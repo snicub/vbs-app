@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useState, useTransition } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { submitEvent } from "@/server-actions/events";
 import { broadcastVanLocation } from "@/server-actions/van";
 import { STATE_LABEL, type DayState } from "@/lib/events/state-machine";
+import { requestScreenWakeLock } from "@/lib/wake-lock";
 
 type RosterItem = {
   studentId: string;
@@ -33,17 +35,42 @@ export function VanManifest({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [broadcasting, setBroadcasting] = useState(false);
+  const [lastReportAt, setLastReportAt] = useState<Date | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const watchIdRef = useRef<number | null>(null);
+  const wakeLockRef = useRef<{ release: () => Promise<void> } | null>(null);
 
   useEffect(() => {
-    if (!broadcasting) return;
+    if (!broadcasting) {
+      // Stop everything
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+      return;
+    }
+
     if (typeof navigator === "undefined" || !navigator.geolocation) {
       toast.error("This device has no GPS.");
       setBroadcasting(false);
       return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
+    // Acquire screen wake lock so the OS doesn't sleep mid-route
+    requestScreenWakeLock().then((ctl) => {
+      wakeLockRef.current = ctl;
+      if (!ctl.isSupported) {
+        toast.warning(
+          "Screen Wake Lock unsupported on this browser — keep the phone awake manually.",
+        );
+      }
+    });
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
       async (pos) => {
+        setError(null);
         const result = await broadcastVanLocation({
           vanId,
           lat: pos.coords.latitude,
@@ -52,15 +79,41 @@ export function VanManifest({
           headingDeg: pos.coords.heading ?? undefined,
           speedMps: pos.coords.speed ?? undefined,
         });
-        if (!result.ok) toast.error(result.error);
+        if (!result.ok) {
+          setError(result.ok ? null : result.error);
+          toast.error(result.error);
+        } else {
+          setLastReportAt(new Date());
+        }
       },
       (err) => {
+        setError(err.message);
         toast.error(`GPS error: ${err.message}`);
         setBroadcasting(false);
       },
       { enableHighAccuracy: true, maximumAge: 5000, timeout: 15_000 },
     );
-    return () => navigator.geolocation.clearWatch(watchId);
+
+    // If the page is hidden and comes back, restart the watch (some browsers
+    // pause watchPosition while backgrounded).
+    function onVisibility() {
+      if (document.visibilityState === "visible" && broadcasting && watchIdRef.current === null) {
+        setBroadcasting(false);
+        setBroadcasting(true); // triggers the effect to re-run
+      }
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
+        watchIdRef.current = null;
+      }
+      wakeLockRef.current?.release();
+      wakeLockRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcasting, vanId]);
 
   function fire(studentId: string, eventType: string) {
@@ -81,12 +134,36 @@ export function VanManifest({
 
   return (
     <>
-      <div className="rounded-lg border bg-card p-4 flex items-center justify-between gap-3">
-        <div className="text-sm">
-          <div className="font-medium">Location broadcast</div>
-          <div className="text-muted-foreground">
-            {broadcasting ? "Sending GPS to coordinator." : "Off."}
+      <div
+        className={
+          "rounded-lg border p-4 flex items-center justify-between gap-3 " +
+          (broadcasting ? "bg-green-500/10 border-green-500/30" : "bg-card")
+        }
+      >
+        <div className="text-sm space-y-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="font-medium">Location broadcast</span>
+            {broadcasting ? (
+              <Badge variant="success">live</Badge>
+            ) : (
+              <Badge variant="muted">off</Badge>
+            )}
           </div>
+          {broadcasting ? (
+            <div className="text-xs text-muted-foreground">
+              {lastReportAt
+                ? `Last position sent at ${lastReportAt.toLocaleTimeString()}.`
+                : "Waiting for first GPS fix…"}{" "}
+              Keep this tab open and screen on; backgrounding may pause broadcasts.
+            </div>
+          ) : (
+            <div className="text-xs text-muted-foreground">
+              Turn on to broadcast this van&apos;s GPS to the coordinator map.
+            </div>
+          )}
+          {error && (
+            <div className="text-xs text-destructive">Error: {error}</div>
+          )}
         </div>
         <Button
           variant={broadcasting ? "destructive" : "default"}

@@ -2,6 +2,7 @@ import { describe, it, expect } from "vitest";
 import {
   anomaliesFor,
   ANOMALY_LABEL,
+  ANOMALY_DESCRIPTION,
   ANOMALY_SEVERITY,
   type AnomalyKind,
 } from "@/lib/anomaly";
@@ -47,14 +48,19 @@ describe("anomaliesFor", () => {
 });
 
 describe("anomaly metadata", () => {
-  it("has a label for every kind", () => {
+  it("has a short label and a longer description for every kind", () => {
     const kinds: AnomalyKind[] = [
       "late_am",
       "boarded_but_not_arrived",
       "in_but_not_out",
       "pm_van_stuck",
     ];
-    for (const k of kinds) expect(ANOMALY_LABEL[k]).toBeTruthy();
+    for (const k of kinds) {
+      expect(ANOMALY_LABEL[k]).toBeTruthy();
+      expect(ANOMALY_DESCRIPTION[k]).toBeTruthy();
+      // Short label fits in a badge — under ~25 chars.
+      expect(ANOMALY_LABEL[k].length).toBeLessThanOrEqual(28);
+    }
   });
 
   it("classifies severity sensibly (boarded-not-arrived and stuck-PM are critical)", () => {

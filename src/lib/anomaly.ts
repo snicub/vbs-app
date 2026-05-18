@@ -7,10 +7,17 @@ export type AnomalyKind =
   | "pm_van_stuck";
 
 export const ANOMALY_LABEL: Record<AnomalyKind, string> = {
-  late_am: "Late AM (no event by scheduled + 45min)",
-  boarded_but_not_arrived: "Boarded AM van, never arrived (30min+)",
-  in_but_not_out: "Checked in, never checked out",
-  pm_van_stuck: "PM van not offloaded after 2h",
+  late_am: "Late AM pickup",
+  boarded_but_not_arrived: "On van but never arrived",
+  in_but_not_out: "Never checked out",
+  pm_van_stuck: "PM van not offloaded",
+};
+
+export const ANOMALY_DESCRIPTION: Record<AnomalyKind, string> = {
+  late_am: "No AM event 45 minutes after scheduled pickup",
+  boarded_but_not_arrived: "Boarded the AM van but no site check-in within 30 minutes",
+  in_but_not_out: "Checked in at site but never checked out, past scheduled PM time",
+  pm_van_stuck: "PM van boarded but not offloaded after 2 hours",
 };
 
 export const ANOMALY_SEVERITY: Record<AnomalyKind, "warning" | "critical"> = {
