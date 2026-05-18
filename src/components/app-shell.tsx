@@ -49,7 +49,7 @@ export function AppShell({
   const links = linksFor(user.role);
   return (
     <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-50 border-b bg-card">
+      <header className="sticky top-0 z-[1100] border-b bg-card">
         <div className="mx-auto max-w-7xl px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <Link

@@ -39,6 +39,7 @@ function validInput(): RawInput {
         legalFirstName: "Joey",
         legalLastName: "Doe",
         dob: "2018-04-01",
+        photoBytes: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
         transport: {
           mode: "van" as const,
           morningStopId: SAMPLE_STOP_ID,

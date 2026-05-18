@@ -55,6 +55,12 @@ export const StudentSchema = z.object({
   grade: z.string().trim().optional().nullable(),
   allergies: z.string().trim().optional().nullable(),
   medicalNotes: z.string().trim().optional().nullable(),
+  // Base64-encoded JPEG bytes (≤~200KB after client-side resize).
+  // Required at signup time so volunteers can visually verify each kid.
+  photoBytes: z
+    .string()
+    .min(1, "Photo is required")
+    .regex(/^[A-Za-z0-9+/]+=*$/, "Invalid photo encoding"),
   transport: StudentTransportSchema,
 }).superRefine((s, ctx) => {
   if (!s.dob && (s.ageAtRegistration == null)) {

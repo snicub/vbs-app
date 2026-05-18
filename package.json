@@ -20,7 +20,8 @@
     "supabase:reset": "supabase db reset",
     "supabase:gen-types": "supabase gen types typescript --local > src/lib/supabase/types.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
-    "promote": "tsx scripts/promote-coordinator.ts"
+    "promote": "tsx scripts/promote-coordinator.ts",
+    "set-role": "tsx scripts/set-role.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

@@ -2,10 +2,10 @@ import { notFound, redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { canCheckIn } from "@/lib/auth/roles";
 import { lookupByWristband } from "@/server-actions/events";
+import { signedUrlFor } from "@/lib/storage/signed-url";
 import { StudentActions } from "./student-actions";
 import { STATE_LABEL, type DayState } from "@/lib/events/state-machine";
 import Link from "next/link";
-import { buttonVariants } from "@/components/ui/button";
 
 export const dynamic = "force-dynamic";
 
@@ -26,28 +26,33 @@ export default async function StudentTablePage({
 
   const { student, status } = result;
   const state = (status?.state ?? "not_started") as DayState;
+  const photoUrl = await signedUrlFor("student-photos", student.photoPath);
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-6 space-y-5">
-      <Link
-        href="/table"
-        className="text-sm text-muted-foreground hover:underline"
-      >
+      <Link href="/table" className="text-sm text-muted-foreground hover:underline">
         ← Back to search
       </Link>
 
-      <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">
-          {student.preferredFirstName ?? student.legalFirstName}{" "}
-          {student.legalLastName}
-        </h1>
-        <div className="text-sm text-muted-foreground">
-          Code <code className="font-mono">{student.wristbandCode}</code>
-          {status?.wristbandColorName && (
-            <> · color {status.wristbandColorName}</>
+      <div className="flex items-start gap-4">
+        <div className="h-24 w-24 rounded-lg border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+          {photoUrl ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={photoUrl} alt={student.legalFirstName} className="h-full w-full object-cover" />
+          ) : (
+            <span className="text-xs text-muted-foreground text-center">No photo on file</span>
           )}
         </div>
-      </header>
+        <div className="space-y-1 min-w-0">
+          <h1 className="text-2xl font-semibold truncate">
+            {student.preferredFirstName ?? student.legalFirstName} {student.legalLastName}
+          </h1>
+          <div className="text-sm text-muted-foreground">
+            <code className="font-mono">{student.wristbandCode}</code>
+            {status?.wristbandColorName && <> · color {status.wristbandColorName}</>}
+          </div>
+        </div>
+      </div>
 
       <div className="rounded-lg border bg-card p-4">
         <div className="text-xs text-muted-foreground uppercase tracking-wide">
@@ -59,14 +64,10 @@ export default async function StudentTablePage({
       {(student.allergies || student.medicalNotes) && (
         <div className="rounded-lg border border-yellow-500/40 bg-yellow-50 p-3 text-sm space-y-2 dark:bg-yellow-900/20">
           {student.allergies && (
-            <p>
-              <strong>Allergies:</strong> {student.allergies}
-            </p>
+            <p><strong>Allergies:</strong> {student.allergies}</p>
           )}
           {student.medicalNotes && (
-            <p>
-              <strong>Medical:</strong> {student.medicalNotes}
-            </p>
+            <p><strong>Medical:</strong> {student.medicalNotes}</p>
           )}
         </div>
       )}
@@ -77,13 +78,6 @@ export default async function StudentTablePage({
         currentState={state}
         actorRole={user.role}
       />
-
-      <div className="text-xs text-muted-foreground">
-        Wrong student?{" "}
-        <Link href="/table" className={buttonVariants({ variant: "link", size: "xs" })}>
-          Back to search
-        </Link>
-      </div>
     </main>
   );
 }

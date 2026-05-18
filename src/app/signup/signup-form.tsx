@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PhotoInput, type PhotoValue } from "@/components/photo-input";
 import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
 import type { ConsentKind, TransportMode } from "@/types/domain";
@@ -38,6 +39,7 @@ type StudentDraft = {
   mode: TransportMode;
   morningStopId: string;
   afternoonStopId: string;
+  photo: PhotoValue;
 };
 
 const emptyStudent = (): StudentDraft => ({
@@ -50,6 +52,7 @@ const emptyStudent = (): StudentDraft => ({
   mode: "van",
   morningStopId: "",
   afternoonStopId: "",
+  photo: null,
 });
 
 const CONSENT_LABELS: Record<ConsentKind, string> = {
@@ -59,6 +62,14 @@ const CONSENT_LABELS: Record<ConsentKind, string> = {
   general_liability: "General liability",
   photo_release: "Wristband photo use",
 };
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
+}
 
 export function SignupForm({
   stops,
@@ -99,8 +110,30 @@ export function SignupForm({
       toast.error("Type your full name to sign.");
       return;
     }
+    const missingPhoto = students.findIndex((s) => !s.photo);
+    if (missingPhoto !== -1) {
+      toast.error(`Photo required for child #${missingPhoto + 1}.`);
+      return;
+    }
 
     setPending(true);
+    const studentsPayload = await Promise.all(students.map(async (s) => ({
+      legalFirstName: s.legalFirstName,
+      legalLastName: s.legalLastName,
+      preferredFirstName: s.preferredFirstName || null,
+      dob: s.dob || null,
+      ageAtRegistration: null,
+      grade: null,
+      allergies: s.allergies || null,
+      medicalNotes: s.medicalNotes || null,
+      photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
+      transport: {
+        mode: s.mode,
+        morningStopId: s.mode === "van" || s.mode === "parent_pickup_only" ? s.morningStopId || null : null,
+        afternoonStopId: s.mode === "van" || s.mode === "parent_dropoff_only" ? s.afternoonStopId || null : null,
+      },
+    })));
+
     const payload = {
       family,
       guardians: [
@@ -113,21 +146,7 @@ export function SignupForm({
       ],
       emergencyContact: emergency,
       authorizedPickup: [],
-      students: students.map((s) => ({
-        legalFirstName: s.legalFirstName,
-        legalLastName: s.legalLastName,
-        preferredFirstName: s.preferredFirstName || null,
-        dob: s.dob || null,
-        ageAtRegistration: null,
-        grade: null,
-        allergies: s.allergies || null,
-        medicalNotes: s.medicalNotes || null,
-        transport: {
-          mode: s.mode,
-          morningStopId: s.mode === "van" || s.mode === "parent_pickup_only" ? s.morningStopId || null : null,
-          afternoonStopId: s.mode === "van" || s.mode === "parent_dropoff_only" ? s.afternoonStopId || null : null,
-        },
-      })),
+      students: studentsPayload,
       consents: {
         typedName,
         agreed: consents.map((c) => ({
@@ -164,170 +183,115 @@ export function SignupForm({
             </li>
           ))}
         </ul>
-        <Link href="/" className={buttonVariants({ variant: "outline" })}>
-          Done
-        </Link>
+        <Link href="/" className={buttonVariants({ variant: "outline" })}>Done</Link>
       </div>
     );
   }
 
   return (
     <form onSubmit={onSubmit} className="space-y-8">
-      {/* ------------------- Family ------------------- */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Primary guardian</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Full name" required>
-            <Input
-              required
-              value={family.primaryGuardianName}
-              onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })}
-            />
+            <Input required value={family.primaryGuardianName}
+              onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })} />
           </Field>
           <Field label="Email" required>
-            <Input
-              required
-              type="email"
-              autoComplete="email"
-              value={family.primaryEmail}
-              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })}
-            />
+            <Input required type="email" autoComplete="email" value={family.primaryEmail}
+              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })} />
           </Field>
           <Field label="Phone" required>
-            <Input
-              required
-              type="tel"
-              inputMode="tel"
-              autoComplete="tel"
-              value={family.primaryPhone}
-              onChange={(e) => setFamily({ ...family, primaryPhone: e.target.value })}
-            />
+            <Input required type="tel" autoComplete="tel" value={family.primaryPhone}
+              onChange={(e) => setFamily({ ...family, primaryPhone: e.target.value })} />
           </Field>
         </div>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Street address">
-            <Input
-              value={family.streetAddress}
-              onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })}
-            />
+            <Input value={family.streetAddress}
+              onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })} />
           </Field>
           <Field label="City">
-            <Input
-              value={family.city}
-              onChange={(e) => setFamily({ ...family, city: e.target.value })}
-            />
+            <Input value={family.city}
+              onChange={(e) => setFamily({ ...family, city: e.target.value })} />
           </Field>
           <Field label="State">
-            <Input
-              value={family.state}
-              onChange={(e) => setFamily({ ...family, state: e.target.value })}
-            />
+            <Input value={family.state}
+              onChange={(e) => setFamily({ ...family, state: e.target.value })} />
           </Field>
           <Field label="Postal code">
-            <Input
-              value={family.postalCode}
-              onChange={(e) => setFamily({ ...family, postalCode: e.target.value })}
-            />
+            <Input value={family.postalCode}
+              onChange={(e) => setFamily({ ...family, postalCode: e.target.value })} />
           </Field>
         </div>
       </section>
 
-      {/* ------------------- Emergency ------------------- */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Emergency contact</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <Field label="Name" required>
-            <Input
-              required
-              value={emergency.name}
-              onChange={(e) => setEmergency({ ...emergency, name: e.target.value })}
-            />
+            <Input required value={emergency.name}
+              onChange={(e) => setEmergency({ ...emergency, name: e.target.value })} />
           </Field>
           <Field label="Phone" required>
-            <Input
-              required
-              type="tel"
-              value={emergency.phone}
-              onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })}
-            />
+            <Input required type="tel" value={emergency.phone}
+              onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })} />
           </Field>
           <Field label="Relationship" required>
-            <Input
-              required
-              value={emergency.relationship}
-              onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })}
-            />
+            <Input required value={emergency.relationship}
+              onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })} />
           </Field>
         </div>
       </section>
 
-      {/* ------------------- Children ------------------- */}
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold">Children</h2>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setStudents([...students, emptyStudent()])}
-          >
-            + Add child
-          </Button>
+          <Button type="button" variant="outline" size="sm"
+            onClick={() => setStudents([...students, emptyStudent()])}>+ Add child</Button>
         </div>
         {students.map((s, i) => (
-          <fieldset
-            key={i}
-            className="rounded-lg border p-4 space-y-3 bg-card"
-          >
+          <fieldset key={i} className="rounded-lg border p-4 space-y-3 bg-card">
             <legend className="px-1 text-sm font-medium">Child #{i + 1}</legend>
+
+            <Field label="Photo" required>
+              <PhotoInput
+                value={s.photo}
+                onChange={(p) => updateStudent(i, { photo: p })}
+                required
+              />
+            </Field>
+
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Legal first name" required>
-                <Input
-                  required
-                  value={s.legalFirstName}
-                  onChange={(e) => updateStudent(i, { legalFirstName: e.target.value })}
-                />
+                <Input required value={s.legalFirstName}
+                  onChange={(e) => updateStudent(i, { legalFirstName: e.target.value })} />
               </Field>
               <Field label="Legal last name" required>
-                <Input
-                  required
-                  value={s.legalLastName}
-                  onChange={(e) => updateStudent(i, { legalLastName: e.target.value })}
-                />
+                <Input required value={s.legalLastName}
+                  onChange={(e) => updateStudent(i, { legalLastName: e.target.value })} />
               </Field>
               <Field label="Preferred first name (optional)">
-                <Input
-                  value={s.preferredFirstName}
-                  onChange={(e) => updateStudent(i, { preferredFirstName: e.target.value })}
-                />
+                <Input value={s.preferredFirstName}
+                  onChange={(e) => updateStudent(i, { preferredFirstName: e.target.value })} />
               </Field>
               <Field label="Date of birth" required>
-                <Input
-                  type="date"
-                  required
-                  value={s.dob}
-                  onChange={(e) => updateStudent(i, { dob: e.target.value })}
-                />
+                <Input type="date" required value={s.dob}
+                  onChange={(e) => updateStudent(i, { dob: e.target.value })} />
               </Field>
             </div>
             <Field label="Allergies (one per line)">
-              <Textarea
-                value={s.allergies}
-                onChange={(e) => updateStudent(i, { allergies: e.target.value })}
-              />
+              <Textarea value={s.allergies}
+                onChange={(e) => updateStudent(i, { allergies: e.target.value })} />
             </Field>
             <Field label="Medical notes">
-              <Textarea
-                value={s.medicalNotes}
-                onChange={(e) => updateStudent(i, { medicalNotes: e.target.value })}
-              />
+              <Textarea value={s.medicalNotes}
+                onChange={(e) => updateStudent(i, { medicalNotes: e.target.value })} />
             </Field>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label="Transportation" required>
-                <Select
-                  value={s.mode}
-                  onChange={(e) => updateStudent(i, { mode: e.target.value as TransportMode })}
-                >
+                <Select value={s.mode}
+                  onChange={(e) => updateStudent(i, { mode: e.target.value as TransportMode })}>
                   <option value="van">Both ways by van</option>
                   <option value="parent_dropoff_only">Parent dropoff, van home</option>
                   <option value="parent_pickup_only">Van out, parent pickup</option>
@@ -336,11 +300,8 @@ export function SignupForm({
               </Field>
               {(s.mode === "van" || s.mode === "parent_pickup_only") && (
                 <Field label="Morning stop" required>
-                  <Select
-                    required
-                    value={s.morningStopId}
-                    onChange={(e) => updateStudent(i, { morningStopId: e.target.value })}
-                  >
+                  <Select required value={s.morningStopId}
+                    onChange={(e) => updateStudent(i, { morningStopId: e.target.value })}>
                     <option value="">— select —</option>
                     {stops.map((stop) => (
                       <option key={stop.id} value={stop.id}>
@@ -352,11 +313,8 @@ export function SignupForm({
               )}
               {(s.mode === "van" || s.mode === "parent_dropoff_only") && (
                 <Field label="Afternoon stop" required>
-                  <Select
-                    required
-                    value={s.afternoonStopId}
-                    onChange={(e) => updateStudent(i, { afternoonStopId: e.target.value })}
-                  >
+                  <Select required value={s.afternoonStopId}
+                    onChange={(e) => updateStudent(i, { afternoonStopId: e.target.value })}>
                     <option value="">— select —</option>
                     {stops.map((stop) => (
                       <option key={stop.id} value={stop.id}>
@@ -368,14 +326,8 @@ export function SignupForm({
               )}
             </div>
             {students.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onClick={() =>
-                  setStudents((prev) => prev.filter((_, idx) => idx !== i))
-                }
-              >
+              <Button type="button" variant="ghost" size="sm"
+                onClick={() => setStudents((prev) => prev.filter((_, idx) => idx !== i))}>
                 Remove this child
               </Button>
             )}
@@ -383,7 +335,6 @@ export function SignupForm({
         ))}
       </section>
 
-      {/* ------------------- Consents ------------------- */}
       <section className="space-y-4">
         <h2 className="text-lg font-semibold">Consents</h2>
         <div className="space-y-3">
@@ -410,11 +361,7 @@ export function SignupForm({
           ))}
         </div>
         <Field label="Type your full legal name to sign" required>
-          <Input
-            value={typedName}
-            onChange={(e) => setTypedName(e.target.value)}
-            required
-          />
+          <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} required />
         </Field>
       </section>
 

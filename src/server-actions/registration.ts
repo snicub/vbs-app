@@ -78,7 +78,8 @@ export async function registerFamily(
     }
   }
 
-  // 4) Students + wristband codes (unique)
+  // 4) Students + wristband codes (unique). Photos uploaded after row insert
+  // so we can use the new student id in the path.
   const codes = await generateUniqueWristbandCodes(data.students.length);
   const studentRows = data.students.map((s, i) => ({
     family_id: familyId,
@@ -98,6 +99,29 @@ export async function registerFamily(
     .select("id, legal_first_name, legal_last_name, wristband_code");
   if (studentErr || !inserted) {
     return { ok: false, error: `could not create students: ${studentErr?.message ?? "unknown"}` };
+  }
+
+  // Upload photos for each student (if provided). Path: <family>/<student>.jpg
+  for (let i = 0; i < data.students.length; i++) {
+    const photo = data.students[i]!.photoBytes;
+    if (!photo) continue;
+    const studentId = (inserted as { id: string }[])[i]!.id;
+    const path = `${familyId}/${studentId}.jpg`;
+    const bytes = Buffer.from(photo, "base64");
+    const { error: uploadErr } = await admin.storage
+      .from("student-photos")
+      .upload(path, bytes, {
+        contentType: "image/jpeg",
+        upsert: true,
+      });
+    if (uploadErr) {
+      console.error(`photo upload failed for student ${studentId}: ${uploadErr.message}`);
+      continue;
+    }
+    await admin
+      .from("students")
+      .update({ photo_path: path } as never)
+      .eq("id", studentId);
   }
 
   // 5) student_day_records — one per (student, VBS date)

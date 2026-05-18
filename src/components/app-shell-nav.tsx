@@ -51,7 +51,7 @@ export function AppShellNav({ links }: { links: NavLink[] }) {
       {open && (
         <div
           id="mobile-nav"
-          className="md:hidden fixed left-0 right-0 top-14 z-40 border-b bg-card shadow-lg"
+          className="md:hidden fixed left-0 right-0 top-14 z-[1099] border-b bg-card shadow-lg"
         >
           <nav className="px-4 py-2 flex flex-col">
             {links.map((l) => (
