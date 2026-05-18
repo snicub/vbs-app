@@ -12,7 +12,7 @@ Safety-critical check-in and transportation tracker for a one-time Vacation Bibl
 
 ## Tech stack (locked, do not relitigate)
 
-- Next.js 14 App Router + TypeScript strict (`noUncheckedIndexedAccess` on) + Tailwind + shadcn/ui
+- Next.js 14 App Router + TypeScript strict (`noUncheckedIndexedAccess` on) + Tailwind v4 + shadcn/ui v4 (Base UI primitives). CSS-based theme via `@theme inline` in `globals.css`; no `tailwind.config.ts`.
 - Supabase (Postgres / Auth via magic link / Realtime / Storage / RLS)
 - Twilio (SMS), Resend (email), Mapbox (geocoding + Directions Matrix for ETAs)
 - Vercel (host), Sentry (errors), UptimeRobot (uptime)
@@ -210,8 +210,13 @@ These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to 
 
 ## Current status
 
-- Phase 1.1 (scaffold + TS strictness) **complete**. Commits on `main`:
+- Phase 1.1 (scaffold + TS strictness) **complete**.
+- Phase 1.2 (shadcn init + Tailwind v4 + base components) **complete**.
+- Commits on `main`:
   - `340cec0` Initial commit from Create Next App
   - `bb47ab1` chore: tighten TS strictness, enable React strict mode
-- Phase 1 task list tracked via TaskList (12 sub-steps).
-- **Next: Phase 1.2** — shadcn init + base components (button, input, form, dialog, toast).
+  - `02b7687` docs: add CLAUDE.md
+  - `e81292b` chore: init shadcn/ui + upgrade to Tailwind v4
+- Base components present in `src/components/ui/`: button, input, label, form, dialog, card, sonner. `form.tsx` was hand-written (shadcn 4.7 CLI silently no-ops on `form` — uses `radix-ui` `Slot` + `react-hook-form` per canonical shadcn pattern). `Toaster` mounted in root layout.
+- Phase 1 task list tracked via TaskList (11 sub-steps remaining after 1.2).
+- **Next: Phase 1.3** — Supabase init (CLI + local stack config) + zod-validated `src/lib/env.ts` + skeleton `src/lib/supabase/{client,server,admin}.ts`.
