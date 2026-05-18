@@ -1,0 +1,8 @@
+{
+  "crons": [
+    {
+      "path": "/api/cron/day-before-reminder",
+      "schedule": "0 19 * * *"
+    }
+  ]
+}
