@@ -34,10 +34,26 @@ const clientSchema = serverSchema.pick({
 
 const isServer = typeof window === "undefined";
 
+// During `next build` (and `next lint`) most env vars aren't injected — the
+// build only needs to compile, not connect. Skip strict validation in those
+// phases; runtime first-use will throw if something is genuinely missing.
+const isBuildPhase =
+  process.env.NEXT_PHASE === "phase-production-build" ||
+  process.env.NEXT_PHASE === "phase-production-server" ||
+  process.env.SKIP_ENV_VALIDATION === "1";
+
 function parseEnv() {
   if (isServer) {
     const parsed = serverSchema.safeParse(process.env);
     if (!parsed.success) {
+      if (isBuildPhase) {
+        // Return a placeholder; nothing in this process actually calls Supabase.
+        return serverSchema.parse({
+          NEXT_PUBLIC_SUPABASE_URL: "http://placeholder.local",
+          NEXT_PUBLIC_SUPABASE_ANON_KEY: "placeholder",
+          SUPABASE_SERVICE_ROLE_KEY: "placeholder",
+        });
+      }
       const issues = parsed.error.issues
         .map((i) => `  ${i.path.join(".")}: ${i.message}`)
         .join("\n");
