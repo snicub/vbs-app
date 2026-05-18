@@ -209,15 +209,68 @@ User-level preferences and prior conversation memories live at:
 
 These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to the directory Claude is launched from). The most load-bearing pieces are baked into the "How to work with this user" section above. If you need more, read that directory.
 
-## Current status
+## Current status (2026-05-18 — autonomous build pass complete)
 
-- Phase 1.1 (scaffold + TS strictness) **complete**.
-- Phase 1.2 (shadcn init + Tailwind v4 + base components) **complete**.
-- Commits on `main`:
-  - `340cec0` Initial commit from Create Next App
-  - `bb47ab1` chore: tighten TS strictness, enable React strict mode
-  - `02b7687` docs: add CLAUDE.md
-  - `e81292b` chore: init shadcn/ui + upgrade to Tailwind v4
-- Base components present in `src/components/ui/`: button, input, label, form, dialog, card, sonner. `form.tsx` was hand-written (shadcn 4.7 CLI silently no-ops on `form` — uses `radix-ui` `Slot` + `react-hook-form` per canonical shadcn pattern). `Toaster` mounted in root layout.
-- Phase 1 task list tracked via TaskList (11 sub-steps remaining after 1.2).
-- **Next: Phase 1.3** — Supabase init (CLI + local stack config) + zod-validated `src/lib/env.ts` + skeleton `src/lib/supabase/{client,server,admin}.ts`.
+All 5 phases have a working first-cut shipped on `main`. **71 unit tests + 20 pgTAP assertions pass; typecheck, lint, build all clean.**
+
+### What's wired up
+
+**Phase 1 — Foundation**
+- 8 SQL migrations in `supabase/migrations/`: extensions, core tables, append-only event log, `record_event()` function with state-machine guards + advisory locking + idempotency + override path, `student_day_status` derived view with 4 anomaly flags, RLS for every table, realtime publication, private storage buckets.
+- pgTAP suite (`supabase/tests/record_event.sql`) — 20 assertions for happy path, idempotency, illegal transitions, override gate, supersession, terminal states.
+- Lib modules with tests: `events/state-machine` (TS mirror), `wristband/{alphabet,checksum,generate,validate}`, `consents/{text,hash}`, `idempotency` (uuidv7), `anomaly`, `notifications/{send,templates,opt-out}`, `auth/{roles,session}`, `registration/{schema,dates}`, `env`.
+- Supabase clients: browser, server (cookie-bound), admin (service role), middleware refresher.
+- Sentry SDK plumbed (client/server/edge configs + `instrumentation.ts`); no-op without DSN.
+- Vitest 3 + jsdom 26 + Playwright config. `pnpm check` = typecheck + lint + unit tests.
+
+**Phase 2 — Registration**
+- `/signup`: single-page form. Server component fetches stops + computes consent text hashes; client component handles family info, emergency contact, multi-child array, transport per child, 5 consents + typed name. Writes through `registerFamily` server action: family → guardians → pickup contacts → students (with collision-free wristband codes) → student_day_records for each VBS date → consents (with text hash, IP, UA) → family_access_token.
+- Schema-level guards: requires dob OR age; van mode requires morning stop; all 5 consents required.
+
+**Phase 3 — Check-in flows**
+- `/table`: wristband-code primary entry, name-search fallback. `lookupByWristband` validates against the alphabet/checksum before any DB hit.
+- `/table/[code]`: state-aware action surface, allergy/medical callouts, coordinator-only override panel (event picker + required reason).
+- `/van` → `/van/[vanId]`: per-day manifest for the user's assigned van (or van picker for coordinators). GPS broadcast via `navigator.geolocation.watchPosition` → `broadcastVanLocation` upserts `van_locations`.
+
+**Phase 4 — Coordinator**
+- `/coordinator`: today view with anomaly section at top, count-by-state, full roster. Realtime subscription on `student_day_events` + `student_day_records` refreshes on any change.
+- `/coordinator/closeout`: snapshots pending anomalies and writes `daily_closeouts`; supports reopen.
+- `/coordinator/announcements`: broadcast SMS to every non-opted-out family.
+
+**Phase 5 — Notifications + parent page**
+- `/parent/[familyToken]`: token-validated public status page (middleware-excluded). Service-role read for that family only.
+- `POST /api/twilio/inbound`: TwiML response; handles STOP/START via `handleInboundSms`.
+- `POST /api/twilio/status`: delivery callbacks update `notifications_sent.status`.
+- `POST /api/resend/webhook`: email events map to status.
+- `GET /api/cron/day-before-reminder`: Vercel cron path declared in `vercel.json`, runs at 19:00 daily; auth via `Bearer CRON_SECRET` when set.
+
+### What is deliberately not built yet
+
+- **PDFs** (wristband sheet, manifest, roster). Defer — printed Sunday-night fail-safes.
+- **Mapbox geocoding + ETAs** — need Mapbox token.
+- **Live van map** — explicit "build last" per spec.
+- **Coordinator family/student edit screens** — coordinators can use `/table/[code]` for daily actions; admin DB edits via Supabase Studio cover the rest for now.
+- **Photo upload UI** — schema supports it (`students.photo_path`, `student-photos` bucket); UI deferred.
+- **E2E tests** beyond a smoke test — Playwright config + 3 smoke specs land in `tests/e2e/`; full flows need a seeded Supabase to be useful.
+
+### To run from a fresh clone
+
+```
+pnpm install
+docker desktop start
+pnpm supabase:start            # prints anon + service_role keys
+cp .env.example .env.local     # fill in keys from above
+pnpm supabase:reset            # apply migrations
+pnpm seed:dev                  # idempotent dev seed
+pnpm dev
+```
+
+See `docs/ops-runbook.md` for the recovery playbook during VBS week.
+
+### Files most worth reading before changing anything
+
+1. `supabase/migrations/0004_record_event_fn.sql` — the single write entry point. The state machine + override path are encoded here.
+2. `supabase/migrations/0006_rls_policies.sql` — all the access scoping in one place.
+3. `src/lib/events/state-machine.ts` — TS mirror; keep in sync with 0004.
+4. `src/server-actions/events.ts` — only client-facing event writer.
+5. `src/app/coordinator/page.tsx` — the operational center of the UI.
