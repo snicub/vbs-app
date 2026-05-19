@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { AppShell } from "@/components/app-shell";
+import { RealtimeRefresher } from "@/components/realtime-refresher";
 
 export default async function CoordinatorLayout({
   children,
@@ -23,5 +24,10 @@ export default async function CoordinatorLayout({
       </AppShell>
     );
   }
-  return <AppShell user={user}>{children}</AppShell>;
+  return (
+    <AppShell user={user}>
+      <RealtimeRefresher channelName="coordinator-realtime" />
+      {children}
+    </AppShell>
+  );
 }

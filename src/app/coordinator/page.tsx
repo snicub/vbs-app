@@ -8,7 +8,6 @@ import { anomaliesFor, ANOMALY_LABEL, ANOMALY_SEVERITY } from "@/lib/anomaly";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { Badge } from "@/components/ui/badge";
 import { buttonVariants } from "@/components/ui/button";
-import { CoordinatorRealtime } from "./realtime";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator — Today" };
@@ -34,6 +33,7 @@ type StudentRow = {
   preferred_first_name: string | null;
   wristband_code: string;
   allergies: string | null;
+  medical_notes: string | null;
   photo_path: string | null;
 };
 
@@ -64,7 +64,7 @@ export default async function CoordinatorTodayPage({
   const { data: students } = studentIds.length > 0
     ? await supabase
         .from("students")
-        .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, photo_path")
+        .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path")
         .in("id", studentIds)
         .returns<StudentRow[]>()
     : { data: [] as StudentRow[] };
@@ -99,6 +99,7 @@ export default async function CoordinatorTodayPage({
         : "(unknown)",
       wristbandCode: stu?.wristband_code ?? "",
       allergies: stu?.allergies ?? null,
+      medicalNotes: stu?.medical_notes ?? null,
       photoUrl: photoUrls.get(s.student_id) ?? null,
     };
   });
@@ -117,8 +118,6 @@ export default async function CoordinatorTodayPage({
 
   return (
     <>
-      <CoordinatorRealtime />
-
       <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
         <div className="space-y-1">
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
@@ -220,9 +219,15 @@ export default async function CoordinatorTodayPage({
                   <ColorDot color={s.wristband_color_for_day} />
                   <span className="font-medium truncate flex-1 min-w-0">{s.name}</span>
                   {s.allergies && (
-                    <Badge variant="warning" className="shrink-0">
+                    <Badge variant="warning" className="shrink-0" title={s.allergies}>
                       <span className="sm:hidden">!</span>
                       <span className="hidden sm:inline">allergies</span>
+                    </Badge>
+                  )}
+                  {s.medicalNotes && (
+                    <Badge variant="destructive" className="shrink-0" title={s.medicalNotes}>
+                      <span className="sm:hidden">⚕</span>
+                      <span className="hidden sm:inline">medical</span>
                     </Badge>
                   )}
                   <StateBadge state={s.state as DayState} />

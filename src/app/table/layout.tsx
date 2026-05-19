@@ -1,5 +1,5 @@
 import { ProtectedLayout } from "@/components/protected-layout";
 
 export default function TableLayout({ children }: { children: React.ReactNode }) {
-  return <ProtectedLayout>{children}</ProtectedLayout>;
+  return <ProtectedLayout channelName="table-realtime">{children}</ProtectedLayout>;
 }
