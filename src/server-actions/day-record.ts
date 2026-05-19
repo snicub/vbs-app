@@ -45,7 +45,7 @@ export async function updateTodayStops(
 
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/coordinator");
-  revalidatePath(`/table`, "layout");
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
   return { ok: true };
 }

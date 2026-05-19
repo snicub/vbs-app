@@ -64,8 +64,10 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
 
   if (!result.ok) return result;
 
-  revalidatePath("/coordinator");
-  revalidatePath("/table");
+  // Cascade to layout-scope so dynamic children like /table/[code],
+  // /van/[vanId], and /coordinator/students all refresh too.
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
   revalidatePath("/van", "layout");
 
   return {

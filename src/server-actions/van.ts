@@ -56,7 +56,7 @@ export async function broadcastVanLocation(
 
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/coordinator");
+  revalidatePath("/coordinator", "layout");
   return { ok: true };
 }
 

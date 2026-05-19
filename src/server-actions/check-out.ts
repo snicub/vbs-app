@@ -72,8 +72,8 @@ export async function smartCheckOut(
     finalState = r.data.derivedState;
   }
 
-  revalidatePath("/coordinator");
-  revalidatePath("/table");
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
   revalidatePath("/van", "layout");
 
   return { ok: true, finalState };

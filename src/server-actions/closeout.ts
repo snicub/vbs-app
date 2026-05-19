@@ -38,7 +38,7 @@ export async function closeoutDay(
   );
 
   if (error) return { ok: false, error: error.message };
-  revalidatePath("/coordinator");
+  revalidatePath("/coordinator", "layout");
   return { ok: true };
 }
 
@@ -60,6 +60,6 @@ export async function reopenDay(input: unknown): Promise<
     .eq("event_date", parsed.data.eventDate);
   if (error) return { ok: false, error: error.message };
 
-  revalidatePath("/coordinator");
+  revalidatePath("/coordinator", "layout");
   return { ok: true };
 }
