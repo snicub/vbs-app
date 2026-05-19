@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
 import { submitEvent } from "@/server-actions/events";
+import { smartCheckOut } from "@/server-actions/check-out";
 import { broadcastVanLocation } from "@/server-actions/van";
 import { STATE_LABEL, type DayState } from "@/lib/events/state-machine";
 import { requestScreenWakeLock } from "@/lib/wake-lock";
@@ -116,6 +117,18 @@ export function VanManifest({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcasting, vanId]);
 
+  function fireCheckOut(studentId: string) {
+    startTransition(async () => {
+      const result = await smartCheckOut({ studentId, eventDate });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Dropped off — kid is home");
+      router.refresh();
+    });
+  }
+
   function fire(studentId: string, eventType: string) {
     startTransition(async () => {
       const result = await submitEvent({
@@ -203,25 +216,15 @@ export function VanManifest({
             )}
 
             <div className="flex flex-wrap gap-2">
-              {r.direction !== "pm" && (
-                <>
-                  <Button size="sm" disabled={pending} onClick={() => fire(r.studentId, "van_boarded_am")}>
-                    Board AM
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={pending} onClick={() => fire(r.studentId, "van_offloaded_am")}>
-                    Off AM
-                  </Button>
-                </>
+              {r.direction !== "pm" && r.state === "not_started" && (
+                <Button size="sm" disabled={pending} onClick={() => fire(r.studentId, "van_boarded_am")}>
+                  Boarded AM van
+                </Button>
               )}
-              {r.direction !== "am" && (
-                <>
-                  <Button size="sm" disabled={pending} onClick={() => fire(r.studentId, "van_boarded_pm")}>
-                    Board PM
-                  </Button>
-                  <Button size="sm" variant="outline" disabled={pending} onClick={() => fire(r.studentId, "van_offloaded_pm")}>
-                    Off PM
-                  </Button>
-                </>
+              {r.direction !== "am" && (r.state === "site_checked_in" || r.state === "site_checked_out" || r.state === "van_boarded_pm") && (
+                <Button size="sm" disabled={pending} onClick={() => fireCheckOut(r.studentId)}>
+                  Dropped off (check out)
+                </Button>
               )}
             </div>
           </li>

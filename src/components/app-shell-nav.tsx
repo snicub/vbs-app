@@ -11,8 +11,15 @@ export function AppShellNav({ links }: { links: NavLink[] }) {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
 
+  // Longest-prefix match so only ONE tab lights up. Otherwise both
+  // /coordinator and /coordinator/students would highlight when on /coordinator/students.
+  const activeHref =
+    links
+      .filter((l) => pathname === l.href || (l.href !== "/" && pathname.startsWith(l.href + "/")))
+      .sort((a, b) => b.href.length - a.href.length)[0]?.href ?? null;
+
   function isActive(href: string) {
-    return pathname === href || (href !== "/" && pathname.startsWith(href + "/"));
+    return href === activeHref;
   }
 
   return (

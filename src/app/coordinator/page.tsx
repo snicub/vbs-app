@@ -144,10 +144,14 @@ export default async function CoordinatorTodayPage({
           </p>
         </div>
 
-        {/* Status counts */}
+        {/* Status counts — colored stripe matches the state badge */}
         <section className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
           {(Object.keys(STATE_ORDER) as DayState[]).map((state) => (
-            <div key={state} className="rounded-lg border bg-card px-3 py-2">
+            <div
+              key={state}
+              className="rounded-lg border bg-card px-3 py-2 border-l-4"
+              style={{ borderLeftColor: STATE_STRIPE[state] }}
+            >
               <div className="text-2xl font-semibold leading-none">{counts[state] ?? 0}</div>
               <div className="text-xs text-muted-foreground mt-1">{STATE_LABEL[state]}</div>
             </div>
@@ -205,7 +209,8 @@ export default async function CoordinatorTodayPage({
             {sorted.map((s) => (
               <li
                 key={s.student_id}
-                className="hover:bg-muted/40 active:bg-muted"
+                className="hover:bg-muted/40 active:bg-muted border-l-4"
+                style={{ borderLeftColor: STATE_STRIPE[s.state as DayState] }}
               >
                 <Link
                   href={`/table/${s.wristbandCode}`}
@@ -260,16 +265,28 @@ const STATE_ORDER: Record<DayState, number> = {
 
 const STATE_BADGE_VARIANT: Record<
   DayState,
-  "muted" | "warning" | "default" | "success" | "destructive"
+  "muted" | "info" | "accent" | "success" | "warning" | "successDeep" | "destructive"
 > = {
-  not_started: "muted",
-  van_boarded_am: "default",
-  arrived_at_site: "default",
-  site_checked_in: "default",
-  site_checked_out: "warning",
-  van_boarded_pm: "warning",
-  home: "success",
-  marked_no_show: "destructive",
+  not_started:      "muted",        // gray
+  van_boarded_am:   "info",         // blue — arriving
+  arrived_at_site:  "accent",       // teal — at site, awaiting check-in
+  site_checked_in:  "success",      // green — at VBS (safe)
+  site_checked_out: "warning",      // amber — heading home from site
+  van_boarded_pm:   "warning",      // amber — on PM van home
+  home:             "successDeep",  // deep green — home (terminal safe)
+  marked_no_show:   "destructive",  // red — no-show
+};
+
+// Hex stripes per state — left border on roster rows + count cards.
+const STATE_STRIPE: Record<DayState, string> = {
+  not_started:      "transparent",
+  van_boarded_am:   "rgb(14 165 233)",   // sky-500 (arriving)
+  arrived_at_site:  "rgb(20 184 166)",   // teal-500 (at site)
+  site_checked_in:  "rgb(34 197 94)",    // green-500 (at VBS)
+  site_checked_out: "rgb(251 146 60)",   // orange-400 (leaving site)
+  van_boarded_pm:   "rgb(245 158 11)",   // amber-500 (en route home)
+  home:             "rgb(22 163 74)",    // green-600 (home)
+  marked_no_show:   "rgb(239 68 68)",    // red-500 (no-show)
 };
 
 function StateBadge({ state }: { state: DayState }) {

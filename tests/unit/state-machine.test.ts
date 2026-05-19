@@ -34,8 +34,13 @@ describe("state-machine: isLegalTransition", () => {
     expect(isLegalTransition("home", "no_show")).toBe(false);
   });
 
-  it("rejects skipping the offload step", () => {
-    expect(isLegalTransition("van_boarded_am", "site_checked_in")).toBe(false);
+  it("allows skipping the AM offload click — checking in straight off the van", () => {
+    expect(isLegalTransition("van_boarded_am", "site_checked_in")).toBe(true);
+  });
+
+  it("still rejects illegal jumps (e.g. straight to home from not_started)", () => {
+    expect(isLegalTransition("not_started", "van_boarded_pm")).toBe(false);
+    expect(isLegalTransition("not_started", "van_offloaded_pm")).toBe(false);
   });
 
   it("rejects all forward motion from terminal states", () => {
@@ -87,16 +92,25 @@ describe("state-machine: legalNextEvents", () => {
     expect(events).toContain<EventType>("no_show");
     expect(events).toHaveLength(3);
   });
+
+  it("van_boarded_am allows either offload OR direct check-in OR parent dropoff", () => {
+    const events = legalNextEvents("van_boarded_am");
+    expect(events).toContain<EventType>("van_offloaded_am");
+    expect(events).toContain<EventType>("site_checked_in");
+    expect(events).toContain<EventType>("parent_dropoff");
+  });
 });
 
 describe("state-machine: requiresOverride", () => {
-  it("flags skipping middle steps", () => {
-    expect(requiresOverride("van_boarded_am", "site_checked_in")).toBe(true);
+  it("flags genuinely illegal jumps", () => {
     expect(requiresOverride("not_started", "site_checked_out")).toBe(true);
+    expect(requiresOverride("not_started", "van_boarded_pm")).toBe(true);
+    expect(requiresOverride("home", "site_checked_in")).toBe(true);
   });
 
-  it("does not flag legal transitions", () => {
+  it("does not flag legal transitions (including the AM-van-to-check-in shortcut)", () => {
     expect(requiresOverride("not_started", "van_boarded_am")).toBe(false);
+    expect(requiresOverride("van_boarded_am", "site_checked_in")).toBe(false);
   });
 });
 

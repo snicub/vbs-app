@@ -32,7 +32,8 @@ export type DayState = (typeof STATES)[number];
 
 const TRANSITIONS: Readonly<Record<DayState, readonly EventType[]>> = {
   not_started:      ["van_boarded_am", "parent_dropoff", "no_show"],
-  van_boarded_am:   ["van_offloaded_am"],
+  // AM van → checked-in is legal so aides can skip the offload click.
+  van_boarded_am:   ["van_offloaded_am", "site_checked_in", "parent_dropoff"],
   arrived_at_site:  ["site_checked_in"],
   site_checked_in:  ["site_checked_out"],
   site_checked_out: ["van_boarded_pm", "parent_pickup"],
@@ -83,12 +84,12 @@ export function requiresOverride(from: DayState, event: EventType): boolean {
  * here don't break SQL/parser code.
  */
 export const STATE_LABEL: Readonly<Record<DayState, string>> = {
-  not_started:      "Not started",
-  van_boarded_am:   "On van (AM)",
-  arrived_at_site:  "Arrived at site",
-  site_checked_in:  "Checked in",
-  site_checked_out: "Checked out",
-  van_boarded_pm:   "On van (PM)",
+  not_started:      "Not arrived",
+  van_boarded_am:   "On AM van",
+  arrived_at_site:  "Arrived",
+  site_checked_in:  "At VBS",
+  site_checked_out: "Heading home",
+  van_boarded_pm:   "On PM van",
   home:             "Home",
   marked_no_show:   "No-show",
 };

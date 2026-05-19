@@ -16,8 +16,8 @@ function linksFor(role: UserRole): NavLink[] {
   if (isCoordinator(role)) {
     return [
       { href: "/coordinator", label: "Today" },
+      { href: "/coordinator/students", label: "Students" },
       { href: "/table", label: "Check-In" },
-      { href: "/coordinator/vans", label: "Vans" },
       { href: "/coordinator/vans/map", label: "Live Map" },
       { href: "/coordinator/announcements", label: "Announce" },
       { href: "/coordinator/closeout", label: "Closeout" },
