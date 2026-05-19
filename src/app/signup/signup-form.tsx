@@ -93,7 +93,11 @@ export function SignupForm({
   const [typedName, setTypedName] = useState("");
   const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState<
-    null | { familyId: string; codes: { studentName: string; code: string }[] }
+    null | {
+      familyId: string;
+      statusUrl: string;
+      codes: { studentName: string; code: string }[];
+    }
   >(null);
 
   function updateStudent(i: number, patch: Partial<StudentDraft>) {
@@ -161,7 +165,11 @@ export function SignupForm({
     setPending(false);
 
     if (result.ok) {
-      setSuccess({ familyId: result.familyId, codes: result.wristbandCodes });
+      setSuccess({
+        familyId: result.familyId,
+        statusUrl: result.familyStatusUrl,
+        codes: result.wristbandCodes,
+      });
     } else {
       toast.error(result.error);
     }
@@ -169,21 +177,63 @@ export function SignupForm({
 
   if (success) {
     return (
-      <div className="space-y-4 rounded-lg border bg-card p-6">
-        <h2 className="text-xl font-semibold">You&apos;re registered.</h2>
-        <p className="text-sm">
-          We&apos;ve generated a wristband code for each child. Bring them on the first
-          day of VBS — staff will scan or type these codes for check-in.
-        </p>
-        <ul className="rounded border bg-muted/30 divide-y">
-          {success.codes.map((c) => (
-            <li key={c.code} className="flex justify-between px-3 py-2 text-sm">
-              <span>{c.studentName}</span>
-              <code className="font-mono tracking-widest">{c.code}</code>
-            </li>
-          ))}
-        </ul>
-        <Link href="/" className={buttonVariants({ variant: "outline" })}>Done</Link>
+      <div className="space-y-5 rounded-lg border bg-card p-4 sm:p-6">
+        <div>
+          <h2 className="text-xl font-semibold">You&apos;re registered.</h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            We&apos;ve generated a wristband code for each child. Bring them on the
+            first day of VBS — staff will scan or type these codes for check-in.
+          </p>
+        </div>
+
+        <div>
+          <h3 className="text-sm font-medium mb-2">Wristband codes</h3>
+          <ul className="rounded-lg border bg-muted/30 divide-y">
+            {success.codes.map((c) => (
+              <li key={c.code} className="flex justify-between items-center px-3 py-2 text-sm">
+                <span className="truncate pr-2">{c.studentName}</span>
+                <code className="font-mono tracking-widest shrink-0">{c.code}</code>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
+          <div className="text-sm font-medium">Your family status link</div>
+          <p className="text-xs text-muted-foreground">
+            Bookmark this link to see live updates during VBS — pickup, check-in,
+            drop-off. No sign-in required from this device.
+          </p>
+          <div className="flex flex-col sm:flex-row gap-2">
+            <input
+              readOnly
+              value={success.statusUrl}
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+              className="flex-1 rounded border bg-background px-2 py-1.5 text-xs font-mono min-w-0"
+            />
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                navigator.clipboard?.writeText(success.statusUrl);
+                toast.success("Copied");
+              }}
+            >
+              Copy link
+            </Button>
+          </div>
+          <Link
+            href={success.statusUrl.replace(/^https?:\/\/[^/]+/, "")}
+            className={buttonVariants({ variant: "default", size: "sm" })}
+          >
+            Open status page now →
+          </Link>
+        </div>
+
+        <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+          Done
+        </Link>
       </div>
     );
   }

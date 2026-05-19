@@ -36,8 +36,25 @@ export async function broadcastVanLocation(
     .eq("van_id", parsed.data.vanId)
     .or(`driver_user_id.eq.${user.id},aide_user_id.eq.${user.id}`)
     .maybeSingle();
-  if (!assignment && user.role !== "coordinator" && user.role !== "admin") {
-    return { ok: false, error: "Not assigned to this van today" };
+  if (!assignment) {
+    if (user.role !== "coordinator" && user.role !== "admin") {
+      return { ok: false, error: "Not assigned to this van today" };
+    }
+    // Coordinator/admin overriding the assignment check — log it for audit.
+    await supabase.from("incidents").insert({
+      severity: "info",
+      category: "van_gps_override",
+      summary: `${user.role} broadcast GPS for van ${parsed.data.vanId} without an assignment`,
+      details: {
+        van_id: parsed.data.vanId,
+        actor_user_id: user.id,
+        actor_role: user.role,
+        lat: parsed.data.lat,
+        lng: parsed.data.lng,
+      },
+      van_id: parsed.data.vanId,
+      reported_by_user_id: user.id,
+    } as never);
   }
 
   const { error } = await supabase.from("van_locations").upsert(

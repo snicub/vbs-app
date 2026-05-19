@@ -4,10 +4,15 @@ import { headers } from "next/headers";
 import { FamilyRegistrationSchema } from "@/lib/registration/schema";
 import { VBS_DATES } from "@/lib/registration/dates";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { generateUniqueWristbandCodes } from "@/lib/wristband/generate-unique";
 
 export type RegistrationResult =
-  | { ok: true; familyId: string; wristbandCodes: { studentName: string; code: string }[] }
+  | {
+      ok: true;
+      familyId: string;
+      familyAccessToken: string;
+      familyStatusUrl: string;
+      wristbandCodes: { studentName: string; code: string }[];
+    }
   | { ok: false; error: string };
 
 export async function registerFamily(
@@ -78,34 +83,60 @@ export async function registerFamily(
     }
   }
 
-  // 4) Students + wristband codes (unique). Photos uploaded after row insert
-  // so we can use the new student id in the path.
-  const codes = await generateUniqueWristbandCodes(data.students.length);
-  const studentRows = data.students.map((s, i) => ({
-    family_id: familyId,
-    legal_first_name: s.legalFirstName,
-    legal_last_name: s.legalLastName,
-    preferred_first_name: s.preferredFirstName ?? null,
-    dob: s.dob ?? null,
-    age_at_registration: s.ageAtRegistration ?? null,
-    grade: s.grade ?? null,
-    allergies: s.allergies ?? null,
-    medical_notes: s.medicalNotes ?? null,
-    wristband_code: codes[i]!,
-  }));
-  const { data: inserted, error: studentErr } = await admin
-    .from("students")
-    .insert(studentRows as never)
-    .select("id, legal_first_name, legal_last_name, wristband_code");
-  if (studentErr || !inserted) {
-    return { ok: false, error: `could not create students: ${studentErr?.message ?? "unknown"}` };
+  // 4) Students with wristband codes. We insert per-student with retry-on-
+  // unique-violation: two concurrent signups could generate the same code,
+  // and pre-checking the existing set isn't race-safe. The unique index on
+  // students.wristband_code is the authoritative gate; we just regenerate
+  // and retry on conflict (Postgres code 23505).
+  const { generateWristbandCode } = await import("@/lib/wristband/generate");
+
+  type InsertedStudent = { id: string; legal_first_name: string; legal_last_name: string; wristband_code: string };
+  const inserted: InsertedStudent[] = [];
+
+  for (const s of data.students) {
+    const row = {
+      family_id: familyId,
+      legal_first_name: s.legalFirstName,
+      legal_last_name: s.legalLastName,
+      preferred_first_name: s.preferredFirstName ?? null,
+      dob: s.dob ?? null,
+      age_at_registration: s.ageAtRegistration ?? null,
+      grade: s.grade ?? null,
+      allergies: s.allergies ?? null,
+      medical_notes: s.medicalNotes ?? null,
+      wristband_code: "",
+    };
+    let result: InsertedStudent | null = null;
+    let lastErr: { code?: string; message: string } | null = null;
+    for (let attempt = 0; attempt < 16; attempt++) {
+      row.wristband_code = generateWristbandCode();
+      const { data: ins, error } = await admin
+        .from("students")
+        .insert(row as never)
+        .select("id, legal_first_name, legal_last_name, wristband_code")
+        .single<InsertedStudent>();
+      if (!error && ins) {
+        result = ins;
+        break;
+      }
+      lastErr = error;
+      // 23505 = unique_violation. Anything else is fatal.
+      if (error?.code !== "23505") break;
+    }
+    if (!result) {
+      return {
+        ok: false,
+        error: `could not create student ${s.legalFirstName} ${s.legalLastName}: ${lastErr?.message ?? "unknown"}`,
+      };
+    }
+    inserted.push(result);
   }
 
   // Upload photos for each student (if provided). Path: <family>/<student>.jpg
   for (let i = 0; i < data.students.length; i++) {
     const photo = data.students[i]!.photoBytes;
     if (!photo) continue;
-    const studentId = (inserted as { id: string }[])[i]!.id;
+    const studentId = inserted[i]!.id;
     const path = `${familyId}/${studentId}.jpg`;
     const bytes = Buffer.from(photo, "base64");
     const { error: uploadErr } = await admin.storage
@@ -125,7 +156,7 @@ export async function registerFamily(
   }
 
   // 5) student_day_records — one per (student, VBS date)
-  const studentMeta = inserted as { id: string; legal_first_name: string; legal_last_name: string; wristband_code: string }[];
+  const studentMeta = inserted;
   const dayRows = data.students.flatMap((s, i) => {
     const studentId = studentMeta[i]!.id;
     return VBS_DATES.map((d) => ({
@@ -161,11 +192,23 @@ export async function registerFamily(
   }
 
   // 7) Family access token for the parent status URL
-  await admin.from("family_access_tokens").insert({ family_id: familyId } as never);
+  const { data: tokenRow, error: tokenErr } = await admin
+    .from("family_access_tokens")
+    .insert({ family_id: familyId } as never)
+    .select("token")
+    .single<{ token: string }>();
+  if (tokenErr || !tokenRow) {
+    return { ok: false, error: `could not create access token: ${tokenErr?.message ?? "unknown"}` };
+  }
+
+  const { env } = await import("@/lib/env");
+  const familyStatusUrl = `${env.NEXT_PUBLIC_BASE_URL}/parent/${tokenRow.token}`;
 
   return {
     ok: true,
     familyId,
+    familyAccessToken: tokenRow.token,
+    familyStatusUrl,
     wristbandCodes: studentMeta.map((s) => ({
       studentName: `${s.legal_first_name} ${s.legal_last_name}`,
       code: s.wristband_code,
