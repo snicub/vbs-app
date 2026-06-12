@@ -8,6 +8,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { recordEvent } from "@/lib/events/record-event";
 import type { EventType } from "@/lib/events/state-machine";
 import { newIdempotencyKey } from "@/lib/idempotency";
+import { getLocalDate } from "@/lib/date";
 
 const EventArgsSchema = z.object({
   studentId: z.string().uuid(),
@@ -49,6 +50,12 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
   }
   const args = parsed.data;
 
+  // The DB enforces this too, but catching it here lets the UI show a
+  // clear message instead of a raw "P0001: override requires reason" error.
+  if (args.eventType === "override" && !args.overrideReason?.trim()) {
+    return { ok: false, error: "Override requires a written reason." };
+  }
+
   const result = await recordEvent({
     studentId: args.studentId,
     eventDate: args.eventDate,
@@ -76,6 +83,114 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
     state: result.data.derivedState,
     wasOverride: result.data.wasOverride,
   };
+}
+
+/**
+ * Undo a recently-recorded event by inserting an `override` event that
+ * supersedes it. Because `_derive_state` filters out override events AND
+ * superseded events, the derived state reverts to what it was just before
+ * the mistake. The original event row stays for audit.
+ *
+ * The undo is allowed if:
+ *   - the actor is a coordinator/admin, OR
+ *   - the actor recorded the event being undone (self-undo, common case)
+ *   - AND the event is less than 60 seconds old (after that, force coord override)
+ */
+const UndoSchema = z.object({
+  eventId: z.string().uuid(),
+});
+
+export async function undoEvent(input: unknown): Promise<
+  { ok: true; newState: string } | { ok: false; error: string }
+> {
+  const session = await getSessionUser();
+  if (!session) return { ok: false, error: "Not signed in" };
+
+  const parsed = UndoSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+
+  const admin = createAdminClient();
+  const { data: original } = await admin
+    .from("student_day_events")
+    .select("id, student_id, event_date, event_type, actor_user_id, occurred_at, superseded_by_event_id")
+    .eq("id", parsed.data.eventId)
+    .maybeSingle<{
+      id: string;
+      student_id: string;
+      event_date: string;
+      event_type: string;
+      actor_user_id: string | null;
+      occurred_at: string;
+      superseded_by_event_id: string | null;
+    }>();
+
+  if (!original) return { ok: false, error: "Event not found" };
+  if (original.superseded_by_event_id) {
+    return { ok: false, error: "This event was already undone" };
+  }
+  if (original.event_type === "override") {
+    return { ok: false, error: "Override events can't be undone — record a new override" };
+  }
+
+  const isOwner = original.actor_user_id === session.id;
+  const isCoord = session.role === "coordinator" || session.role === "admin";
+  if (!isOwner && !isCoord) {
+    return { ok: false, error: "You can only undo your own events" };
+  }
+  if (original.event_type === "no_show" && !isCoord) {
+    return { ok: false, error: "Only a coordinator can reverse a no-show" };
+  }
+  if (!isCoord) {
+    const ageMs = Date.now() - new Date(original.occurred_at).getTime();
+    if (ageMs > 60_000) {
+      return {
+        ok: false,
+        error: "Too late to undo — ask a coordinator to override",
+      };
+    }
+  }
+
+  // Reject undo if newer non-superseded events exist for this student/date.
+  // Undoing an earlier event while later ones stand would silently rewrite
+  // the audit trail and could leave the kid in a state that's historically
+  // impossible (e.g., site_checked_in with no preceding board/dropoff).
+  if (!isCoord) {
+    const { data: newer } = await admin
+      .from("student_day_events")
+      .select("id")
+      .eq("student_id", original.student_id)
+      .eq("event_date", original.event_date)
+      .gt("occurred_at", original.occurred_at)
+      .is("superseded_by_event_id", null)
+      .neq("event_type", "override")
+      .limit(1);
+    if (newer && newer.length > 0) {
+      return {
+        ok: false,
+        error: "Newer events exist — ask a coordinator to override instead",
+      };
+    }
+  }
+
+  const result = await recordEvent({
+    studentId: original.student_id,
+    eventDate: original.event_date,
+    eventType: "override",
+    actorUserId: session.id,
+    actorRole: session.role,
+    idempotencyKey: newIdempotencyKey("undo"),
+    overrideReason: `undo: ${original.event_type} at ${original.occurred_at}`,
+    supersedesEventId: original.id,
+    asAdmin: true,
+  });
+
+  if (!result.ok) return result;
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+
+  return { ok: true, newState: result.data.derivedState };
 }
 
 /**
@@ -107,7 +222,9 @@ export async function lookupByWristband(input: unknown): Promise<
       status: {
         state: string;
         eventDate: string;
+        mode: string;
         wristbandColorName: string | null;
+        wristbandColorHex: string | null;
         morningStopId: string | null;
         afternoonStopId: string | null;
       } | null;
@@ -154,17 +271,19 @@ export async function lookupByWristband(input: unknown): Promise<
   if (stuErr) return { ok: false, error: stuErr.message };
   if (!student) return { ok: false, error: "No student found for that code." };
 
-  const eventDate = parsed.data.eventDate ?? new Date().toISOString().slice(0, 10);
+  const eventDate = parsed.data.eventDate ?? getLocalDate();
 
   const { data: status } = await supabase
     .from("student_day_status")
-    .select("state, event_date, wristband_color_name, morning_stop_id, afternoon_stop_id")
+    .select("state, event_date, mode, wristband_color_name, wristband_color_for_day, morning_stop_id, afternoon_stop_id")
     .eq("student_id", student.id)
     .eq("event_date", eventDate)
     .maybeSingle<{
       state: string;
       event_date: string;
+      mode: string;
       wristband_color_name: string | null;
+      wristband_color_for_day: string | null;
       morning_stop_id: string | null;
       afternoon_stop_id: string | null;
     }>();
@@ -186,7 +305,9 @@ export async function lookupByWristband(input: unknown): Promise<
       ? {
           state: status.state,
           eventDate: status.event_date,
+          mode: status.mode,
           wristbandColorName: status.wristband_color_name,
+          wristbandColorHex: status.wristband_color_for_day,
           morningStopId: status.morning_stop_id,
           afternoonStopId: status.afternoon_stop_id,
         }
@@ -206,15 +327,21 @@ export async function searchStudentsByName(query: string): Promise<
   const session = await getSessionUser();
   if (!session) return { ok: false, error: "Not signed in" };
 
+  const { isStaff } = await import("@/lib/auth/roles");
+  if (!isStaff(session.role)) return { ok: false, error: "Staff only" };
+
   const q = query.trim().toLowerCase();
   if (q.length < 2) return { ok: true, matches: [] };
+
+  const sanitized = q.replace(/[.,%_*()\\]/g, "");
+  if (sanitized.length < 2) return { ok: true, matches: [] };
 
   const admin = createAdminClient();
   const { data, error } = await admin
     .from("students")
     .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code")
     .or(
-      `legal_first_name.ilike.%${q}%,legal_last_name.ilike.%${q}%,preferred_first_name.ilike.%${q}%`,
+      `legal_first_name.ilike.%${sanitized}%,legal_last_name.ilike.%${sanitized}%,preferred_first_name.ilike.%${sanitized}%`,
     )
     .limit(20)
     .returns<{

@@ -1,13 +1,25 @@
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { getLocalDate } from "@/lib/date";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
-import { STATE_LABEL, type DayState } from "@/lib/events/state-machine";
-import { anomaliesFor, ANOMALY_LABEL, ANOMALY_SEVERITY } from "@/lib/anomaly";
+import { type DayState } from "@/lib/events/state-machine";
+import { anomaliesFor } from "@/lib/anomaly";
+import {
+  STATE_PRESENTATION,
+  TONE_CLASSES,
+  ANOMALY_PRESENTATION,
+} from "@/lib/state-presentation";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { Badge } from "@/components/ui/badge";
+import {
+  AnomalyBadge,
+} from "@/components/state-badge";
 import { buttonVariants } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+import { AlertTriangleIcon } from "lucide-react";
+import { RosterList, Avatar } from "./roster-list";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator — Today" };
@@ -35,6 +47,7 @@ type StudentRow = {
   allergies: string | null;
   medical_notes: string | null;
   photo_path: string | null;
+  family_id: string;
 };
 
 export default async function CoordinatorTodayPage({
@@ -49,7 +62,7 @@ export default async function CoordinatorTodayPage({
   }
 
   const { date } = await searchParams;
-  const today = date ?? new Date().toISOString().slice(0, 10);
+  const today = date ?? getLocalDate();
 
   const supabase = await createClient();
   const { data: statuses } = await supabase
@@ -64,10 +77,21 @@ export default async function CoordinatorTodayPage({
   const { data: students } = studentIds.length > 0
     ? await supabase
         .from("students")
-        .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path")
+        .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path, family_id")
         .in("id", studentIds)
         .returns<StudentRow[]>()
     : { data: [] as StudentRow[] };
+
+  // Fetch family names for roster search
+  const familyIds = Array.from(new Set((students ?? []).map((s) => s.family_id)));
+  const { data: families } = familyIds.length > 0
+    ? await supabase
+        .from("families")
+        .select("id, primary_guardian_name")
+        .in("id", familyIds)
+        .returns<{ id: string; primary_guardian_name: string }[]>()
+    : { data: [] as { id: string; primary_guardian_name: string }[] };
+  const familyNameMap = new Map((families ?? []).map((f) => [f.id, f.primary_guardian_name]));
 
   const { data: closeout } = await supabase
     .from("daily_closeouts")
@@ -75,7 +99,6 @@ export default async function CoordinatorTodayPage({
     .eq("event_date", today)
     .maybeSingle<{ closed_at: string; notes: string | null }>();
 
-  // Short-lived signed URLs for each photo, in parallel.
   const photoUrls = new Map<string, string | null>();
   await Promise.all(
     (students ?? []).map(async (s) => {
@@ -83,7 +106,7 @@ export default async function CoordinatorTodayPage({
     }),
   );
 
-  const studentMap = new Map(students!.map((s) => [s.id, s]));
+  const studentMap = new Map((students ?? []).map((s) => [s.id, s]));
   const enriched = (statuses ?? []).map((s) => {
     const stu = studentMap.get(s.student_id);
     return {
@@ -101,6 +124,7 @@ export default async function CoordinatorTodayPage({
       allergies: stu?.allergies ?? null,
       medicalNotes: stu?.medical_notes ?? null,
       photoUrl: photoUrls.get(s.student_id) ?? null,
+      familyName: stu?.family_id ? (familyNameMap.get(stu.family_id) ?? "") : "",
     };
   });
 
@@ -117,143 +141,120 @@ export default async function CoordinatorTodayPage({
   const counts = countByState(enriched);
 
   return (
-    <>
-      <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
-        <div className="space-y-1">
-          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
-            Today — {formatDate(today)}
-          </h1>
-          <p className="text-muted-foreground text-sm">
-            {enriched.length} student{enriched.length === 1 ? "" : "s"} ·{" "}
-            {watchList.length === 0 ? (
-              <span className="text-green-700 dark:text-green-400 font-medium">
-                nothing needs attention
-              </span>
-            ) : (
-              <span className="text-destructive font-medium">
-                {watchList.length} need{watchList.length === 1 ? "s" : ""} attention
-              </span>
-            )}
-            {closeout && (
-              <>
-                {" · "}
-                <Badge variant="secondary">closed at {fmtTime(closeout.closed_at)}</Badge>
-              </>
-            )}
-          </p>
-        </div>
+    <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      <header className="space-y-1">
+        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
+          Today — {formatDate(today)}
+        </h1>
+        <p className="text-muted-foreground text-sm">
+          {enriched.length} student{enriched.length === 1 ? "" : "s"} ·{" "}
+          {watchList.length === 0 ? (
+            <span className="text-[var(--state-safe)] font-medium">
+              nothing needs attention
+            </span>
+          ) : (
+            <span className="text-[var(--anomaly-critical)] font-medium">
+              {watchList.length} need{watchList.length === 1 ? "s" : ""} attention
+            </span>
+          )}
+          {closeout && (
+            <>
+              {" · "}
+              <Badge variant="secondary">closed at {fmtTime(closeout.closed_at)}</Badge>
+            </>
+          )}
+        </p>
+      </header>
 
-        {/* Status counts — colored stripe matches the state badge */}
-        <section className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-          {(Object.keys(STATE_ORDER) as DayState[]).map((state) => (
-            <div
-              key={state}
-              className="rounded-lg border bg-card px-3 py-2 border-l-4"
-              style={{ borderLeftColor: STATE_STRIPE[state] }}
-            >
-              <div className="text-2xl font-semibold leading-none">{counts[state] ?? 0}</div>
-              <div className="text-xs text-muted-foreground mt-1">{STATE_LABEL[state]}</div>
-            </div>
-          ))}
-        </section>
-
-        {watchList.length > 0 && (
-          <section className="rounded-lg border border-destructive/30 bg-destructive/5 p-3 sm:p-4">
-            <h2 className="font-semibold text-destructive mb-3 text-sm sm:text-base">
+      {watchList.length > 0 && (
+        <section className="rounded-xl border-2 border-[var(--anomaly-critical)]/30 bg-[var(--anomaly-critical)]/5 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <AlertTriangleIcon
+              className="size-5 text-[var(--anomaly-critical)]"
+              aria-hidden
+            />
+            <h2 className="font-semibold text-[var(--anomaly-critical)] text-sm sm:text-base">
               Needs attention ({watchList.length})
             </h2>
-            <ul className="space-y-2">
-              {watchList.map((s) => (
-                <li
-                  key={s.student_id}
-                  className="flex flex-wrap items-center gap-2 rounded-md bg-card border px-2.5 py-2"
-                >
-                  <Avatar url={s.photoUrl} alt={s.name} size={32} />
-                  <Link
-                    href={`/table/${s.wristbandCode}`}
-                    className="font-medium hover:underline text-sm"
-                  >
-                    {s.name}
-                  </Link>
-                  <code className="font-mono text-xs text-muted-foreground hidden sm:inline">
-                    {s.wristbandCode}
-                  </code>
-                  <div className="flex flex-wrap gap-1 ml-auto">
-                    {s.anomalies.map((a) => (
-                      <Badge
-                        key={a}
-                        variant={
-                          ANOMALY_SEVERITY[a] === "critical" ? "destructive" : "warning"
-                        }
-                      >
-                        {ANOMALY_LABEL[a]}
-                      </Badge>
-                    ))}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
-
-        {/* Roster */}
-        <section className="rounded-lg border bg-card">
-          <div className="border-b px-3 sm:px-4 py-2.5 flex items-center justify-between">
-            <h2 className="font-semibold text-sm">Roster ({enriched.length})</h2>
-            <div className="text-xs text-muted-foreground hidden sm:block">
-              Tap a name to check in / out
-            </div>
           </div>
-          <ul className="divide-y">
-            {sorted.map((s) => (
+          <ul className="space-y-2">
+            {watchList.map((s) => (
               <li
                 key={s.student_id}
-                className="hover:bg-muted/40 active:bg-muted border-l-4"
-                style={{ borderLeftColor: STATE_STRIPE[s.state as DayState] }}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-card border px-2.5 py-2"
               >
+                <Avatar url={s.photoUrl} alt={s.name} size={40} />
                 <Link
                   href={`/table/${s.wristbandCode}`}
-                  className="flex items-center gap-3 px-3 sm:px-4 py-2.5"
+                  className="font-medium hover:underline text-sm"
                 >
-                  <Avatar url={s.photoUrl} alt={s.name} />
-                  <ColorDot color={s.wristband_color_for_day} />
-                  <span className="font-medium truncate flex-1 min-w-0">{s.name}</span>
-                  {s.allergies && (
-                    <Badge variant="warning" className="shrink-0" title={s.allergies}>
-                      <span className="sm:hidden">!</span>
-                      <span className="hidden sm:inline">allergies</span>
-                    </Badge>
-                  )}
-                  {s.medicalNotes && (
-                    <Badge variant="destructive" className="shrink-0" title={s.medicalNotes}>
-                      <span className="sm:hidden">⚕</span>
-                      <span className="hidden sm:inline">medical</span>
-                    </Badge>
-                  )}
-                  <StateBadge state={s.state as DayState} />
+                  {s.name}
                 </Link>
+                <code className="font-mono text-xs text-muted-foreground hidden sm:inline">
+                  {s.wristbandCode}
+                </code>
+                <div className="flex flex-wrap gap-1 ml-auto">
+                  {s.anomalies.map((a) => (
+                    <AnomalyBadge key={a} kind={a} size="sm" />
+                  ))}
+                </div>
               </li>
             ))}
           </ul>
         </section>
+      )}
 
-        {/* Footer actions — stacked on mobile, inline on desktop */}
-        <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-          <Link
-            href="/coordinator/announcements"
-            className={buttonVariants({ variant: "outline" })}
-          >
-            Send announcement
-          </Link>
-          <Link
-            href="/coordinator/closeout"
-            className={buttonVariants({ variant: closeout ? "outline" : "default" })}
-          >
-            {closeout ? "Reopen day…" : "End-of-day closeout"}
-          </Link>
-        </div>
+      {/* Status counts — each state gets its own card with matching stripe */}
+      <section className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
+        {(Object.keys(STATE_ORDER) as DayState[]).map((state) => {
+          const p = STATE_PRESENTATION[state];
+          const tone = TONE_CLASSES[p.tone];
+          const Icon = p.icon;
+          const count = counts[state] ?? 0;
+          return (
+            <div
+              key={state}
+              className="rounded-lg border bg-card px-3 py-2.5 border-l-4 transition-colors"
+              style={{
+                borderLeftColor:
+                  state === "not_started"
+                    ? "transparent"
+                    : `var(--state-${p.tone})`,
+              }}
+              title={p.description}
+            >
+              <div className="flex items-center justify-between gap-2">
+                <div className="text-2xl font-semibold leading-none tabular-nums">
+                  {count}
+                </div>
+                <Icon className={cn("size-4", tone.icon)} aria-hidden />
+              </div>
+              <div className="text-xs text-muted-foreground mt-1.5">
+                {p.label}
+              </div>
+            </div>
+          );
+        })}
+      </section>
+
+      {/* Roster */}
+      <RosterList students={sorted} />
+
+      <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
+        <Link
+          href="/coordinator/announcements"
+          className={buttonVariants({ variant: "outline" })}
+        >
+          Send announcement
+        </Link>
+        <Link
+          href="/coordinator/closeout"
+          className={buttonVariants({ variant: closeout ? "outline" : "default" })}
+        >
+          {closeout ? "Reopen day…" : "End-of-day closeout"}
+        </Link>
       </div>
-    </>
+    </div>
   );
 }
 
@@ -268,86 +269,6 @@ const STATE_ORDER: Record<DayState, number> = {
   marked_no_show: 7,
 };
 
-const STATE_BADGE_VARIANT: Record<
-  DayState,
-  "muted" | "info" | "accent" | "success" | "warning" | "successDeep" | "destructive"
-> = {
-  not_started:      "muted",        // gray
-  van_boarded_am:   "info",         // blue — arriving
-  arrived_at_site:  "accent",       // teal — at site, awaiting check-in
-  site_checked_in:  "success",      // green — at VBS (safe)
-  site_checked_out: "warning",      // amber — heading home from site
-  van_boarded_pm:   "warning",      // amber — on PM van home
-  home:             "successDeep",  // deep green — home (terminal safe)
-  marked_no_show:   "destructive",  // red — no-show
-};
-
-// Hex stripes per state — left border on roster rows + count cards.
-const STATE_STRIPE: Record<DayState, string> = {
-  not_started:      "transparent",
-  van_boarded_am:   "rgb(14 165 233)",   // sky-500 (arriving)
-  arrived_at_site:  "rgb(20 184 166)",   // teal-500 (at site)
-  site_checked_in:  "rgb(34 197 94)",    // green-500 (at VBS)
-  site_checked_out: "rgb(251 146 60)",   // orange-400 (leaving site)
-  van_boarded_pm:   "rgb(245 158 11)",   // amber-500 (en route home)
-  home:             "rgb(22 163 74)",    // green-600 (home)
-  marked_no_show:   "rgb(239 68 68)",    // red-500 (no-show)
-};
-
-function StateBadge({ state }: { state: DayState }) {
-  return <Badge variant={STATE_BADGE_VARIANT[state]}>{STATE_LABEL[state]}</Badge>;
-}
-
-function ColorDot({ color }: { color: string | null }) {
-  if (!color) {
-    return (
-      <span className="inline-block w-3 h-3 rounded-full border bg-muted shrink-0" />
-    );
-  }
-  return (
-    <span
-      className="inline-block w-3 h-3 rounded-full border shrink-0"
-      style={{ backgroundColor: color }}
-      aria-hidden
-    />
-  );
-}
-
-function Avatar({
-  url,
-  alt,
-  size = 36,
-}: {
-  url: string | null;
-  alt: string;
-  size?: number;
-}) {
-  const base = "rounded-full border object-cover shrink-0";
-  if (url) {
-    return (
-      // eslint-disable-next-line @next/next/no-img-element
-      <img src={url} alt={alt} className={base} style={{ width: size, height: size }} />
-    );
-  }
-  return (
-    <span
-      className={
-        base +
-        " bg-muted text-[10px] text-muted-foreground flex items-center justify-center"
-      }
-      style={{ width: size, height: size }}
-    >
-      {alt
-        .split(/\s+/)
-        .map((s) => s[0])
-        .filter(Boolean)
-        .slice(0, 2)
-        .join("")
-        .toUpperCase()}
-    </span>
-  );
-}
-
 function countByState(rows: { state: string }[]): Record<string, number> {
   const counts: Record<string, number> = {};
   for (const r of rows) counts[r.state] = (counts[r.state] ?? 0) + 1;
@@ -356,7 +277,9 @@ function countByState(rows: { state: string }[]): Record<string, number> {
 
 function severityRank(anomalies: ReturnType<typeof anomaliesFor>): number {
   if (anomalies.length === 0) return 99;
-  const hasCritical = anomalies.some((a) => ANOMALY_SEVERITY[a] === "critical");
+  const hasCritical = anomalies.some(
+    (a) => ANOMALY_PRESENTATION[a].tone === "critical",
+  );
   return hasCritical ? 0 : 1;
 }
 

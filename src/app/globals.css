@@ -17,24 +17,28 @@
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
+  /* Semantic state colors — one source of truth for every place a
+     student's status is rendered. Each ships with a strong "base" hue
+     (for stripes, dots, icons) and a foreground hue for text-on-tint
+     badges. Tuned for WCAG AA contrast on the cream background. */
+  --color-state-pending: var(--state-pending);
+  --color-state-transit: var(--state-transit);
+  --color-state-arrived: var(--state-arrived);
+  --color-state-safe: var(--state-safe);
+  --color-state-leaving: var(--state-leaving);
+  --color-state-home: var(--state-home);
+  --color-state-danger: var(--state-danger);
+
+  /* Anomaly + safety callouts. These pop louder than state badges. */
+  --color-anomaly-warn: var(--anomaly-warn);
+  --color-anomaly-critical: var(--anomaly-critical);
+  --color-medical: var(--medical);
+  --color-allergy: var(--allergy);
+
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -43,72 +47,75 @@
 }
 
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+  /* Warm cream surface, deep teal primary. Calm at rest, alarming on
+     incident. */
+  --background: oklch(0.985 0.006 85);          /* warm cream */
+  --foreground: oklch(0.20 0.01 80);            /* warm near-black */
+  --card: oklch(1 0 0);                          /* pure white card on cream */
+  --card-foreground: oklch(0.20 0.01 80);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.55 0.20 257);            /* sky-600 / blue */
+  --popover-foreground: oklch(0.20 0.01 80);
+  --primary: oklch(0.50 0.10 195);              /* deep teal */
   --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.55 0.20 257);                /* match primary */
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --secondary: oklch(0.96 0.008 85);            /* slightly darker cream */
+  --secondary-foreground: oklch(0.25 0.01 80);
+  --muted: oklch(0.95 0.008 85);
+  --muted-foreground: oklch(0.48 0.01 80);
+  --accent: oklch(0.93 0.04 195);                /* pale teal tint */
+  --destructive: oklch(0.58 0.21 22);            /* warm rose-red */
+  --border: oklch(0.90 0.008 85);
+  --input: oklch(0.92 0.008 85);
+  --ring: oklch(0.50 0.10 195);                  /* match primary */
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+
+  /* Semantic state palette (light) — all tuned to ≥4.5:1 on cream bg */
+  --state-pending: oklch(0.50 0.01 80);          /* warm gray */
+  --state-transit: oklch(0.48 0.14 240);         /* sky blue — moving */
+  --state-arrived: oklch(0.48 0.12 195);         /* teal — at site */
+  --state-safe:    oklch(0.48 0.15 150);         /* emerald — checked in */
+  --state-leaving: oklch(0.52 0.16 65);          /* amber — heading home */
+  --state-home:    oklch(0.42 0.14 150);         /* deep green — home (terminal good) */
+  --state-danger:  oklch(0.48 0.21 22);          /* rose — no-show */
+
+  --anomaly-warn:     oklch(0.52 0.16 65);       /* amber */
+  --anomaly-critical: oklch(0.48 0.21 22);       /* rose */
+  --medical:          oklch(0.48 0.22 18);       /* deeper rose */
+  --allergy:          oklch(0.52 0.16 65);       /* amber */
+
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.7 0.18 257);              /* lighter blue for dark bg */
-  --primary-foreground: oklch(0.15 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
+  --background: oklch(0.18 0.01 80);             /* warm near-black */
+  --foreground: oklch(0.95 0.008 85);            /* warm off-white */
+  --card: oklch(0.23 0.01 80);
+  --card-foreground: oklch(0.95 0.008 85);
+  --popover: oklch(0.23 0.01 80);
+  --popover-foreground: oklch(0.95 0.008 85);
+  --primary: oklch(0.72 0.10 195);               /* lighter teal */
+  --primary-foreground: oklch(0.18 0.01 80);
+  --secondary: oklch(0.28 0.01 80);
+  --secondary-foreground: oklch(0.95 0.008 85);
+  --muted: oklch(0.28 0.01 80);
+  --muted-foreground: oklch(0.70 0.01 80);
+  --accent: oklch(0.32 0.06 195);
+  --destructive: oklch(0.70 0.20 22);
+  --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --ring: oklch(0.72 0.10 195);
+  /* Semantic state palette (dark) — lighter chroma for legibility */
+  --state-pending: oklch(0.65 0.01 80);
+  --state-transit: oklch(0.72 0.14 240);
+  --state-arrived: oklch(0.72 0.12 195);
+  --state-safe:    oklch(0.72 0.15 150);
+  --state-leaving: oklch(0.78 0.16 65);
+  --state-home:    oklch(0.65 0.14 150);
+  --state-danger:  oklch(0.70 0.20 22);
+
+  --anomaly-warn:     oklch(0.78 0.16 65);
+  --anomaly-critical: oklch(0.70 0.20 22);
+  --medical:          oklch(0.70 0.21 18);
+  --allergy:          oklch(0.78 0.16 65);
+
 }
 
 @layer base {
@@ -117,12 +124,71 @@
   }
   body {
     @apply bg-background text-foreground antialiased;
+    /* iOS safe-area + prevent overscroll bounce showing the browser chrome */
+    padding-top: env(safe-area-inset-top);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+    overscroll-behavior-y: none;
   }
   html {
     @apply font-sans;
+    /* Stop iOS Safari from auto-sizing text in landscape */
+    -webkit-text-size-adjust: 100%;
   }
 }
 
 @utility text-balance {
   text-wrap: balance;
+}
+
+/* Leaflet zoom controls — default Leaflet ships ~26px buttons which fail
+   our 44px tap-target floor. Scale them up for thumb use without changing
+   the icon font. */
+.leaflet-bar a,
+.leaflet-bar a:hover {
+  width: 44px !important;
+  height: 44px !important;
+  line-height: 44px !important;
+  font-size: 22px !important;
+}
+
+/* ----------------------------------------------------------------------------
+ * Print — name-tag sheet. Cards lay out 2-up on plain letter paper with dashed
+ * cut lines; print-color-adjust forces the town color band to actually print.
+ * --------------------------------------------------------------------------*/
+@media print {
+  @page {
+    size: letter;
+    margin: 0.5in;
+  }
+
+  html,
+  body {
+    background: #fff !important;
+  }
+
+  .nametag-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0;
+  }
+
+  .nametag-card {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    height: 2.4in;
+    border-radius: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .nametag-band {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  .nametag-name {
+    font-size: 30pt;
+  }
 }

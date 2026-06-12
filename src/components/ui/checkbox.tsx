@@ -11,7 +11,10 @@ const Checkbox = React.forwardRef<
   <CheckboxPrimitive.Root
     ref={ref}
     className={cn(
-      "peer h-4 w-4 shrink-0 rounded border border-input bg-background",
+      // Visual box is 20px (h-5 w-5) but the touch target extends to 44px
+      // via padding on the outer element so adjacent tap zones don't fight.
+      "peer relative h-5 w-5 shrink-0 rounded border border-input bg-background",
+      "before:absolute before:-inset-3 before:content-['']",
       "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
       "disabled:cursor-not-allowed disabled:opacity-50",
       "data-[checked]:bg-primary data-[checked]:text-primary-foreground data-[checked]:border-primary",
@@ -20,8 +23,8 @@ const Checkbox = React.forwardRef<
     {...props}
   >
     <CheckboxPrimitive.Indicator className="flex items-center justify-center text-current">
-      <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
-        <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+        <path d="M2.5 7L5.5 10L11.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </CheckboxPrimitive.Indicator>
   </CheckboxPrimitive.Root>

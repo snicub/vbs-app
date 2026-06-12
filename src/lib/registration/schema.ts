@@ -2,10 +2,24 @@ import { z } from "zod";
 
 const PHONE_RE = /^\+?[0-9()\-.\s]{7,20}$/;
 
+/**
+ * Strip a phone string to digits and normalize to E.164 for Twilio.
+ * - 10 digits → +1XXXXXXXXXX (US)
+ * - 11 digits starting with 1 → +1XXXXXXXXXX (US with country code)
+ * - anything else → +<digits> (international)
+ */
+export function normalizePhone(raw: string): string {
+  const digits = raw.replace(/\D/g, "");
+  if (digits.length === 10) return `+1${digits}`;
+  if (digits.length === 11 && digits.startsWith("1")) return `+${digits}`;
+  return `+${digits}`;
+}
+
 export const PhoneSchema = z
   .string()
   .trim()
-  .regex(PHONE_RE, "Enter a valid phone number");
+  .regex(PHONE_RE, "Enter a valid phone number")
+  .transform(normalizePhone);
 
 export const EmailSchema = z.string().trim().email("Enter a valid email");
 
@@ -104,7 +118,7 @@ export const FamilyRegistrationSchema = z.object({
   guardians: z.array(GuardianSchema).min(1, "At least one guardian is required"),
   emergencyContact: EmergencyContactSchema,
   authorizedPickup: z.array(AuthorizedPickupSchema).default([]),
-  students: z.array(StudentSchema).min(1, "Add at least one child"),
+  students: z.array(StudentSchema).min(1, "Add at least one child").max(15, "Maximum 15 children per family"),
   consents: z.object({
     typedName: z.string().trim().min(1, "Type your full name to sign"),
     agreed: z.array(ConsentInputSchema).min(5, "All consents are required"),

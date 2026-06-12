@@ -17,15 +17,20 @@ function linksFor(role: UserRole): NavLink[] {
     return [
       { href: "/coordinator", label: "Today" },
       { href: "/coordinator/students", label: "Students" },
+      { href: "/coordinator/nametags", label: "Name Tags" },
+      { href: "/coordinator/stops", label: "Colors" },
       { href: "/table", label: "Check-In" },
+      { href: "/coordinator/vans", label: "Vans" },
       { href: "/coordinator/vans/map", label: "Live Map" },
       { href: "/coordinator/announcements", label: "Announce" },
       { href: "/coordinator/closeout", label: "Closeout" },
+      { href: "/photos", label: "Photos" },
     ];
   }
   const links: NavLink[] = [];
   if (canCheckIn(role)) links.push({ href: "/table", label: "Check-In" });
   if (canDriveVan(role)) links.push({ href: "/van", label: "My Van" });
+  if (isStaff(role)) links.push({ href: "/photos", label: "Photos" });
   if (!isStaff(role)) links.push({ href: "/parent", label: "My Family" });
   return links;
 }
@@ -49,7 +54,7 @@ export function AppShell({
   const links = linksFor(user.role);
   return (
     <div className="min-h-dvh bg-background">
-      <header className="sticky top-0 z-[1100] border-b bg-card">
+      <header className="sticky top-0 z-[1100] border-b bg-card print:hidden">
         <div className="mx-auto max-w-7xl px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <Link

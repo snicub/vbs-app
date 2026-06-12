@@ -1,7 +1,19 @@
+import dynamic from "next/dynamic";
 import { createClient } from "@/lib/supabase/server";
-import { VanMap } from "./van-map";
 
-export const dynamic = "force-dynamic";
+const VanMap = dynamic(() => import("./van-map").then((m) => m.VanMap), {
+  ssr: false,
+  loading: () => (
+    <div
+      className="w-full rounded-lg border bg-muted animate-pulse flex items-center justify-center text-sm text-muted-foreground"
+      style={{ height: "min(70dvh, 720px)", minHeight: 360 }}
+    >
+      Loading map…
+    </div>
+  ),
+});
+
+export const revalidate = 0;
 export const metadata = { title: "Live Van Map — Coordinator" };
 
 export default async function VanMapPage() {

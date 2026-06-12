@@ -1,0 +1,18 @@
+{
+  "name": "VBS Check-In",
+  "short_name": "VBS",
+  "description": "Vacation Bible School check-in and transportation tracker",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#FAF7F2",
+  "theme_color": "#0F766E",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    }
+  ]
+}

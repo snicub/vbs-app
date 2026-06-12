@@ -4,6 +4,9 @@ import { headers } from "next/headers";
 import { FamilyRegistrationSchema } from "@/lib/registration/schema";
 import { VBS_DATES } from "@/lib/registration/dates";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { consentText, CONSENT_TEXT } from "@/lib/consents/text";
+import { hashConsentText } from "@/lib/consents/hash";
+import type { ConsentKind } from "@/types/domain";
 
 export type RegistrationResult =
   | {
@@ -29,6 +32,20 @@ export async function registerFamily(
   }
 
   const data = parsed.data;
+
+  // Verify consent hashes: recompute from canonical text, reject if mismatch
+  for (const consent of data.consents.agreed) {
+    const version = consent.textVersion as keyof typeof CONSENT_TEXT;
+    if (!(version in CONSENT_TEXT)) {
+      return { ok: false, error: "Consent text has changed. Please reload the page and try again." };
+    }
+    const canonical = consentText(consent.kind as ConsentKind, version);
+    const expected = await hashConsentText(canonical);
+    if (consent.textHash !== expected) {
+      return { ok: false, error: "Consent text has changed. Please reload the page and try again." };
+    }
+  }
+
   const admin = createAdminClient();
 
   // 1) Family
@@ -204,6 +221,17 @@ export async function registerFamily(
   const { env } = await import("@/lib/env");
   const familyStatusUrl = `${env.NEXT_PUBLIC_BASE_URL}/parent/${tokenRow.token}`;
 
+  // Fire-and-forget SMS confirmation. We don't await — if Twilio is slow
+  // or down the registration still succeeds; the message lands in
+  // notifications_sent as 'queued'/'failed' for coordinator follow-up.
+  void sendConfirmationSms({
+    familyId,
+    phone: data.family.primaryPhone,
+    guardianName: data.family.primaryGuardianName,
+    studentName: studentMeta[0]?.legal_first_name ?? "your child",
+    statusUrl: familyStatusUrl,
+  });
+
   return {
     ok: true,
     familyId,
@@ -214,4 +242,32 @@ export async function registerFamily(
       code: s.wristband_code,
     })),
   };
+}
+
+async function sendConfirmationSms(args: {
+  familyId: string;
+  phone: string;
+  guardianName: string;
+  studentName: string;
+  statusUrl: string;
+}): Promise<void> {
+  try {
+    const [{ sendSms }, { confirmationOnRegister }] = await Promise.all([
+      import("@/lib/notifications/send"),
+      import("@/lib/notifications/templates"),
+    ]);
+    const tpl = confirmationOnRegister({
+      guardianName: args.guardianName,
+      studentName: args.studentName,
+      statusUrl: args.statusUrl,
+    });
+    await sendSms({
+      familyId: args.familyId,
+      to: args.phone,
+      body: tpl.body,
+      templateKey: "confirmation_on_register",
+    });
+  } catch (err) {
+    console.error("confirmation SMS failed:", err);
+  }
 }

@@ -9,6 +9,8 @@ const serverSchema = z.object({
 
   NEXT_PUBLIC_BASE_URL: z.string().url().default("http://localhost:3000"),
 
+  APP_TIMEZONE: z.string().default("America/Chicago"),
+
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
@@ -16,13 +18,24 @@ const serverSchema = z.object({
 
   RESEND_API_KEY: z.string().optional(),
   RESEND_FROM: z.string().email().optional(),
+  RESEND_WEBHOOK_SECRET: z.string().optional(),
 
   MAPBOX_TOKEN: z.string().optional(),
+
+  COORDINATOR_NAME: z.string().optional(),
+  COORDINATOR_PHONE: z.string().optional(),
 
   SENTRY_DSN: z.string().optional(),
   NEXT_PUBLIC_SENTRY_DSN: z.string().optional(),
 
-  CRON_SECRET: z.string().optional(),
+  // CRON_SECRET is required in production. In dev/test you can omit it; the
+  // cron route still fails closed when the value is missing or doesn't match,
+  // so an unset secret can never accidentally expose the endpoint publicly.
+  CRON_SECRET: z.string().min(16).optional(),
+
+  // Google Drive folder to embed on /photos (staff uploads + family browsing).
+  // Share the folder "Anyone with link → Editor" for uploads without login.
+  NEXT_PUBLIC_DRIVE_FOLDER_ID: z.string().optional(),
 });
 
 const clientSchema = serverSchema.pick({
@@ -30,6 +43,7 @@ const clientSchema = serverSchema.pick({
   NEXT_PUBLIC_SUPABASE_ANON_KEY: true,
   NEXT_PUBLIC_BASE_URL: true,
   NEXT_PUBLIC_SENTRY_DSN: true,
+  NEXT_PUBLIC_DRIVE_FOLDER_ID: true,
 });
 
 const isServer = typeof window === "undefined";
@@ -67,6 +81,7 @@ function parseEnv() {
     NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     NEXT_PUBLIC_BASE_URL: process.env.NEXT_PUBLIC_BASE_URL,
     NEXT_PUBLIC_SENTRY_DSN: process.env.NEXT_PUBLIC_SENTRY_DSN,
+    NEXT_PUBLIC_DRIVE_FOLDER_ID: process.env.NEXT_PUBLIC_DRIVE_FOLDER_ID,
   });
   if (!parsed.success) {
     const issues = parsed.error.issues

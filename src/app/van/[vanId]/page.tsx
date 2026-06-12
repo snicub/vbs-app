@@ -1,7 +1,9 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { getLocalDate } from "@/lib/date";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan } from "@/lib/auth/roles";
+import { signedUrlFor } from "@/lib/storage/signed-url";
 import { VanManifest } from "./van-manifest";
 
 export const dynamic = "force-dynamic";
@@ -13,6 +15,7 @@ type StatusRow = {
   morning_van_id: string | null;
   afternoon_van_id: string | null;
   wristband_color_name: string | null;
+  wristband_color_for_day: string | null;
   morning_stop_id: string | null;
   afternoon_stop_id: string | null;
 };
@@ -25,6 +28,7 @@ type StudentRow = {
   wristband_code: string;
   allergies: string | null;
   medical_notes: string | null;
+  photo_path: string | null;
 };
 
 export default async function VanPage({
@@ -40,7 +44,7 @@ export default async function VanPage({
   }
 
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const { data: van } = await supabase
     .from("vans")
@@ -53,7 +57,7 @@ export default async function VanPage({
   const { data: statuses } = await supabase
     .from("student_day_status")
     .select(
-      "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_name, morning_stop_id, afternoon_stop_id",
+      "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_name, wristband_color_for_day, morning_stop_id, afternoon_stop_id",
     )
     .eq("event_date", today)
     .or(`morning_van_id.eq.${vanId},afternoon_van_id.eq.${vanId}`)
@@ -65,12 +69,22 @@ export default async function VanPage({
     const { data: studentRows } = await supabase
       .from("students")
       .select(
-        "id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes",
+        "id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path",
       )
       .in("id", studentIds)
       .returns<StudentRow[]>();
     students = studentRows ?? [];
   }
+
+  // Sign photo URLs in parallel for the manifest. Driver needs to see the
+  // kid's face before tapping "Boarded PM van" — this is the cheapest
+  // way to prevent kid-to-van mismatches.
+  const photoUrls = new Map<string, string | null>();
+  await Promise.all(
+    students.map(async (s) => {
+      photoUrls.set(s.id, await signedUrlFor("student-photos", s.photo_path));
+    }),
+  );
 
   const { data: stops } = await supabase
     .from("stops")
@@ -78,7 +92,19 @@ export default async function VanPage({
     .returns<{ id: string; name: string; color_name: string }[]>();
   const stopMap = new Map((stops ?? []).map((s) => [s.id, s]));
 
-  const roster = (statuses ?? []).map((status) => {
+  // Fetch AM route to get the ordered stop list for sort priority.
+  // Fall back to PM route if no AM route exists (shouldn't happen in practice).
+  const { data: routes } = await supabase
+    .from("routes")
+    .select("direction, stop_ids")
+    .eq("van_id", vanId)
+    .returns<{ direction: string; stop_ids: string[] }[]>();
+  const amRoute = routes?.find((r) => r.direction === "am");
+  const pmRoute = routes?.find((r) => r.direction === "pm");
+  const orderedStopIds = amRoute?.stop_ids ?? pmRoute?.stop_ids ?? [];
+  const stopOrderMap = new Map(orderedStopIds.map((id, i) => [id, i]));
+
+  const rosterUnsorted = (statuses ?? []).map((status) => {
     const student = students.find((s) => s.id === status.student_id);
     const direction: "am" | "pm" | "both" =
       status.morning_van_id === vanId && status.afternoon_van_id === vanId
@@ -86,6 +112,10 @@ export default async function VanPage({
         : status.morning_van_id === vanId
           ? "am"
           : "pm";
+    const stopId =
+      status.morning_van_id === vanId
+        ? (status.morning_stop_id ?? "")
+        : (status.afternoon_stop_id ?? "");
     return {
       studentId: status.student_id,
       eventDate: status.event_date,
@@ -95,14 +125,19 @@ export default async function VanPage({
         : "(unknown)",
       wristbandCode: student?.wristband_code ?? "",
       colorName: status.wristband_color_name,
+      colorHex: status.wristband_color_for_day,
       allergies: student?.allergies ?? null,
       medicalNotes: student?.medical_notes ?? null,
       direction,
-      stopName:
-        (status.morning_van_id === vanId
-          ? stopMap.get(status.morning_stop_id ?? "")?.name
-          : stopMap.get(status.afternoon_stop_id ?? "")?.name) ?? null,
+      stopName: stopMap.get(stopId)?.name ?? null,
+      stopOrder: stopOrderMap.get(stopId) ?? Infinity,
+      photoUrl: photoUrls.get(status.student_id) ?? null,
     };
+  });
+
+  const roster = rosterUnsorted.sort((a, b) => {
+    if (a.stopOrder !== b.stopOrder) return a.stopOrder - b.stopOrder;
+    return a.name.localeCompare(b.name);
   });
 
   return (

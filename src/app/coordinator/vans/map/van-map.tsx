@@ -63,10 +63,14 @@ export function VanMap({
         shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
       });
 
-      const map = L.map(mapHostRef.current, { zoomControl: false }).setView(
-        centerOfStops(stops),
-        11,
-      );
+      const map = L.map(mapHostRef.current, {
+        zoomControl: false,
+        // Wheel-zoom traps the page scroll on desktop and pinch-zoom traps
+        // the page on mobile. Require explicit +/− taps or a two-finger
+        // gesture instead so the parent page stays scrollable/zoomable.
+        scrollWheelZoom: false,
+        touchZoom: "center",
+      }).setView(centerOfStops(stops), 11);
       L.control.zoom({ position: "bottomright" }).addTo(map);
       L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         attribution: "© OpenStreetMap contributors",
@@ -199,8 +203,12 @@ export function VanMap({
       <div
         ref={mapHostRef}
         className="w-full rounded-lg border bg-card"
-        style={{ height: "calc(100dvh - 8rem)", minHeight: 400 }}
+        style={{ height: "min(70dvh, 720px)", minHeight: 360 }}
       />
+      <p className="mt-2 text-xs text-muted-foreground">
+        Use the <span className="font-mono">+ / −</span> buttons (or two-finger
+        pinch) to zoom the map. The page scrolls and zooms normally.
+      </p>
       <MapControls
         vans={vans}
         locations={locations}
@@ -245,7 +253,7 @@ function MapControls({
         <span className="text-sm font-semibold">Vans</span>
         <button
           type="button"
-          className="text-xs text-muted-foreground hover:text-foreground"
+          className="text-xs text-muted-foreground hover:text-foreground min-h-9 px-2"
           onClick={() => setOpen((v) => !v)}
           aria-expanded={open}
         >
@@ -260,7 +268,7 @@ function MapControls({
               type="button"
               onClick={onFitAll}
               disabled={locations.length === 0 && !hasStops}
-              className="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+              className="flex-1 rounded-md border px-2 min-h-11 md:min-h-8 text-xs font-medium hover:bg-muted disabled:opacity-50"
             >
               Fit all
             </button>
@@ -268,7 +276,7 @@ function MapControls({
               type="button"
               onClick={onFitStops}
               disabled={!hasStops}
-              className="flex-1 rounded-md border px-2 py-1.5 text-xs font-medium hover:bg-muted disabled:opacity-50"
+              className="flex-1 rounded-md border px-2 min-h-11 md:min-h-8 text-xs font-medium hover:bg-muted disabled:opacity-50"
             >
               Stops
             </button>
@@ -291,14 +299,14 @@ function MapControls({
                         type="button"
                         disabled={!loc}
                         onClick={() => onLocate(v.id)}
-                        className="rounded-md border px-2 py-1 text-xs hover:bg-muted disabled:opacity-50"
+                        className="rounded-md border px-2 min-h-9 md:min-h-7 text-xs hover:bg-muted disabled:opacity-50"
                         aria-label={`Locate ${v.name}`}
                       >
                         Locate
                       </button>
                       <Link
                         href={`/van/${v.id}`}
-                        className="rounded-md border px-2 py-1 text-xs hover:bg-muted"
+                        className="rounded-md border px-2 min-h-9 md:min-h-7 text-xs hover:bg-muted inline-flex items-center"
                       >
                         Open
                       </Link>

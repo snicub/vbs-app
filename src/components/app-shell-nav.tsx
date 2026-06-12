@@ -45,10 +45,10 @@ export function AppShellNav({ links }: { links: NavLink[] }) {
       {/* Mobile trigger: hamburger button (visible only on small screens) */}
       <button
         type="button"
-        aria-label="Open menu"
+        aria-label={open ? "Close menu" : "Open menu"}
         aria-expanded={open}
         aria-controls="mobile-nav"
-        className="md:hidden h-9 w-9 inline-flex items-center justify-center rounded-md hover:bg-muted"
+        className="md:hidden inline-flex h-11 w-11 items-center justify-center rounded-md hover:bg-muted active:bg-muted"
         onClick={() => setOpen((v) => !v)}
       >
         <HamburgerIcon open={open} />
@@ -58,7 +58,7 @@ export function AppShellNav({ links }: { links: NavLink[] }) {
       {open && (
         <div
           id="mobile-nav"
-          className="md:hidden fixed left-0 right-0 top-14 z-[1099] border-b bg-card shadow-lg"
+          className="md:hidden fixed left-0 right-0 top-14 z-[1099] max-h-[calc(100dvh-3.5rem)] overflow-y-auto border-b bg-card shadow-lg"
         >
           <nav className="px-4 py-2 flex flex-col">
             {links.map((l) => (
@@ -67,7 +67,7 @@ export function AppShellNav({ links }: { links: NavLink[] }) {
                 href={l.href}
                 onClick={() => setOpen(false)}
                 className={cn(
-                  "py-3 text-base border-b last:border-b-0",
+                  "min-h-12 flex items-center text-base border-b last:border-b-0",
                   isActive(l.href)
                     ? "font-semibold text-primary"
                     : "text-foreground",

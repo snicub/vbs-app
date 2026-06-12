@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/day-before-reminder",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/anomaly-watch",
+      "schedule": "*/5 13-23 * * *"
     }
   ]
 }

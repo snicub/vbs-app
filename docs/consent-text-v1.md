@@ -1,43 +1,47 @@
-# Consent text — version v1
+# Consent text
 
 Canonical text shown to parents at registration. Stored in
 `src/lib/consents/text.ts`. SHA-256 hashed when the parent signs;
 the hash plus the typed name + IP + UA is snapshotted into `consents`.
 
-## media_release
+Current active version: **v2** (set by `CONSENT_VERSION`). Older versions
+remain in the source file so we can show a parent exactly what they signed.
 
-> By signing, I grant the church permission to photograph my child during
-> VBS activities and to use those images in church publications, websites,
-> and social media.
+## v2 (active)
 
-## medical
+### media_release
 
-> I authorize VBS staff to administer routine first aid and to contact
-> emergency medical services in the event of injury or sudden illness.
-> I will provide an up-to-date list of allergies and medications.
+> Photos and video of my child taken at VBS may appear in church publications,
+> websites, and social media.
 
-## transport
+### medical
 
-> I authorize my child to be transported between the designated pickup/
-> dropoff stop and the VBS site by church-driven vehicles. I agree to
-> provide accurate pickup/dropoff locations and to be present (or
-> designate an authorized pickup person) at the scheduled time.
+> Staff may give routine first aid and call emergency services if needed.
+> I'll keep allergies and medications up to date.
 
-## general_liability
+### transport
 
-> I understand that VBS activities involve normal risks of childhood play.
-> I release the church, its staff, and volunteers from liability for
-> injuries arising from ordinary participation.
+> Church vans may drive my child between the assigned stop and VBS.
+> I'll be at the stop on time, or send an authorized adult.
 
-## photo_release
+### general_liability
 
-> I consent to my child's photo being printed on a wristband and used for
-> visual identification by VBS staff during the event. Photos are stored
-> privately and deleted within 30 days of the event ending.
+> VBS involves normal childhood play risks. I release the church and
+> volunteers from liability for ordinary injuries.
+
+### photo_release
+
+> My child's photo may be printed on their wristband for staff identification.
+> Photos are stored privately and deleted within 30 days after VBS.
+
+## v1 (archived — kept for parents who already signed)
+
+See `src/lib/consents/text.ts` under the `v1` key for the original wording.
 
 ## How to revise
 
-1. Update the strings in `src/lib/consents/text.ts`
-2. Bump the version key (e.g. `v1` → `v2`); the old key stays in the file
-   so we can show parents what they signed
-3. Update this document
+1. Add a new top-level key (e.g. `v3`) in `src/lib/consents/text.ts` with the
+   new wording. Don't edit existing versions.
+2. Bump `CONSENT_VERSION` to the new key. Hashes are derived from text+version,
+   so changing the active version makes new signups hash against the new text.
+3. Update this document.

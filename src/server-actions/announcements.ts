@@ -34,14 +34,22 @@ export async function broadcastAnnouncement(
   const eligible = (families ?? []).filter((f) => !f.sms_opted_out_at);
 
   let queued = 0;
-  for (const family of eligible) {
-    const result = await sendSms({
-      familyId: family.id,
-      to: family.primary_phone,
-      body: parsed.data.body,
-      templateKey: "announcement",
-    });
-    if (result.ok) queued++;
+  const BATCH_SIZE = 15;
+  for (let i = 0; i < eligible.length; i += BATCH_SIZE) {
+    const batch = eligible.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((family) =>
+        sendSms({
+          familyId: family.id,
+          to: family.primary_phone,
+          body: parsed.data.body,
+          templateKey: "announcement",
+        }),
+      ),
+    );
+    queued += results.filter(
+      (r) => r.status === "fulfilled" && r.value.ok,
+    ).length;
   }
 
   return { ok: true, recipients: queued };

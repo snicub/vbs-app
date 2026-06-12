@@ -3,7 +3,7 @@
 -- Run via:  pnpm supabase test db
 
 begin;
-select plan(20);
+select plan(22);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -313,6 +313,73 @@ select throws_ok(
   'P0001',
   null,
   'home is terminal without override'
+);
+
+-- ---------------------------------------------------------------------------
+-- (21-22) Regression for 0018: a driver/aide ASSIGNED to a van can complete
+-- the PM van check-out chain via smart_checkout. Before 0018 this raised 42501
+-- because the whole chain was authorized against 'site_checked_out', which
+-- driver/aide may never record — breaking the core van drop-off flow.
+-- ---------------------------------------------------------------------------
+insert into public.stops (
+  id, name, town, color_code, color_name, scheduled_am_time, scheduled_pm_time
+) values (
+  '40000000-0000-0000-0000-000000000001', 'Test Stop', 'Testville',
+  '#3b82f6', 'Blue', '08:00', '16:00'
+);
+
+insert into public.routes (van_id, direction, stop_ids) values (
+  '30000000-0000-0000-0000-000000000001', 'pm',
+  array['40000000-0000-0000-0000-000000000001'::uuid]
+);
+
+insert into public.students (
+  id, family_id, legal_first_name, legal_last_name, dob, wristband_code
+) values (
+  '20000000-0000-0000-0000-000000000003', '10000000-0000-0000-0000-000000000001',
+  'Van', 'Rider', '2017-03-03', 'EF45Z'
+);
+
+insert into public.student_day_records (
+  student_id, event_date, attending, mode, morning_stop_id, afternoon_stop_id
+) values (
+  '20000000-0000-0000-0000-000000000003', current_date, true, 'van',
+  '40000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001'
+);
+
+insert into public.van_assignments (assignment_date, van_id, aide_user_id) values (
+  current_date, '30000000-0000-0000-0000-000000000001',
+  '00000000-0000-0000-0000-000000000002'
+);
+
+-- Get the kid to site_checked_in first (coordinator parent_dropoff).
+do $$
+begin
+  perform public.record_event(
+    '20000000-0000-0000-0000-000000000003'::uuid, current_date,
+    'parent_dropoff'::public.event_type,
+    '00000000-0000-0000-0000-000000000003'::uuid, 'coordinator'::public.user_role,
+    'test-key-vanrider-dropoff'
+  );
+end$$;
+
+-- (21) Aide assigned to the van completes the van PM checkout chain
+select lives_ok(
+  $$select public.smart_checkout(
+      '20000000-0000-0000-0000-000000000003'::uuid,
+      current_date,
+      '00000000-0000-0000-0000-000000000002'::uuid,
+      'aide'::public.user_role,
+      'van'
+    )$$,
+  'aide assigned to the van can smart_checkout a van-mode kid'
+);
+
+-- (22) The kid lands home
+select is(
+  public._derive_state('20000000-0000-0000-0000-000000000003', current_date),
+  'home',
+  'van-mode kid reaches home after aide check-out'
 );
 
 select * from finish();

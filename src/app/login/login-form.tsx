@@ -65,16 +65,18 @@ export function LoginForm() {
             Check <strong>{email}</strong> for a sign-in email. It contains both a link
             and a 6-digit code.
           </p>
-          <p className="text-xs text-muted-foreground">
-            In local dev, open{" "}
-            <a className="underline" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
-              Mailpit
-            </a>{" "}
-            to find it.
-          </p>
+          {process.env.NODE_ENV === "development" && (
+            <p className="text-xs text-muted-foreground">
+              In local dev, open{" "}
+              <a className="underline" href="http://127.0.0.1:54324" target="_blank" rel="noreferrer">
+                Mailpit
+              </a>{" "}
+              to find it.
+            </p>
+          )}
 
           <form onSubmit={onVerifyCode} className="space-y-2 pt-2 border-t">
-            <Label htmlFor="otp">Or paste the 6-digit code</Label>
+            <Label htmlFor="otp">Or enter the 6-digit code</Label>
             <div className="flex gap-2">
               <Input
                 id="otp"

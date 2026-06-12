@@ -11,16 +11,19 @@ export function AnnouncementForm() {
   const [body, setBody] = useState("");
   const [pending, startTransition] = useTransition();
   const [sent, setSent] = useState<null | { recipients: number }>(null);
+  const [confirming, setConfirming] = useState(false);
 
   function send() {
     startTransition(async () => {
       const r = await broadcastAnnouncement({ body });
       if (!r.ok) {
         toast.error(r.error);
+        setConfirming(false);
         return;
       }
       setSent({ recipients: r.recipients });
       setBody("");
+      setConfirming(false);
     });
   }
 
@@ -32,7 +35,10 @@ export function AnnouncementForm() {
           rows={5}
           maxLength={320}
           value={body}
-          onChange={(e) => setBody(e.target.value)}
+          onChange={(e) => {
+            setBody(e.target.value);
+            setConfirming(false);
+          }}
         />
         <div className="text-xs text-muted-foreground">
           {body.length}/320 chars
@@ -44,9 +50,27 @@ export function AnnouncementForm() {
           notifications log.
         </div>
       )}
-      <Button onClick={send} disabled={pending || body.trim().length === 0}>
-        {pending ? "Sending…" : "Send to all families"}
-      </Button>
+      {!confirming ? (
+        <Button
+          onClick={() => setConfirming(true)}
+          disabled={pending || body.trim().length === 0}
+        >
+          Send to all families
+        </Button>
+      ) : (
+        <div className="flex gap-2">
+          <Button
+            variant="destructive"
+            onClick={send}
+            disabled={pending || body.trim().length === 0}
+          >
+            {pending ? "Sending…" : "Confirm: send to all families?"}
+          </Button>
+          <Button variant="outline" onClick={() => setConfirming(false)} disabled={pending}>
+            Cancel
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useRef, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -16,11 +16,11 @@ export function TableSearchClient() {
     { id: string; name: string; wristbandCode: string }[]
   >([]);
   const [pending, startTransition] = useTransition();
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  async function onLookup(e: React.FormEvent) {
-    e.preventDefault();
+  function doLookup(value: string) {
     startTransition(async () => {
-      const result = await lookupByWristband({ code });
+      const result = await lookupByWristband({ code: value });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -29,14 +29,30 @@ export function TableSearchClient() {
     });
   }
 
-  async function onNameSearch(query: string) {
+  function onCodeChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const val = e.target.value.toUpperCase();
+    setCode(val);
+    if (val.length === WRISTBAND_LENGTH) {
+      doLookup(val);
+    }
+  }
+
+  function onLookup(e: React.FormEvent) {
+    e.preventDefault();
+    doLookup(code);
+  }
+
+  function onNameSearch(query: string) {
     setNameQuery(query);
+    if (debounceRef.current) clearTimeout(debounceRef.current);
     if (query.trim().length < 2) {
       setMatches([]);
       return;
     }
-    const result = await searchStudentsByName(query);
-    if (result.ok) setMatches(result.matches);
+    debounceRef.current = setTimeout(async () => {
+      const result = await searchStudentsByName(query);
+      if (result.ok) setMatches(result.matches);
+    }, 250);
   }
 
   return (
@@ -49,11 +65,11 @@ export function TableSearchClient() {
             inputMode="text"
             autoCapitalize="characters"
             spellCheck={false}
-            maxLength={6}   // 5 chars + 1 typo grace
+            maxLength={WRISTBAND_LENGTH}
             placeholder="e.g. AB23X"
             className="text-xl font-mono tracking-widest uppercase"
             value={code}
-            onChange={(e) => setCode(e.target.value.toUpperCase())}
+            onChange={onCodeChange}
           />
           <Button type="submit" disabled={pending || code.length < WRISTBAND_LENGTH}>
             Look up
@@ -62,7 +78,7 @@ export function TableSearchClient() {
       </form>
 
       <div>
-        <div className="text-sm font-medium mb-2">…or search by name</div>
+        <div className="text-sm font-medium mb-2">&hellip;or search by name</div>
         <Input
           placeholder="At least 2 letters"
           value={nameQuery}
@@ -73,7 +89,7 @@ export function TableSearchClient() {
             {matches.map((m) => (
               <li key={m.id}>
                 <button
-                  className="block w-full text-left px-3 py-2 hover:bg-muted text-sm"
+                  className="block w-full text-left px-3 py-3 min-h-11 hover:bg-muted text-sm"
                   onClick={() => router.push(`/table/${m.wristbandCode}`)}
                 >
                   <span className="font-medium">{m.name}</span>

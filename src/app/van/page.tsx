@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan, isCoordinator } from "@/lib/auth/roles";
 import { createClient } from "@/lib/supabase/server";
+import { getLocalDate } from "@/lib/date";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -15,7 +16,7 @@ export default async function VanIndexPage() {
   }
 
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const { data: myAssignment } = await supabase
     .from("van_assignments")

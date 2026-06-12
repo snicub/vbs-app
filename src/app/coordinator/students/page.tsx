@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getLocalDate } from "@/lib/date";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { StudentsTable, type StudentRow } from "./students-table";
 
@@ -15,6 +16,7 @@ type StudentDbRow = {
   age_at_registration: number | null;
   grade: string | null;
   allergies: string | null;
+  medical_notes: string | null;
   photo_path: string | null;
   family_id: string;
   families: { primary_guardian_name: string; primary_phone: string } | null;
@@ -32,13 +34,13 @@ type StopRow = { id: string; name: string; town: string };
 
 export default async function StudentsDashboardPage() {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const { data: students } = await supabase
     .from("students")
     .select(
       `id, legal_first_name, legal_last_name, preferred_first_name, wristband_code,
-       dob, age_at_registration, grade, allergies, photo_path, family_id,
+       dob, age_at_registration, grade, allergies, medical_notes, photo_path, family_id,
        families(primary_guardian_name, primary_phone)`,
     )
     .order("legal_last_name")
@@ -84,6 +86,7 @@ export default async function StudentsDashboardPage() {
       ageAtRegistration: s.age_at_registration,
       grade: s.grade,
       allergies: s.allergies,
+      medicalNotes: s.medical_notes,
       familyName: s.families?.primary_guardian_name ?? "—",
       familyPhone: s.families?.primary_phone ?? "",
       state: status?.state ?? "not_started",

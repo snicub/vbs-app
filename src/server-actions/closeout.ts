@@ -42,6 +42,12 @@ export async function closeoutDay(
   return { ok: true };
 }
 
+/**
+ * Reopen a closed-out day. Preserves the audit trail by inserting the prior
+ * closeout snapshot into incidents (category=closeout_reopened) before
+ * deleting the row, so the next closeout can re-snapshot fresh state without
+ * losing the original record.
+ */
 export async function reopenDay(input: unknown): Promise<
   { ok: true } | { ok: false; error: string }
 > {
@@ -54,6 +60,34 @@ export async function reopenDay(input: unknown): Promise<
   if (!parsed.success) return { ok: false, error: "Bad input" };
 
   const supabase = await createClient();
+
+  const { data: prior } = await supabase
+    .from("daily_closeouts")
+    .select("closed_at, closed_by_user_id, notes, pending_anomalies")
+    .eq("event_date", parsed.data.eventDate)
+    .maybeSingle<{
+      closed_at: string;
+      closed_by_user_id: string | null;
+      notes: string | null;
+      pending_anomalies: unknown;
+    }>();
+
+  if (prior) {
+    await supabase.from("incidents").insert({
+      severity: "info",
+      category: "closeout_reopened",
+      summary: `Closeout for ${parsed.data.eventDate} reopened`,
+      details: {
+        event_date: parsed.data.eventDate,
+        original_closed_at: prior.closed_at,
+        original_closed_by: prior.closed_by_user_id,
+        original_notes: prior.notes,
+        original_pending_anomalies: prior.pending_anomalies,
+      },
+      reported_by_user_id: user.id,
+    } as never);
+  }
+
   const { error } = await supabase
     .from("daily_closeouts")
     .delete()

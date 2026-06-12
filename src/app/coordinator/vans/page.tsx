@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { getLocalDate } from "@/lib/date";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { buttonVariants } from "@/components/ui/button";
@@ -19,14 +20,21 @@ type AssignmentRow = {
   driver_user_id: string | null;
   aide_user_id: string | null;
 };
+type StatusRow = {
+  student_id: string;
+  morning_van_id: string | null;
+  afternoon_van_id: string | null;
+  state: string;
+};
 
 export default async function CoordinatorVansPage() {
   const supabase = await createClient();
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDate();
 
   const { data: vans } = await supabase
     .from("vans")
     .select("id, name, capacity, active")
+    .eq("active", true)
     .order("name")
     .returns<VanRow[]>();
 
@@ -41,29 +49,67 @@ export default async function CoordinatorVansPage() {
     .eq("assignment_date", today)
     .returns<AssignmentRow[]>();
 
+  // Count today's assigned riders per van (AM and PM separately — a kid on
+  // van 1 AM but van 2 PM counts toward 1's AM and 2's PM, not both).
+  const { data: statuses } = await supabase
+    .from("student_day_status")
+    .select("student_id, morning_van_id, afternoon_van_id, state")
+    .eq("event_date", today)
+    .eq("attending", true)
+    .returns<StatusRow[]>();
+
+  // Capacity counts exclude no-shows from AM and home-already kids from PM —
+  // a 14-seat van that "had" 16 assigned but 2 are already home is not over.
+  const amCounts = new Map<string, number>();
+  const pmCounts = new Map<string, number>();
+  for (const s of statuses ?? []) {
+    if (s.morning_van_id && s.state !== "marked_no_show") {
+      amCounts.set(s.morning_van_id, (amCounts.get(s.morning_van_id) ?? 0) + 1);
+    }
+    if (s.afternoon_van_id && s.state !== "home" && s.state !== "marked_no_show") {
+      pmCounts.set(s.afternoon_van_id, (pmCounts.get(s.afternoon_van_id) ?? 0) + 1);
+    }
+  }
+
   const locMap = new Map((locations ?? []).map((l) => [l.van_id, l]));
   const assignMap = new Map((assignments ?? []).map((a) => [a.van_id, a]));
 
   return (
     <main className="mx-auto max-w-5xl px-4 py-6 space-y-5">
-      <header>
-        <h1 className="text-2xl font-semibold tracking-tight">Vans</h1>
-        <p className="text-muted-foreground text-sm">
-          Live positions broadcast from each van&apos;s aide phone.
-        </p>
+      <header className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Vans</h1>
+          <p className="text-muted-foreground text-sm">
+            Live positions broadcast from each van&apos;s aide phone.
+          </p>
+        </div>
+        <Link
+          href="/coordinator/vans/manage"
+          className={buttonVariants({ variant: "outline", size: "sm" })}
+        >
+          Manage vans, routes &amp; drivers
+        </Link>
       </header>
 
       <ul className="space-y-3">
         {(vans ?? []).map((v) => {
           const loc = locMap.get(v.id);
           const assign = assignMap.get(v.id);
+          const amCount = amCounts.get(v.id) ?? 0;
+          const pmCount = pmCounts.get(v.id) ?? 0;
+          const amOver = amCount > v.capacity;
+          const pmOver = pmCount > v.capacity;
           return (
             <li
               key={v.id}
-              className="rounded-lg border bg-card p-4 flex flex-wrap items-center gap-4 justify-between"
+              className="rounded-lg border bg-card p-4 flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3 sm:gap-4 sm:justify-between"
+              style={amOver || pmOver ? {
+                borderColor: "var(--destructive)",
+                borderWidth: 2,
+              } : undefined}
             >
               <div className="space-y-1 min-w-0">
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   <span className="font-semibold">{v.name}</span>
                   <Badge variant={v.active ? "default" : "muted"}>
                     {v.active ? "active" : "inactive"}
@@ -73,15 +119,24 @@ export default async function CoordinatorVansPage() {
                   ) : (
                     <Badge variant="muted">no assignment today</Badge>
                   )}
+                  {(amOver || pmOver) && (
+                    <Badge variant="destructive">over capacity</Badge>
+                  )}
                 </div>
-                <div className="text-xs text-muted-foreground">
-                  Capacity {v.capacity}
+                <div className="text-xs text-muted-foreground flex items-center gap-3 flex-wrap">
+                  <span>Capacity {v.capacity}</span>
+                  <span className={amOver ? "text-destructive font-semibold" : ""}>
+                    AM riders: {amCount}{amOver && ` (over by ${amCount - v.capacity})`}
+                  </span>
+                  <span className={pmOver ? "text-destructive font-semibold" : ""}>
+                    PM riders: {pmCount}{pmOver && ` (over by ${pmCount - v.capacity})`}
+                  </span>
                 </div>
               </div>
-              <div className="text-right space-y-1">
+              <div className="sm:text-right space-y-1 min-w-0">
                 {loc ? (
                   <>
-                    <div className="text-sm font-mono">
+                    <div className="text-xs sm:text-sm font-mono truncate">
                       {loc.lat.toFixed(5)}, {loc.lng.toFixed(5)}
                     </div>
                     <div className="text-xs text-muted-foreground">

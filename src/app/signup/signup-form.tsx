@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -91,6 +91,7 @@ export function SignupForm({
   const [students, setStudents] = useState<StudentDraft[]>([emptyStudent()]);
   const [agreedKinds, setAgreedKinds] = useState<Set<ConsentKind>>(new Set());
   const [typedName, setTypedName] = useState("");
+  const submittingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState<
     null | {
@@ -106,6 +107,7 @@ export function SignupForm({
 
   async function onSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (submittingRef.current) return;
     if (agreedKinds.size !== consents.length) {
       toast.error("All consents must be agreed to before submitting.");
       return;
@@ -120,58 +122,63 @@ export function SignupForm({
       return;
     }
 
+    submittingRef.current = true;
     setPending(true);
-    const studentsPayload = await Promise.all(students.map(async (s) => ({
-      legalFirstName: s.legalFirstName,
-      legalLastName: s.legalLastName,
-      preferredFirstName: s.preferredFirstName || null,
-      dob: s.dob || null,
-      ageAtRegistration: null,
-      grade: null,
-      allergies: s.allergies || null,
-      medicalNotes: s.medicalNotes || null,
-      photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
-      transport: {
-        mode: s.mode,
-        morningStopId: s.mode === "van" || s.mode === "parent_pickup_only" ? s.morningStopId || null : null,
-        afternoonStopId: s.mode === "van" || s.mode === "parent_dropoff_only" ? s.afternoonStopId || null : null,
-      },
-    })));
-
-    const payload = {
-      family,
-      guardians: [
-        {
-          fullName: family.primaryGuardianName,
-          email: family.primaryEmail,
-          phone: family.primaryPhone,
-          relationship: "Primary guardian",
+    try {
+      const studentsPayload = await Promise.all(students.map(async (s) => ({
+        legalFirstName: s.legalFirstName,
+        legalLastName: s.legalLastName,
+        preferredFirstName: s.preferredFirstName || null,
+        dob: s.dob || null,
+        ageAtRegistration: null,
+        grade: null,
+        allergies: s.allergies || null,
+        medicalNotes: s.medicalNotes || null,
+        photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
+        transport: {
+          mode: s.mode,
+          morningStopId: s.mode === "van" || s.mode === "parent_pickup_only" ? s.morningStopId || null : null,
+          afternoonStopId: s.mode === "van" || s.mode === "parent_dropoff_only" ? s.afternoonStopId || null : null,
         },
-      ],
-      emergencyContact: emergency,
-      authorizedPickup: [],
-      students: studentsPayload,
-      consents: {
-        typedName,
-        agreed: consents.map((c) => ({
-          kind: c.kind,
-          textVersion: c.version,
-          textHash: c.hash,
-        })),
-      },
-    };
+      })));
 
-    const result = await registerFamily(payload);
-    setPending(false);
+      const payload = {
+        family,
+        guardians: [
+          {
+            fullName: family.primaryGuardianName,
+            email: family.primaryEmail,
+            phone: family.primaryPhone,
+            relationship: "Primary guardian",
+          },
+        ],
+        emergencyContact: emergency,
+        authorizedPickup: [],
+        students: studentsPayload,
+        consents: {
+          typedName,
+          agreed: consents.map((c) => ({
+            kind: c.kind,
+            textVersion: c.version,
+            textHash: c.hash,
+          })),
+        },
+      };
 
-    if (result.ok) {
-      setSuccess({
-        familyId: result.familyId,
-        statusUrl: result.familyStatusUrl,
-        codes: result.wristbandCodes,
-      });
-    } else {
-      toast.error(result.error);
+      const result = await registerFamily(payload);
+
+      if (result.ok) {
+        setSuccess({
+          familyId: result.familyId,
+          statusUrl: result.familyStatusUrl,
+          codes: result.wristbandCodes,
+        });
+      } else {
+        toast.error(result.error);
+      }
+    } finally {
+      submittingRef.current = false;
+      setPending(false);
     }
   }
 
@@ -209,7 +216,7 @@ export function SignupForm({
               readOnly
               value={success.statusUrl}
               onClick={(e) => (e.target as HTMLInputElement).select()}
-              className="flex-1 rounded border bg-background px-2 py-1.5 text-xs font-mono min-w-0"
+              className="flex-1 rounded border bg-background px-2 py-1.5 text-base sm:text-xs font-mono min-w-0 min-h-11 sm:min-h-8"
             />
             <Button
               type="button"

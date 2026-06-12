@@ -2,8 +2,8 @@
 
 import { z } from "zod";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
+import { linkGuardianToUser } from "@/lib/auth/link-guardian";
 
 const EmailSchema = z.object({ email: z.string().email() });
 
@@ -56,24 +56,7 @@ export async function verifyEmailOtp(
     return { ok: false, error: error?.message ?? "Could not verify code" };
   }
 
-  // Link guardian record on first sign-in (mirror the /auth/callback behavior)
-  const admin = createAdminClient();
-  await admin
-    .from("users")
-    .upsert(
-      {
-        id: data.user.id,
-        full_name: data.user.email ?? parsed.data.email,
-        email: data.user.email ?? parsed.data.email,
-        role: "parent",
-      } as never,
-      { onConflict: "id", ignoreDuplicates: true } as never,
-    );
-  await admin
-    .from("guardians")
-    .update({ user_id: data.user.id } as never)
-    .ilike("email", parsed.data.email)
-    .is("user_id", null);
+  await linkGuardianToUser(data.user.id, data.user.email ?? parsed.data.email);
 
   return { ok: true };
 }

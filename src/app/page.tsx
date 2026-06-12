@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { getSessionUser } from "@/lib/auth/session";
 import { buttonVariants } from "@/components/ui/button";
 import { createClient } from "@/lib/supabase/server";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { linkGuardianToUser } from "@/lib/auth/link-guardian";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export default async function Home({
     const supabase = await createClient();
     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
     if (!error && data.user) {
-      await linkGuardian(data.user.id, data.user.email);
+      await linkGuardianToUser(data.user.id, data.user.email);
     }
     redirect("/");  // clean URL, then fall into the session-aware branch below
   }
@@ -46,36 +46,21 @@ export default async function Home({
       <div className="text-center max-w-md">
         <h1 className="text-3xl font-semibold tracking-tight">VBS Check-In</h1>
         <p className="text-muted-foreground mt-2">
-          Sign in to manage check-in for Vacation Bible School.
+          Register your family for Vacation Bible School.
         </p>
         {error_description && (
           <p className="mt-3 text-sm text-destructive">{decodeURIComponent(error_description)}</p>
         )}
       </div>
-      <div className="flex gap-3">
-        <Link href="/login" className={buttonVariants({ size: "lg" })}>
-          Sign in
+      <div className="flex flex-col items-center gap-3">
+        <Link href="/signup" className={buttonVariants({ size: "lg" })}>
+          Register your family
         </Link>
-        <Link href="/signup" className={buttonVariants({ variant: "outline", size: "lg" })}>
-          Register a family
+        <Link href="/login" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+          Already have an account? Sign in
         </Link>
       </div>
     </main>
   );
 }
 
-async function linkGuardian(userId: string, email: string | undefined) {
-  if (!email) return;
-  const admin = createAdminClient();
-  await admin
-    .from("users")
-    .upsert(
-      { id: userId, full_name: email, email, role: "parent" } as never,
-      { onConflict: "id", ignoreDuplicates: true } as never,
-    );
-  await admin
-    .from("guardians")
-    .update({ user_id: userId } as never)
-    .ilike("email", email)
-    .is("user_id", null);
-}
