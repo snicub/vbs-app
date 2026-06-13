@@ -114,11 +114,6 @@ export function SignupForm({
       toast.error(`Enter date of birth or age for child #${missingDobAge + 1}.`);
       return;
     }
-    const missingPhoto = students.findIndex((s) => !s.photo);
-    if (missingPhoto !== -1) {
-      toast.error(`Photo required for child #${missingPhoto + 1}.`);
-      return;
-    }
 
     submittingRef.current = true;
     setPending(true);
@@ -148,7 +143,8 @@ export function SignupForm({
             relationship: "Primary guardian",
           },
         ],
-        emergencyContact: emergency,
+        emergencyContact:
+          emergency.name.trim() && emergency.phone.trim() ? emergency : undefined,
         authorizedPickup: [],
         students: studentsPayload,
         consents: {
@@ -243,58 +239,65 @@ export function SignupForm({
   return (
     <form onSubmit={onSubmit} className="space-y-8">
       <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Primary guardian</h2>
+        <h2 className="text-lg font-semibold">Your info</h2>
         <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Full name" required>
+          <Field label="Your name" required>
             <Input required value={family.primaryGuardianName}
               onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })} />
           </Field>
-          <Field label="Email" required>
-            <Input required type="email" autoComplete="email" value={family.primaryEmail}
-              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })} />
-          </Field>
-          <Field label="Phone" required>
+          <Field label="Mobile phone" required>
             <Input required type="tel" autoComplete="tel" value={family.primaryPhone}
               onChange={(e) => setFamily({ ...family, primaryPhone: e.target.value })} />
           </Field>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2">
-          <Field label="Street address">
-            <Input value={family.streetAddress}
-              onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })} />
-          </Field>
-          <Field label="City">
-            <Input value={family.city}
-              onChange={(e) => setFamily({ ...family, city: e.target.value })} />
-          </Field>
-          <Field label="State">
-            <Input value={family.state}
-              onChange={(e) => setFamily({ ...family, state: e.target.value })} />
-          </Field>
-          <Field label="Postal code">
-            <Input value={family.postalCode}
-              onChange={(e) => setFamily({ ...family, postalCode: e.target.value })} />
-          </Field>
-        </div>
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Emergency contact</h2>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <Field label="Name" required>
-            <Input required value={emergency.name}
-              onChange={(e) => setEmergency({ ...emergency, name: e.target.value })} />
+      <details className="rounded-lg border bg-card px-4 py-3">
+        <summary className="cursor-pointer text-sm font-medium min-h-11 flex items-center">
+          Add email, address &amp; emergency contact (optional)
+        </summary>
+        <div className="mt-4 space-y-4">
+          <Field label="Email">
+            <Input type="email" autoComplete="email" value={family.primaryEmail}
+              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })} />
           </Field>
-          <Field label="Phone" required>
-            <Input required type="tel" value={emergency.phone}
-              onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })} />
-          </Field>
-          <Field label="Relationship" required>
-            <Input required value={emergency.relationship}
-              onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })} />
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Field label="Street address">
+              <Input value={family.streetAddress}
+                onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })} />
+            </Field>
+            <Field label="City">
+              <Input value={family.city}
+                onChange={(e) => setFamily({ ...family, city: e.target.value })} />
+            </Field>
+            <Field label="State">
+              <Input value={family.state}
+                onChange={(e) => setFamily({ ...family, state: e.target.value })} />
+            </Field>
+            <Field label="Postal code">
+              <Input value={family.postalCode}
+                onChange={(e) => setFamily({ ...family, postalCode: e.target.value })} />
+            </Field>
+          </div>
+          <div className="space-y-3">
+            <div className="text-sm font-medium">Emergency contact</div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Name">
+                <Input value={emergency.name}
+                  onChange={(e) => setEmergency({ ...emergency, name: e.target.value })} />
+              </Field>
+              <Field label="Phone">
+                <Input type="tel" value={emergency.phone}
+                  onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })} />
+              </Field>
+              <Field label="Relationship">
+                <Input value={emergency.relationship}
+                  onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })} />
+              </Field>
+            </div>
+          </div>
         </div>
-      </section>
+      </details>
 
       <section className="space-y-4">
         <div className="flex items-center justify-between">
@@ -306,11 +309,10 @@ export function SignupForm({
           <fieldset key={i} className="rounded-lg border p-4 space-y-3 bg-card">
             <legend className="px-1 text-sm font-medium">Child #{i + 1}</legend>
 
-            <Field label="Photo" required>
+            <Field label="Photo (optional)">
               <PhotoInput
                 value={s.photo}
                 onChange={(p) => updateStudent(i, { photo: p })}
-                required
               />
             </Field>
 

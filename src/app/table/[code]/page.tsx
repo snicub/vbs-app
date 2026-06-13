@@ -242,10 +242,14 @@ export default async function StudentTablePage({
               <a href={`tel:${family.primary_phone}`} className="text-primary hover:underline">
                 {family.primary_phone}
               </a>
-              <span className="text-muted-foreground">·</span>
-              <a href={`mailto:${family.primary_email}`} className="text-primary hover:underline">
-                {family.primary_email}
-              </a>
+              {family.primary_email && (
+                <>
+                  <span className="text-muted-foreground">·</span>
+                  <a href={`mailto:${family.primary_email}`} className="text-primary hover:underline">
+                    {family.primary_email}
+                  </a>
+                </>
+              )}
             </div>
             {(guardians ?? []).filter((g) => g.full_name !== family.primary_guardian_name).map((g, i) => (
               <div key={i} className="flex items-center gap-2 flex-wrap text-muted-foreground">

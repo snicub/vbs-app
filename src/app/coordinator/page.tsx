@@ -6,20 +6,17 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { type DayState } from "@/lib/events/state-machine";
 import { anomaliesFor } from "@/lib/anomaly";
-import {
-  STATE_PRESENTATION,
-  TONE_CLASSES,
-  ANOMALY_PRESENTATION,
-} from "@/lib/state-presentation";
+import { ANOMALY_PRESENTATION } from "@/lib/state-presentation";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { Badge } from "@/components/ui/badge";
 import {
   AnomalyBadge,
 } from "@/components/state-badge";
 import { buttonVariants } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { AlertTriangleIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
+import { DashboardCards } from "./dashboard-cards";
+import { computeMetrics, computeTownBreakdown } from "@/lib/coordinator/dashboard";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator — Today" };
@@ -93,6 +90,20 @@ export default async function CoordinatorTodayPage({
     : { data: [] as { id: string; primary_guardian_name: string }[] };
   const familyNameMap = new Map((families ?? []).map((f) => [f.id, f.primary_guardian_name]));
 
+  // Day records (for attendance + stop assignment) and stops (for town names),
+  // both used to drive the dashboard cards.
+  const { data: dayRecords } = await supabase
+    .from("student_day_records")
+    .select("student_id, morning_stop_id, afternoon_stop_id, attending")
+    .eq("event_date", today)
+    .returns<{ student_id: string; morning_stop_id: string | null; afternoon_stop_id: string | null; attending: boolean }[]>();
+  const { data: stops } = await supabase
+    .from("stops")
+    .select("id, town, color_code, color_name")
+    .returns<{ id: string; town: string; color_code: string; color_name: string }[]>();
+  const stopMap = new Map((stops ?? []).map((s) => [s.id, s]));
+  const dayRecMap = new Map((dayRecords ?? []).map((d) => [d.student_id, d]));
+
   const { data: closeout } = await supabase
     .from("daily_closeouts")
     .select("closed_at, notes")
@@ -138,7 +149,23 @@ export default async function CoordinatorTodayPage({
   });
 
   const watchList = sorted.filter((s) => s.anomalies.length > 0);
-  const counts = countByState(enriched);
+
+  const dashRows = enriched.map((s) => {
+    const dr = dayRecMap.get(s.student_id);
+    const stop =
+      (dr?.morning_stop_id ? stopMap.get(dr.morning_stop_id) : undefined) ??
+      (dr?.afternoon_stop_id ? stopMap.get(dr.afternoon_stop_id) : undefined);
+    return {
+      state: s.state,
+      hasAnomaly: s.anomalies.length > 0,
+      attending: dr?.attending ?? true,
+      town: stop?.town ?? null,
+      colorCode: stop?.color_code ?? null,
+      colorName: stop?.color_name ?? null,
+    };
+  });
+  const metrics = computeMetrics(dashRows);
+  const towns = computeTownBreakdown(dashRows);
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
@@ -204,38 +231,8 @@ export default async function CoordinatorTodayPage({
         </section>
       )}
 
-      {/* Status counts — each state gets its own card with matching stripe */}
-      <section className="grid gap-2 grid-cols-2 sm:grid-cols-4 lg:grid-cols-8">
-        {(Object.keys(STATE_ORDER) as DayState[]).map((state) => {
-          const p = STATE_PRESENTATION[state];
-          const tone = TONE_CLASSES[p.tone];
-          const Icon = p.icon;
-          const count = counts[state] ?? 0;
-          return (
-            <div
-              key={state}
-              className="rounded-lg border bg-card px-3 py-2.5 border-l-4 transition-colors"
-              style={{
-                borderLeftColor:
-                  state === "not_started"
-                    ? "transparent"
-                    : `var(--state-${p.tone})`,
-              }}
-              title={p.description}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <div className="text-2xl font-semibold leading-none tabular-nums">
-                  {count}
-                </div>
-                <Icon className={cn("size-4", tone.icon)} aria-hidden />
-              </div>
-              <div className="text-xs text-muted-foreground mt-1.5">
-                {p.label}
-              </div>
-            </div>
-          );
-        })}
-      </section>
+      {/* Dashboard — big at-a-glance numbers + per-town rollup */}
+      <DashboardCards metrics={metrics} towns={towns} />
 
       {/* Roster */}
       <RosterList students={sorted} />
@@ -268,12 +265,6 @@ const STATE_ORDER: Record<DayState, number> = {
   home: 6,
   marked_no_show: 7,
 };
-
-function countByState(rows: { state: string }[]): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const r of rows) counts[r.state] = (counts[r.state] ?? 0) + 1;
-  return counts;
-}
 
 function severityRank(anomalies: ReturnType<typeof anomaliesFor>): number {
   if (anomalies.length === 0) return 99;

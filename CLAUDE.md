@@ -211,7 +211,7 @@ These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to 
 
 ## Current status (2026-05-31 — morning name tags + editable town colors)
 
-All 5 phases on `main`. **179 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
+All 5 phases on `main`. **193 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
 
 ### 2026-06-13 — live on Vercel + registration simplification
 
@@ -223,6 +223,10 @@ All 5 phases on `main`. **179 unit tests pass; typecheck, lint clean.** pgTAP ex
 - **Three consents** now (`CONSENT_VERSION = "v3"`): media_release, general_liability, and medical (reworded as guardian-emergency-availability + first-aid authorization). Dropped transport + photo_release from the active set; v1/v2 retained for already-signed records. **Open gap: photo still required but no consent covers wristband-photo use.**
 - Removed the "type your full legal name to sign" field; consent records auto-attribute `typed_name` to the primary guardian (+ IP/UA/timestamp).
 - **Coordinator student-edit** screen aligned to the same single-**Name** field (was editing an orphaned "preferred first name"); `updateStudent` splits the name and clears any stale preferred override.
+
+**Door-to-door simplification** (for on-the-spot phone signup): photo, email, address, and emergency contact are all **optional** now; phone stays required (it's the safety contact). Email/address/emergency tuck into a collapsible "optional details" `<details>` so the default form is name + phone + child name + age + transport + consents. No migration — `primary_email` is NOT NULL so a blank stores `""`; the rest were already nullable. `OptionalEmailSchema` accepts a valid email, blank, or omitted. Table check-in contact block now guards the email `mailto:` so a blank email doesn't render a dangling link.
+
+**Coordinator dashboard rebuilt** (`/coordinator`): big at-a-glance stat cards (expected / on a van now / at site now / checked in today / home / no-shows / needs attention) + a per-town rollup ("kids coming by town" with color dot, expected count, in/home). Pure counting in `src/lib/coordinator/dashboard.ts` (`computeMetrics`, `computeTownBreakdown`), unit-tested; cards in `dashboard-cards.tsx`. Dashboard counts filter to **attending** kids (the old tiny state-count grid did not). Town comes from the morning stop (fallback afternoon); stop-less kids group under "Parent drop-off".
 
 ### 2026-06-01 — full-repo gap audit (68 agents) + CRITICAL check-out fix
 

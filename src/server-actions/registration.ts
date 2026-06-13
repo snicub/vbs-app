@@ -53,15 +53,15 @@ export async function registerFamily(
     .from("families")
     .insert({
       primary_guardian_name: data.family.primaryGuardianName,
-      primary_email: data.family.primaryEmail,
+      primary_email: data.family.primaryEmail || "",
       primary_phone: data.family.primaryPhone,
       street_address: data.family.streetAddress ?? null,
       city: data.family.city ?? null,
       state: data.family.state ?? null,
       postal_code: data.family.postalCode ?? null,
-      emergency_contact_name: data.emergencyContact.name,
-      emergency_contact_phone: data.emergencyContact.phone,
-      emergency_contact_relationship: data.emergencyContact.relationship,
+      emergency_contact_name: data.emergencyContact?.name ?? null,
+      emergency_contact_phone: data.emergencyContact?.phone ?? null,
+      emergency_contact_relationship: data.emergencyContact?.relationship ?? null,
     } as never)
     .select("id")
     .single<{ id: string }>();
@@ -75,7 +75,7 @@ export async function registerFamily(
   const guardianRows = data.guardians.map((g) => ({
     family_id: familyId,
     full_name: g.fullName,
-    email: g.email,
+    email: g.email || null,
     phone: g.phone,
     relationship: g.relationship ?? null,
   }));

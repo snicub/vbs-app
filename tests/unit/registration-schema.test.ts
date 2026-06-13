@@ -163,6 +163,45 @@ describe("registration schema: guardians", () => {
   });
 });
 
+describe("registration schema: optional fields (door-to-door)", () => {
+  it("accepts a signup with no email", () => {
+    const input = validInput();
+    input.family.primaryEmail = "";
+    input.guardians[0]!.email = "";
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a signup with no emergency contact", () => {
+    const input = validInput();
+    delete (input as { emergencyContact?: unknown }).emergencyContact;
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a child with no photo", () => {
+    const input = validInput();
+    delete (input.students[0] as { photoBytes?: unknown }).photoBytes;
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it("still rejects a malformed email when one is given", () => {
+    const input = validInput();
+    input.family.primaryEmail = "not-an-email";
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(false);
+  });
+
+  it("still requires a phone", () => {
+    const input = validInput();
+    const raw = JSON.parse(JSON.stringify(input)) as Record<string, unknown>;
+    delete (raw.family as Record<string, unknown>).primaryPhone;
+    const result = FamilyRegistrationSchema.safeParse(raw);
+    expect(result.success).toBe(false);
+  });
+});
+
 describe("phone normalization", () => {
   it("normalizes 10-digit US numbers to E.164", () => {
     expect(normalizePhone("5555550100")).toBe("+15555550100");
@@ -206,7 +245,7 @@ describe("phone normalization", () => {
     if (result.success) {
       expect(result.data.family.primaryPhone).toBe("+15555550100");
       expect(result.data.guardians[0]!.phone).toBe("+15555550100");
-      expect(result.data.emergencyContact.phone).toBe("+15555550199");
+      expect(result.data.emergencyContact!.phone).toBe("+15555550199");
     }
   });
 });

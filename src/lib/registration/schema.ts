@@ -23,9 +23,14 @@ export const PhoneSchema = z
 
 export const EmailSchema = z.string().trim().email("Enter a valid email");
 
+/** Email is optional for door-to-door signup; accept a valid address, blank, or omitted. */
+export const OptionalEmailSchema = z
+  .union([z.string().trim().email("Enter a valid email"), z.literal("")])
+  .optional();
+
 export const GuardianSchema = z.object({
   fullName: z.string().trim().min(1, "Guardian name is required"),
-  email: EmailSchema,
+  email: OptionalEmailSchema,
   phone: PhoneSchema,
   relationship: z.string().trim().optional().nullable(),
 });
@@ -33,7 +38,7 @@ export const GuardianSchema = z.object({
 export const EmergencyContactSchema = z.object({
   name: z.string().trim().min(1, "Emergency contact name is required"),
   phone: PhoneSchema,
-  relationship: z.string().trim().min(1, "Relationship is required"),
+  relationship: z.string().trim().optional().nullable(),
 });
 
 export const AuthorizedPickupSchema = z.object({
@@ -80,12 +85,13 @@ export const StudentSchema = z.object({
   grade: z.string().trim().optional().nullable(),
   allergies: z.string().trim().optional().nullable(),
   medicalNotes: z.string().trim().optional().nullable(),
-  // Base64-encoded JPEG bytes (≤~200KB after client-side resize).
-  // Required at signup time so volunteers can visually verify each kid.
+  // Base64-encoded JPEG bytes (≤~200KB after client-side resize). Optional —
+  // door-to-door signups often skip it; a coordinator can add it later.
   photoBytes: z
     .string()
-    .min(1, "Photo is required")
-    .regex(/^[A-Za-z0-9+/]+=*$/, "Invalid photo encoding"),
+    .regex(/^[A-Za-z0-9+/]+=*$/, "Invalid photo encoding")
+    .optional()
+    .nullable(),
   transport: StudentTransportSchema,
 }).superRefine((s, ctx) => {
   if (!s.dob && (s.ageAtRegistration == null)) {
@@ -119,7 +125,7 @@ export const ConsentInputSchema = z.object({
 export const FamilyRegistrationSchema = z.object({
   family: z.object({
     primaryGuardianName: z.string().trim().min(1),
-    primaryEmail: EmailSchema,
+    primaryEmail: OptionalEmailSchema,
     primaryPhone: PhoneSchema,
     streetAddress: z.string().trim().optional().nullable(),
     city: z.string().trim().optional().nullable(),
@@ -127,7 +133,7 @@ export const FamilyRegistrationSchema = z.object({
     postalCode: z.string().trim().optional().nullable(),
   }),
   guardians: z.array(GuardianSchema).min(1, "At least one guardian is required"),
-  emergencyContact: EmergencyContactSchema,
+  emergencyContact: EmergencyContactSchema.optional(),
   authorizedPickup: z.array(AuthorizedPickupSchema).default([]),
   students: z.array(StudentSchema).min(1, "Add at least one child").max(15, "Maximum 15 children per family"),
   consents: z.object({
