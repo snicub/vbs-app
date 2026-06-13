@@ -1,12 +1,11 @@
 "use server";
 
 import { headers } from "next/headers";
-import { FamilyRegistrationSchema } from "@/lib/registration/schema";
+import { FamilyRegistrationSchema, splitName } from "@/lib/registration/schema";
 import { VBS_DATES } from "@/lib/registration/dates";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { consentText, CONSENT_TEXT } from "@/lib/consents/text";
+import { CONSENT_TEXT } from "@/lib/consents/text";
 import { hashConsentText } from "@/lib/consents/hash";
-import type { ConsentKind } from "@/types/domain";
 
 export type RegistrationResult =
   | {
@@ -36,10 +35,11 @@ export async function registerFamily(
   // Verify consent hashes: recompute from canonical text, reject if mismatch
   for (const consent of data.consents.agreed) {
     const version = consent.textVersion as keyof typeof CONSENT_TEXT;
-    if (!(version in CONSENT_TEXT)) {
+    const versionTexts = CONSENT_TEXT[version] as Record<string, string> | undefined;
+    const canonical = versionTexts?.[consent.kind];
+    if (!canonical) {
       return { ok: false, error: "Consent text has changed. Please reload the page and try again." };
     }
-    const canonical = consentText(consent.kind as ConsentKind, version);
     const expected = await hashConsentText(canonical);
     if (consent.textHash !== expected) {
       return { ok: false, error: "Consent text has changed. Please reload the page and try again." };
@@ -111,11 +111,12 @@ export async function registerFamily(
   const inserted: InsertedStudent[] = [];
 
   for (const s of data.students) {
+    const { first, last } = splitName(s.name);
     const row = {
       family_id: familyId,
-      legal_first_name: s.legalFirstName,
-      legal_last_name: s.legalLastName,
-      preferred_first_name: s.preferredFirstName ?? null,
+      legal_first_name: first,
+      legal_last_name: last,
+      preferred_first_name: null,
       dob: s.dob ?? null,
       age_at_registration: s.ageAtRegistration ?? null,
       grade: s.grade ?? null,
@@ -143,7 +144,7 @@ export async function registerFamily(
     if (!result) {
       return {
         ok: false,
-        error: `could not create student ${s.legalFirstName} ${s.legalLastName}: ${lastErr?.message ?? "unknown"}`,
+        error: `could not create student ${s.name}: ${lastErr?.message ?? "unknown"}`,
       };
     }
     inserted.push(result);
@@ -199,7 +200,7 @@ export async function registerFamily(
     kind: c.kind,
     text_version: c.textVersion,
     text_hash: c.textHash,
-    typed_name: data.consents.typedName,
+    typed_name: data.family.primaryGuardianName,
     ip_address: ip,
     user_agent: ua,
   }));
@@ -238,7 +239,7 @@ export async function registerFamily(
     familyAccessToken: tokenRow.token,
     familyStatusUrl,
     wristbandCodes: studentMeta.map((s) => ({
-      studentName: `${s.legal_first_name} ${s.legal_last_name}`,
+      studentName: [s.legal_first_name, s.legal_last_name].filter(Boolean).join(" "),
       code: s.wristband_code,
     })),
   };

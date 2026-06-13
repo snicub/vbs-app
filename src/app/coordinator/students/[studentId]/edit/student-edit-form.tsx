@@ -21,7 +21,7 @@ type StopOption = {
 export function StudentEditForm({
   studentId,
   eventDate,
-  initialPreferredFirstName,
+  initialName,
   initialAllergies,
   initialMedicalNotes,
   initialMode,
@@ -33,7 +33,7 @@ export function StudentEditForm({
 }: {
   studentId: string;
   eventDate: string;
-  initialPreferredFirstName: string;
+  initialName: string;
   initialAllergies: string;
   initialMedicalNotes: string;
   initialMode: string | null;
@@ -46,7 +46,7 @@ export function StudentEditForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
-  const [preferredFirstName, setPreferredFirstName] = useState(initialPreferredFirstName);
+  const [name, setName] = useState(initialName);
   const [allergies, setAllergies] = useState(initialAllergies);
   const [medicalNotes, setMedicalNotes] = useState(initialMedicalNotes);
 
@@ -59,7 +59,7 @@ export function StudentEditForm({
     startTransition(async () => {
       const result = await updateStudent({
         studentId,
-        preferredFirstName,
+        name,
         allergies,
         medicalNotes,
       });
@@ -103,12 +103,12 @@ export function StudentEditForm({
         </h2>
 
         <div className="space-y-1.5">
-          <Label htmlFor="preferredFirstName">Preferred first name</Label>
+          <Label htmlFor="name">Name</Label>
           <Input
-            id="preferredFirstName"
-            value={preferredFirstName}
-            onChange={(e) => setPreferredFirstName(e.target.value)}
-            placeholder="Leave blank to use legal name"
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Child's name"
           />
         </div>
 

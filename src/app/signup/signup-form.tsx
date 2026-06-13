@@ -30,10 +30,9 @@ type ConsentItem = {
 };
 
 type StudentDraft = {
-  legalFirstName: string;
-  legalLastName: string;
-  preferredFirstName: string;
+  name: string;
   dob: string;
+  age: string;
   allergies: string;
   medicalNotes: string;
   mode: TransportMode;
@@ -43,10 +42,9 @@ type StudentDraft = {
 };
 
 const emptyStudent = (): StudentDraft => ({
-  legalFirstName: "",
-  legalLastName: "",
-  preferredFirstName: "",
+  name: "",
   dob: "",
+  age: "",
   allergies: "",
   medicalNotes: "",
   mode: "van",
@@ -57,7 +55,7 @@ const emptyStudent = (): StudentDraft => ({
 
 const CONSENT_LABELS: Record<ConsentKind, string> = {
   media_release: "Media release",
-  medical: "Medical authorization",
+  medical: "Emergency availability & medical",
   transport: "Transportation authorization",
   general_liability: "General liability",
   photo_release: "Wristband photo use",
@@ -90,7 +88,6 @@ export function SignupForm({
   const [emergency, setEmergency] = useState({ name: "", phone: "", relationship: "" });
   const [students, setStudents] = useState<StudentDraft[]>([emptyStudent()]);
   const [agreedKinds, setAgreedKinds] = useState<Set<ConsentKind>>(new Set());
-  const [typedName, setTypedName] = useState("");
   const submittingRef = useRef(false);
   const [pending, setPending] = useState(false);
   const [success, setSuccess] = useState<
@@ -112,8 +109,9 @@ export function SignupForm({
       toast.error("All consents must be agreed to before submitting.");
       return;
     }
-    if (typedName.trim().length === 0) {
-      toast.error("Type your full name to sign.");
+    const missingDobAge = students.findIndex((s) => !s.dob && !s.age.trim());
+    if (missingDobAge !== -1) {
+      toast.error(`Enter date of birth or age for child #${missingDobAge + 1}.`);
       return;
     }
     const missingPhoto = students.findIndex((s) => !s.photo);
@@ -126,11 +124,9 @@ export function SignupForm({
     setPending(true);
     try {
       const studentsPayload = await Promise.all(students.map(async (s) => ({
-        legalFirstName: s.legalFirstName,
-        legalLastName: s.legalLastName,
-        preferredFirstName: s.preferredFirstName || null,
+        name: s.name,
         dob: s.dob || null,
-        ageAtRegistration: null,
+        ageAtRegistration: s.age.trim() ? Number(s.age) : null,
         grade: null,
         allergies: s.allergies || null,
         medicalNotes: s.medicalNotes || null,
@@ -156,7 +152,6 @@ export function SignupForm({
         authorizedPickup: [],
         students: studentsPayload,
         consents: {
-          typedName,
           agreed: consents.map((c) => ({
             kind: c.kind,
             textVersion: c.version,
@@ -319,24 +314,21 @@ export function SignupForm({
               />
             </Field>
 
+            <Field label="Child's name" required>
+              <Input required value={s.name}
+                onChange={(e) => updateStudent(i, { name: e.target.value })} />
+            </Field>
             <div className="grid gap-3 sm:grid-cols-2">
-              <Field label="Legal first name" required>
-                <Input required value={s.legalFirstName}
-                  onChange={(e) => updateStudent(i, { legalFirstName: e.target.value })} />
-              </Field>
-              <Field label="Legal last name" required>
-                <Input required value={s.legalLastName}
-                  onChange={(e) => updateStudent(i, { legalLastName: e.target.value })} />
-              </Field>
-              <Field label="Preferred first name (optional)">
-                <Input value={s.preferredFirstName}
-                  onChange={(e) => updateStudent(i, { preferredFirstName: e.target.value })} />
-              </Field>
-              <Field label="Date of birth" required>
-                <Input type="date" required value={s.dob}
+              <Field label="Date of birth">
+                <Input type="date" value={s.dob}
                   onChange={(e) => updateStudent(i, { dob: e.target.value })} />
               </Field>
+              <Field label="Age">
+                <Input type="number" inputMode="numeric" min={1} max={18} value={s.age}
+                  onChange={(e) => updateStudent(i, { age: e.target.value })} />
+              </Field>
             </div>
+            <p className="text-xs text-muted-foreground">Enter date of birth or age — either one is fine.</p>
             <Field label="Allergies (one per line)">
               <Textarea value={s.allergies}
                 onChange={(e) => updateStudent(i, { allergies: e.target.value })} />
@@ -417,9 +409,9 @@ export function SignupForm({
             </label>
           ))}
         </div>
-        <Field label="Type your full legal name to sign" required>
-          <Input value={typedName} onChange={(e) => setTypedName(e.target.value)} required />
-        </Field>
+        <p className="text-xs text-muted-foreground">
+          By submitting this form you agree to the items above on behalf of your family.
+        </p>
       </section>
 
       <Button type="submit" disabled={pending} size="lg">

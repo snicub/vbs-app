@@ -5,12 +5,13 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
+import { splitName } from "@/lib/registration/schema";
 
 // -- Update student profile (name, allergies, medical notes) --
 
 const UpdateStudentSchema = z.object({
   studentId: z.string().uuid(),
-  preferredFirstName: z.string().trim().optional(),
+  name: z.string().trim().min(1, "Name is required").optional(),
   allergies: z.string().trim().optional(),
   medicalNotes: z.string().trim().optional(),
 });
@@ -41,8 +42,13 @@ export async function updateStudent(
 
   // Build the update payload from only the fields that were provided
   const updates: Record<string, string | null> = {};
-  if (fields.preferredFirstName !== undefined) {
-    updates.preferred_first_name = fields.preferredFirstName || null;
+  if (fields.name !== undefined) {
+    const { first, last } = splitName(fields.name);
+    updates.legal_first_name = first;
+    updates.legal_last_name = last;
+    // The single-name model is authoritative; clear any old preferred-name
+    // override so the edited name is what shows everywhere.
+    updates.preferred_first_name = null;
   }
   if (fields.allergies !== undefined) {
     updates.allergies = fields.allergies || null;

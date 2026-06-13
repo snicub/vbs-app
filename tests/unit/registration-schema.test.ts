@@ -4,6 +4,7 @@ import {
   StudentSchema,
   PhoneSchema,
   normalizePhone,
+  splitName,
 } from "@/lib/registration/schema";
 
 const SAMPLE_HASH = "a".repeat(64);
@@ -37,8 +38,7 @@ function validInput(): RawInput {
     authorizedPickup: [],
     students: [
       {
-        legalFirstName: "Joey",
-        legalLastName: "Doe",
+        name: "Joey Doe",
         dob: "2018-04-01",
         photoBytes: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
         transport: {
@@ -49,13 +49,10 @@ function validInput(): RawInput {
       },
     ],
     consents: {
-      typedName: "Jane Doe",
       agreed: [
-        { kind: "media_release" as const,    textVersion: "v1", textHash: SAMPLE_HASH },
-        { kind: "medical" as const,          textVersion: "v1", textHash: SAMPLE_HASH },
-        { kind: "transport" as const,        textVersion: "v1", textHash: SAMPLE_HASH },
-        { kind: "general_liability" as const,textVersion: "v1", textHash: SAMPLE_HASH },
-        { kind: "photo_release" as const,    textVersion: "v1", textHash: SAMPLE_HASH },
+        { kind: "media_release" as const,     textVersion: "v3", textHash: SAMPLE_HASH },
+        { kind: "general_liability" as const, textVersion: "v3", textHash: SAMPLE_HASH },
+        { kind: "medical" as const,           textVersion: "v3", textHash: SAMPLE_HASH },
       ],
     },
   };
@@ -113,19 +110,38 @@ describe("registration schema: students", () => {
     const result = StudentSchema.safeParse(input.students[0]);
     expect(result.success).toBe(true);
   });
+
+  it("accepts age in place of date of birth", () => {
+    const input = validInput();
+    input.students[0]!.dob = null;
+    input.students[0]!.ageAtRegistration = 7;
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+});
+
+describe("splitName", () => {
+  it("splits first and last on the final space", () => {
+    expect(splitName("Aiden Anderson")).toEqual({ first: "Aiden", last: "Anderson" });
+  });
+
+  it("keeps a multi-word first name, last word is the last name", () => {
+    expect(splitName("Mary Jane Watson")).toEqual({ first: "Mary Jane", last: "Watson" });
+  });
+
+  it("stores a single-word name with an empty last name", () => {
+    expect(splitName("Madonna")).toEqual({ first: "Madonna", last: "" });
+  });
+
+  it("collapses extra whitespace", () => {
+    expect(splitName("  Aiden   Anderson  ")).toEqual({ first: "Aiden", last: "Anderson" });
+  });
 });
 
 describe("registration schema: consents", () => {
-  it("requires all 5 consents", () => {
+  it("requires all 3 consents", () => {
     const input = validInput();
-    input.consents.agreed = input.consents.agreed.slice(0, 4);
-    const result = FamilyRegistrationSchema.safeParse(input);
-    expect(result.success).toBe(false);
-  });
-
-  it("requires a typed name", () => {
-    const input = validInput();
-    input.consents.typedName = "";
+    input.consents.agreed = input.consents.agreed.slice(0, 2);
     const result = FamilyRegistrationSchema.safeParse(input);
     expect(result.success).toBe(false);
   });

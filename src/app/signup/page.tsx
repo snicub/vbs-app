@@ -2,7 +2,6 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { SignupForm } from "./signup-form";
 import { consentText, CONSENT_TEXT, CONSENT_VERSION } from "@/lib/consents/text";
 import { hashConsentText } from "@/lib/consents/hash";
-import type { ConsentKind } from "@/types/domain";
 
 export const metadata = { title: "Register a Family — VBS" };
 export const dynamic = "force-dynamic";
@@ -34,13 +33,9 @@ export default async function SignupPage() {
     }),
   );
 
-  const kinds: ConsentKind[] = [
-    "media_release",
-    "medical",
-    "transport",
-    "general_liability",
-    "photo_release",
-  ];
+  const kinds = Object.keys(
+    CONSENT_TEXT[CONSENT_VERSION],
+  ) as (keyof (typeof CONSENT_TEXT)[typeof CONSENT_VERSION])[];
   const consents = await Promise.all(
     kinds.map(async (kind) => {
       const text = consentText(kind);
@@ -48,7 +43,6 @@ export default async function SignupPage() {
       return { kind, text, hash, version: CONSENT_VERSION };
     }),
   );
-  void CONSENT_TEXT;  // silence unused-import noise from re-export consumers
 
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">

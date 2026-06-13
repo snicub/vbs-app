@@ -6,7 +6,7 @@
  * we can show a parent exactly what they signed if asked.
  */
 
-export const CONSENT_VERSION = "v2" as const;
+export const CONSENT_VERSION = "v3" as const;
 
 export const CONSENT_TEXT = {
   v1: {
@@ -22,6 +22,11 @@ export const CONSENT_TEXT = {
     transport: `Church vans may drive my child between the assigned stop and VBS. I'll be at the stop on time, or send an authorized adult.`,
     general_liability: `VBS involves normal childhood play risks. I release the church and volunteers from liability for ordinary injuries.`,
     photo_release: `My child's photo may be printed on their wristband for staff identification. Photos are stored privately and deleted within 30 days after VBS.`,
+  },
+  v3: {
+    media_release: `Photos and video of my child taken at VBS may appear in church publications, websites, and social media.`,
+    general_liability: `VBS involves normal childhood play risks. I release the church and volunteers from liability for ordinary injuries.`,
+    medical: `I will be reachable by phone during VBS hours and have an authorized adult available to respond in an emergency. I authorize staff to give routine first aid and to call emergency services if my child is hurt or sick.`,
   },
 } as const;
 

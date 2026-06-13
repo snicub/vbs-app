@@ -211,7 +211,18 @@ These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to 
 
 ## Current status (2026-05-31 — morning name tags + editable town colors)
 
-All 5 phases on `main`. **174 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
+All 5 phases on `main`. **179 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
+
+### 2026-06-13 — live on Vercel + registration simplification
+
+**Production is deployed on Vercel** (`vbs26.vercel.app`) against a hosted Supabase project. Auth emails send via **Resend SMTP** (custom domain `mail.k2e.app`, verified; sender `vbs@mail.k2e.app`). Env wired on Vercel: Supabase URL/anon/**service_role** (the service key was initially wrong → `public.users` rows never auto-created, which silently breaks registration + sign-in profile creation; verify it decodes to `role: service_role`), `NEXT_PUBLIC_BASE_URL`, Resend, Mapbox (staged, unused). Admin access = sign in, then `update public.users set role='admin' where email=…` (no in-app role UI). Mapbox token is staged but the **address-first stop planner is still unbuilt** (the discussed feature: geocode addresses → cluster-suggest stops → coordinator finalizes on a map).
+
+**Registration form simplified** (no DB migration — name splits into the existing first/last columns on save):
+- Single **"Child's name"** field replaces legal first/last/preferred. `splitName()` in `registration/schema.ts` (last word → last name) maps it to `legal_first_name`/`legal_last_name`; everything downstream reads those columns unchanged.
+- **Age** box added next to DOB; either one satisfies the dob-or-age guard (client + server).
+- **Three consents** now (`CONSENT_VERSION = "v3"`): media_release, general_liability, and medical (reworded as guardian-emergency-availability + first-aid authorization). Dropped transport + photo_release from the active set; v1/v2 retained for already-signed records. **Open gap: photo still required but no consent covers wristband-photo use.**
+- Removed the "type your full legal name to sign" field; consent records auto-attribute `typed_name` to the primary guardian (+ IP/UA/timestamp).
+- **Coordinator student-edit** screen aligned to the same single-**Name** field (was editing an orphaned "preferred first name"); `updateStudent` splits the name and clears any stale preferred override.
 
 ### 2026-06-01 — full-repo gap audit (68 agents) + CRITICAL check-out fix
 

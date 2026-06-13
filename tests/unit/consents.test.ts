@@ -41,4 +41,9 @@ describe("consents: text", () => {
   it("consentText(kind) returns the current-version string", () => {
     expect(consentText("medical")).toBe(CONSENT_TEXT[CONSENT_VERSION].medical);
   });
+
+  it("active version has exactly the three required consents", () => {
+    const kinds = Object.keys(CONSENT_TEXT[CONSENT_VERSION]).sort();
+    expect(kinds).toEqual(["general_liability", "media_release", "medical"]);
+  });
 });

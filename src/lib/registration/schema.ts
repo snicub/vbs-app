@@ -50,10 +50,21 @@ export const StudentTransportSchema = z.object({
   afternoonStopId: z.string().uuid().nullable(),
 });
 
+/**
+ * Split a single typed name into the first/last columns the schema stores.
+ * Last whitespace-separated word becomes the last name; the rest is the first
+ * name. A single-word name stores an empty last name (the column is text, not
+ * required to be non-empty).
+ */
+export function splitName(full: string): { first: string; last: string } {
+  const parts = full.trim().split(/\s+/).filter(Boolean);
+  if (parts.length <= 1) return { first: parts[0] ?? "", last: "" };
+  const last = parts.pop()!;
+  return { first: parts.join(" "), last };
+}
+
 export const StudentSchema = z.object({
-  legalFirstName: z.string().trim().min(1, "Legal first name is required"),
-  legalLastName: z.string().trim().min(1, "Legal last name is required"),
-  preferredFirstName: z.string().trim().optional().nullable(),
+  name: z.string().trim().min(1, "Name is required"),
   dob: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
@@ -120,8 +131,7 @@ export const FamilyRegistrationSchema = z.object({
   authorizedPickup: z.array(AuthorizedPickupSchema).default([]),
   students: z.array(StudentSchema).min(1, "Add at least one child").max(15, "Maximum 15 children per family"),
   consents: z.object({
-    typedName: z.string().trim().min(1, "Type your full name to sign"),
-    agreed: z.array(ConsentInputSchema).min(5, "All consents are required"),
+    agreed: z.array(ConsentInputSchema).min(3, "All consents are required"),
   }),
 });
 
