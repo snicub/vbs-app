@@ -12,7 +12,7 @@ import { FamilyAccessPanel } from "./family-access-panel";
 import { STATE_PRESENTATION, TONE_CLASSES } from "@/lib/state-presentation";
 import { StateBadge, SafetyCallout } from "@/components/state-badge";
 import Link from "next/link";
-import { ArrowLeftIcon, PencilIcon } from "lucide-react";
+import { ArrowLeftIcon, PencilIcon, CalendarOffIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -35,6 +35,10 @@ export default async function StudentTablePage({
 
   const { student, status } = result;
   const state = safeDayState(status?.state ?? "not_started");
+  // No day-record for the viewed day → record_event/smart_checkout would reject
+  // every action ("No day record"). We render a hard stop instead of a tappable
+  // surface that fails on tap.
+  const eventDate = status?.eventDate ?? getLocalDate();
   const photoUrl = await signedUrlFor("student-photos", student.photoPath);
 
   const supabase = await createClient();
@@ -215,31 +219,59 @@ export default async function StudentTablePage({
         medicalNotes={student.medicalNotes}
       />
 
-      <StudentActions
-        studentId={student.id}
-        eventDate={status?.eventDate ?? getLocalDate()}
-        currentState={state}
-        actorRole={user.role}
-        mode={(status?.mode as "van" | "parent_dropoff_only" | "parent_pickup_only" | "parent_both" | null) ?? null}
-        primaryGuardianName={family?.primary_guardian_name ?? null}
-        emergencyContact={
-          family?.emergency_contact_name
-            ? {
-                name: family.emergency_contact_name,
-                relationship: family.emergency_contact_relationship,
-              }
-            : null
-        }
-        guardians={(guardians ?? []).map((g) => ({
-          fullName: g.full_name,
-          relationship: g.relationship,
-        }))}
-        authorizedPickup={allowedPickup.map((p) => ({
-          id: p.id,
-          fullName: p.full_name,
-          relationship: p.relationship,
-        }))}
-      />
+      {status ? (
+        <StudentActions
+          studentId={student.id}
+          eventDate={eventDate}
+          currentState={state}
+          actorRole={user.role}
+          mode={(status.mode as "van" | "parent_dropoff_only" | "parent_pickup_only" | "parent_both" | null) ?? null}
+          primaryGuardianName={family?.primary_guardian_name ?? null}
+          emergencyContact={
+            family?.emergency_contact_name
+              ? {
+                  name: family.emergency_contact_name,
+                  relationship: family.emergency_contact_relationship,
+                }
+              : null
+          }
+          guardians={(guardians ?? []).map((g) => ({
+            fullName: g.full_name,
+            relationship: g.relationship,
+          }))}
+          authorizedPickup={allowedPickup.map((p) => ({
+            id: p.id,
+            fullName: p.full_name,
+            relationship: p.relationship,
+          }))}
+        />
+      ) : (
+        <div
+          role="alert"
+          className="rounded-xl border-2 p-4 space-y-2"
+          style={{
+            borderColor: "var(--anomaly-warn)",
+            backgroundColor: "color-mix(in oklab, var(--anomaly-warn) 8%, transparent)",
+          }}
+        >
+          <div className="flex items-center gap-2 font-semibold">
+            <CalendarOffIcon className="size-5 text-[var(--anomaly-warn)]" aria-hidden />
+            No schedule for this child on {eventDate}
+          </div>
+          <p className="text-sm text-muted-foreground">
+            This child isn&apos;t registered for {eventDate}, so check-in actions aren&apos;t
+            available — a coordinator needs to set up their day first.
+          </p>
+          {isCoordinator(user.role) && (
+            <Link
+              href={`/coordinator/students/${student.id}/edit`}
+              className={buttonVariants({ variant: "default", size: "sm" })}
+            >
+              <PencilIcon /> Set up this child&apos;s day
+            </Link>
+          )}
+        </div>
+      )}
 
       {/* Family contacts — below action buttons so volunteers reach check-in faster */}
       {family && (
