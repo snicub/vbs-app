@@ -213,6 +213,28 @@ These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to 
 
 All 5 phases on `main`. **193 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
 
+### 2026-06-17 (overnight) — autonomous review loop, 8 waves on a branch
+
+All work is on branch **`feat/vbs-safety-offline-routing-efficiency`** (pushed; latest `20bf5a6`), NOT `main` — review/merge in the morning. Green at every step: **typecheck + lint + 295 unit tests + `next build`** all pass. (pgTAP is now `plan(30)` but still **Docker-unverified** — run `pnpm supabase:start && pnpm test:db`.)
+
+The branch first bundles the day's safety/offline/routing/efficiency work (commit `adb66bc`: migrations 0019–0023, ALLOW_NO_LOGIN gate, boarded-stop guard, offline outbox, address route builder, age groups, two-color tags, GPS freshness, query parallelization + batched signed-URLs + dead-code trims). Then 8 paced overnight waves, each one focused area, verified green, committed + pushed:
+- **W1** `77206de` — students roster **Status filter** + extracted tested filter/sort core (`student-filter.ts`).
+- **W2** — present-only age grouping was already built+tested (no change).
+- **W3** `89e4cb7` — `canUndo` extracted to one tested source (`lib/events/undo.ts`); fixed the drifted undo test (it was missing the no_show + newer-events rules).
+- **W4** `f70f774` — **multi-day routing**: `autoAssignStopsFromAddresses` now routes ALL VBS days in one click (was Day-1-only → kids fell off the van Days 2–5), idempotent.
+- **W5** `8f90f09` — `/table/[code]` **no-schedule hard-stop** (was rendering actions that failed on tap when a kid had no day-record).
+- **W6** `9c174e2` — pgTAP **negative-authz + restricted-release** assertions (`plan(23)→(30)`; test-only).
+- **W7** `80754a8` — `buildPickupOptions` extracted to a shared tested lib (`lib/checkin/pickup-options.ts`).
+- **W8** `20bf5a6` — anomaly-watch aggregation extracted to a tested lib (`lib/notifications/anomaly-watch.ts`); cron + test now share it.
+
+Also created 3 missing flow agents: **coordinator-ops**, **notifications**, **offline-pwa** (`.claude/agents/`).
+
+**DEFERRED (deliberately not done autonomously — need a supervised Docker/browser session):**
+- **Release-has-no-Undo** (check-in): `smartCheckOut` releases show no Undo toast and `undoEvent` only supersedes one event (the PM chain is 2–3). Needs a chain-aware coordinator-reversible path on the DB release path.
+- **Cold-open offline**: `public/sw.js` is a deliberate kill-switch, so the outbox only covers writes after an online load. A real caching service worker is outward-facing (persists in browsers, can brick the live app) — build + verify in a browser.
+
+**Still open (lower priority):** run pgTAP/0019–0023 under Docker; `tests/integration/` still empty + E2E is a smoke test; address not editable post-signup (geocode only runs at the builder); the `/coordinator` device-clock-vs-server-time GPS-freshness nit; photo-without-consent gap. **Deploy note:** `ALLOW_NO_LOGIN` now defaults OFF — set it `true` on Vercel to keep kiosk mode (and gate `/coordinator/*` at the network/Vercel layer if so).
+
 ### 2026-06-16 — feature-agent team + full-app audit + new product direction
 
 **Agent team created** in `.claude/agents/` — one specialist per flow, each with its own `.claude/agent-memory/<name>/`: `registration-flow-expert` (updated), `check-in-flow-expert`, `van-flow-expert`, `live-map-flow-expert`, `student-edit-flow-expert`, `nametag-flow-expert`, `test-suite-expert`, `data-integrity-expert`. Recommended-but-not-yet-created: a **location/routing** agent (owns address→route building), **coordinator-ops** (dashboard/anomalies/closeout), **notifications** (SMS/email/cron/webhooks).
@@ -320,6 +342,14 @@ The 4 deferred offline items are built (260 tests / typecheck / lint / clean bui
 - **Roster staleness note:** the offline banner shows "Roster shown is from HH:MM — may be out of date" (van page passes `loadedAt`).
 - **Cancel a queued action:** `removePendingForStudent` (tested) + `cancelForStudent` on the hook + a per-row "cancel" link when a kid is queued offline — a wrong offline tap is recoverable before it syncs.
 - **Quiet GPS offline:** the broadcast handler no longer toasts every 15s offline; shows one calm "Location not updating (offline)" status in the GPS card + added the missing `.catch`.
+
+### 2026-06-16 (cont.) — class-group builder (check-in-aware + controls)
+
+`/coordinator/groups` is now an interactive builder, not a static list:
+- Groups from **checked-in kids** by default (`state = site_checked_in`) with an **"All expected"** toggle to pre-plan; previously it grouped all attending.
+- Live controls (client `groups-builder.tsx`): **kids-per-group OR number-of-groups (= teachers, one each)**, **similar-vs-mixed ages**, a summary (N kids → G groups · ~K each · G teachers), and **Print**.
+- Pure `buildGroups(kids, {mode,targetSize,groupCount,mix})` in `lib/coordinator/groups.ts` — count-mode clamps to #kids, mix = round-robin age spread, size-mode = balanced age clusters; tested. `buildAgeGroups` kept as a thin wrapper.
+- Not persisted yet (generate + print; no saved class/teacher assignments) — natural follow-up.
 
 ### 2026-06-13 — live on Vercel + registration simplification
 
