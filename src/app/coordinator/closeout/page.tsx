@@ -67,6 +67,10 @@ export default async function CloseoutPage() {
       )
     `)
     .eq("event_date", today)
+    // Attending-only, like the rest of the coordinator surface. Otherwise a
+    // withdrawn kid sits in not_started (non-terminal) and shows up in the
+    // "N students not yet home" warning, forcing a false "close out anyway?".
+    .eq("attending", true)
     .returns<(Omit<StatusRow, "preferred_first_name" | "legal_first_name" | "legal_last_name" | "wristband_code"> & {
       students: {
         preferred_first_name: string | null;

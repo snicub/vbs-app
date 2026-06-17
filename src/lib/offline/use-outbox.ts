@@ -10,6 +10,7 @@ import {
   pendingStudentIds,
   removePendingForStudent,
   counts,
+  isOutboxEntry,
   type OutboxEntry,
   type SendOutcome,
 } from "./outbox";
@@ -26,9 +27,11 @@ function load(): OutboxEntry[] {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     const parsed: unknown = raw ? JSON.parse(raw) : [];
-    // Guard against corrupt / wrong-shape values (a half-written blob, another
-    // tab stomping the key). A non-array would crash the queue logic later.
-    return Array.isArray(parsed) ? (parsed as OutboxEntry[]) : [];
+    // Guard corrupt / wrong-shape values (a half-written blob, another tab
+    // stomping the key, a version skew). A non-array would crash the queue; a
+    // malformed entry would become a stuck "ghost" that never syncs — so
+    // validate per-entry and drop anything that isn't a well-formed entry.
+    return Array.isArray(parsed) ? parsed.filter(isOutboxEntry) : [];
   } catch {
     return [];
   }

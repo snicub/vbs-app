@@ -7,6 +7,7 @@ import {
   pendingStudentIds,
   counts,
   removePendingForStudent,
+  isOutboxEntry,
   type OutboxEntry,
 } from "@/lib/offline/outbox";
 
@@ -169,5 +170,32 @@ describe("pendingStudentIds + counts", () => {
       e({ id: "3", dedupKey: "3" }),
     ];
     expect(counts(list)).toEqual({ pending: 2, failed: 1 });
+  });
+});
+
+describe("isOutboxEntry (load-time validation — no silent ghosts)", () => {
+  it("accepts a well-formed entry", () => {
+    expect(isOutboxEntry(e({ id: "1", dedupKey: "1" }))).toBe(true);
+    expect(isOutboxEntry(e({ id: "1", dedupKey: "1", studentId: "s1", status: "failed", lastError: "x" }))).toBe(true);
+  });
+
+  it("rejects non-objects and arrays", () => {
+    for (const bad of [null, undefined, 42, "x", true, []]) {
+      expect(isOutboxEntry(bad)).toBe(false);
+    }
+  });
+
+  it("rejects entries missing required fields or with a bad status", () => {
+    const base = e({ id: "1", dedupKey: "1" }) as Record<string, unknown>;
+    expect(isOutboxEntry({ ...base, id: undefined })).toBe(false);
+    expect(isOutboxEntry({ ...base, dedupKey: 123 })).toBe(false);
+    expect(isOutboxEntry({ ...base, capturedAt: undefined })).toBe(false);
+    expect(isOutboxEntry({ ...base, attempts: "0" })).toBe(false);
+    expect(isOutboxEntry({ ...base, status: "synced" })).toBe(false);
+    expect(isOutboxEntry({ ...base, lastError: 5 })).toBe(false);
+  });
+
+  it("allows studentId null and lastError null", () => {
+    expect(isOutboxEntry(e({ id: "1", dedupKey: "1", studentId: null, lastError: null }))).toBe(true);
   });
 });

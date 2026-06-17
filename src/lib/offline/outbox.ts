@@ -28,6 +28,29 @@ export type OutboxEntry = {
   lastError: string | null;
 };
 
+/**
+ * Validate a value loaded from localStorage is a well-formed entry. A corrupt
+ * or old-schema blob (another tab, a half-write, a version skew) must be
+ * discarded on load — otherwise an entry that's neither syncable nor countable
+ * becomes a stuck "ghost" that silently never sends. Discarding a malformed
+ * entry is safe: it could never have synced anyway.
+ */
+export function isOutboxEntry(x: unknown): x is OutboxEntry {
+  if (!x || typeof x !== "object") return false;
+  const e = x as Record<string, unknown>;
+  return (
+    typeof e.id === "string" &&
+    typeof e.kind === "string" &&
+    (e.studentId === null || typeof e.studentId === "string") &&
+    typeof e.dedupKey === "string" &&
+    "payload" in e &&
+    typeof e.capturedAt === "string" &&
+    typeof e.attempts === "number" &&
+    (e.status === "pending" || e.status === "failed") &&
+    (e.lastError === null || typeof e.lastError === "string")
+  );
+}
+
 export type SendOutcome =
   | { outcome: "ok" }
   | { outcome: "rejected"; error: string }
