@@ -1,8 +1,9 @@
 /**
- * Geographic helpers. Currently haversine distance + a naive ETA based on
- * average van speed. When MAPBOX_TOKEN is configured we should switch to
- * the Directions Matrix API for real driving-distance ETAs — TODO before
- * VBS week if the token lands.
+ * Geographic helpers: haversine distance + a naive straight-line ETA based on
+ * average van speed (parent status page only). This is crow-flies × 1.4, not
+ * road routing, so it can mislead on real road networks. MAPBOX_TOKEN is wired
+ * up elsewhere (geocoding in geocode.ts) but is deliberately NOT used here —
+ * these ETAs stay dependency-free and offline-safe.
  */
 
 const EARTH_RADIUS_M = 6_371_000;

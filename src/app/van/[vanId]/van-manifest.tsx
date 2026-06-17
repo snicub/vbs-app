@@ -13,6 +13,9 @@ import { StateBadge, SafetyCallout } from "@/components/state-badge";
 import { requestScreenWakeLock } from "@/lib/wake-lock";
 import { BusIcon, HomeIcon, MapPinIcon, RadioIcon, RadioTowerIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useOutbox } from "@/lib/offline/use-outbox";
+import { OfflineBanner } from "@/components/offline-banner";
+import { clientId } from "@/lib/offline/uuid";
 
 type RosterItem = {
   studentId: string;
@@ -49,15 +52,19 @@ export function VanManifest({
   vanId,
   eventDate,
   roster,
+  loadedAt,
 }: {
   vanId: string;
   eventDate: string;
   roster: RosterItem[];
+  loadedAt: string;
 }) {
   const router = useRouter();
+  const outbox = useOutbox({ submitEvent, smartCheckOut });
   const [pendingStudents, setPendingStudents] = useState<Set<string>>(new Set());
   const [broadcasting, setBroadcasting] = useState(false);
   const [lastReportAt, setLastReportAt] = useState<Date | null>(null);
+  const [gpsReachable, setGpsReachable] = useState(true);
   const [error, setError] = useState<string | null>(null);
   // Photo-verify modal: shown before van_boarded_pm fires so the driver
   // confirms the kid's face matches the name. Prevents the worst failure
@@ -99,20 +106,27 @@ export function VanManifest({
         const now = Date.now();
         if (now - lastBroadcastRef.current < 15_000) return;
         lastBroadcastRef.current = now;
-        setError(null);
-        const result = await broadcastVanLocation({
-          vanId,
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
-          accuracyM: pos.coords.accuracy,
-          headingDeg: pos.coords.heading ?? undefined,
-          speedMps: pos.coords.speed ?? undefined,
-        });
-        if (!result.ok) {
-          setError(result.error);
-          toast.error(result.error);
-        } else {
-          setLastReportAt(new Date());
+        try {
+          const result = await broadcastVanLocation({
+            vanId,
+            lat: pos.coords.latitude,
+            lng: pos.coords.longitude,
+            accuracyM: pos.coords.accuracy,
+            headingDeg: pos.coords.heading ?? undefined,
+            speedMps: pos.coords.speed ?? undefined,
+          });
+          // Don't toast on every failed 15s tick (it would spam while offline).
+          // Show one calm inline status in the GPS card instead.
+          if (!result.ok) {
+            setGpsReachable(false);
+          } else {
+            setGpsReachable(true);
+            setError(null);
+            setLastReportAt(new Date());
+          }
+        } catch {
+          // Request never landed (offline) — location isn't reaching the server.
+          setGpsReachable(false);
         }
       },
       (err) => {
@@ -184,8 +198,16 @@ export function VanManifest({
   }
 
   function fireCheckOut(studentId: string) {
+    const dedupKey = clientId();
+    const occurredAt = new Date().toISOString();
+    const payload = { studentId, eventDate, occurredAt };
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      outbox.enqueue({ kind: "smartCheckOut", studentId, dedupKey, payload });
+      toast.success("Saved offline — will sync when you're back online");
+      return;
+    }
     addPending(studentId);
-    void smartCheckOut({ studentId, eventDate })
+    void smartCheckOut(payload)
       .then((result) => {
         removePending(studentId);
         if (!result.ok) {
@@ -196,14 +218,26 @@ export function VanManifest({
         router.refresh();
       })
       .catch(() => {
+        // Request never landed (offline/timeout) — save it and sync later.
         removePending(studentId);
-        toast.error("Network error — try again");
+        outbox.enqueue({ kind: "smartCheckOut", studentId, dedupKey, payload });
+        toast.success("Saved offline — will sync when you're back online");
       });
   }
 
   function fire(studentId: string, eventType: string) {
+    // Client-generated key so an offline replay dedupes to one event; captured
+    // time so the event records when it happened, not when it later syncs.
+    const idempotencyKey = clientId();
+    const occurredAt = new Date().toISOString();
+    const payload = { studentId, eventDate, eventType, vanId, idempotencyKey, occurredAt };
+    if (typeof navigator !== "undefined" && !navigator.onLine) {
+      outbox.enqueue({ kind: "submitEvent", studentId, dedupKey: idempotencyKey, payload });
+      toast.success("Saved offline — will sync when you're back online");
+      return;
+    }
     addPending(studentId);
-    void submitEvent({ studentId, eventDate, eventType, vanId })
+    void submitEvent(payload)
       .then((result) => {
         removePending(studentId);
         if (!result.ok) {
@@ -215,83 +249,101 @@ export function VanManifest({
       })
       .catch(() => {
         removePending(studentId);
-        toast.error("Network error — try again");
+        outbox.enqueue({ kind: "submitEvent", studentId, dedupKey: idempotencyKey, payload });
+        toast.success("Saved offline — will sync when you're back online");
       });
   }
 
   return (
     <>
+      <OfflineBanner
+        isOnline={outbox.isOnline}
+        pending={outbox.pending}
+        failedCount={outbox.failedCount}
+        loadedAt={loadedAt}
+        onRetry={outbox.retryFailed}
+      />
       <div
         className={cn(
-          "rounded-xl border p-4 flex items-center justify-between gap-3 transition-colors",
+          "rounded-2xl border-2 p-4 flex flex-col gap-3 transition-colors sm:flex-row sm:items-center sm:justify-between",
           broadcasting
-            ? "bg-[var(--state-safe)]/10 border-[var(--state-safe)]/40"
-            : "bg-card",
+            ? "bg-[var(--state-safe)]/10 border-[var(--state-safe)]/50"
+            : "bg-card border-border",
         )}
       >
-        <div className="text-sm space-y-1 min-w-0">
-          <div className="flex items-center gap-2 font-semibold">
+        <div className="space-y-1 min-w-0">
+          <div className="flex items-center gap-2.5 text-lg font-bold">
             {broadcasting ? (
-              <RadioTowerIcon className="size-4 text-[var(--state-safe)] animate-pulse" />
+              <RadioTowerIcon className="size-6 text-[var(--state-safe)] animate-pulse" />
             ) : (
-              <RadioIcon className="size-4 text-muted-foreground" />
+              <RadioIcon className="size-6 text-muted-foreground" />
             )}
-            Van location broadcast
+            GPS broadcast
             <span
               className={cn(
-                "ml-1 text-xs font-medium rounded-md border px-2 py-0.5",
+                "ml-1 text-sm font-bold uppercase tracking-wide rounded-md border px-2.5 py-1",
                 broadcasting
-                  ? "bg-[var(--state-safe)]/15 text-[var(--state-safe)] border-[var(--state-safe)]/35"
+                  ? "bg-[var(--state-safe)]/15 text-[var(--state-safe)] border-[var(--state-safe)]/40"
                   : "bg-muted text-muted-foreground border-border",
               )}
             >
-              {broadcasting ? "live" : "off"}
+              {broadcasting ? "ON" : "OFF"}
             </span>
           </div>
           {broadcasting ? (
-            <div className="text-xs text-muted-foreground">
-              {lastReportAt
-                ? `Last GPS at ${lastReportAt.toLocaleTimeString()}.`
-                : "Waiting for first GPS fix…"}{" "}
-              Keep the screen on; backgrounding may pause broadcasts.
-            </div>
+            !gpsReachable ? (
+              <div className="text-base font-medium text-[var(--anomaly-warn)]">
+                Location not updating (offline) — resumes automatically when
+                you&apos;re back online.
+              </div>
+            ) : (
+              <div className="text-base text-muted-foreground">
+                {lastReportAt
+                  ? `Last sent ${lastReportAt.toLocaleTimeString()}.`
+                  : "Waiting for first GPS fix…"}{" "}
+                Keep the screen on.
+              </div>
+            )
           ) : (
-            <div className="text-xs text-muted-foreground">
-              Turn on to broadcast this van&apos;s GPS to the coordinator map.
+            <div className="text-base text-muted-foreground">
+              Turn on to share this van&apos;s location.
             </div>
           )}
           {error && (
-            <div className="text-xs text-destructive">Error: {error}</div>
+            <div className="text-base font-medium text-destructive">Error: {error}</div>
           )}
         </div>
         <Button
           variant={broadcasting ? "outline" : "default"}
           size="lg"
+          className="w-full text-lg min-h-14 sm:w-auto"
           onClick={() => setBroadcasting((v) => !v)}
         >
-          {broadcasting ? "Stop" : "Start broadcast"}
+          {broadcasting ? "Stop GPS" : "Start GPS"}
         </Button>
       </div>
 
-      <div className="space-y-6 mt-4">
+      <div className="space-y-8 mt-5">
         {groupByStop(roster).map(({ stopName, items }) => (
           <section key={stopName ?? "__none"}>
-            <div className="flex items-center gap-2 mb-3">
-              <MapPinIcon className="size-4 text-muted-foreground shrink-0" />
-              <span className="text-sm font-semibold text-foreground">
+            <div className="flex items-center gap-2.5 mb-4">
+              <MapPinIcon className="size-5 text-muted-foreground shrink-0" />
+              <span className="text-lg font-bold text-foreground">
                 {stopName ?? "Unknown stop"}
               </span>
-              <span className="text-xs text-muted-foreground">
-                ({items.length} kid{items.length === 1 ? "" : "s"})
+              <span className="text-base text-muted-foreground">
+                · {items.length} kid{items.length === 1 ? "" : "s"}
               </span>
               <div className="flex-1 h-px bg-border" />
             </div>
 
-            <ul className="space-y-3">
+            <ul className="space-y-4">
               {items.map((r) => {
                 const state = safeDayState(r.state);
                 const presentation = STATE_PRESENTATION[state];
                 const isPending = pendingStudents.has(r.studentId);
+                const isQueued = outbox.pendingStudentIds.has(r.studentId);
+                const isFailed = outbox.failedStudentIds.has(r.studentId);
                 const canBoardAm =
                   r.direction !== "pm" &&
                   isLegalTransition(state, "van_boarded_am");
@@ -303,55 +355,92 @@ export function VanManifest({
                 return (
                   <li
                     key={r.studentId}
-                    className="rounded-xl border bg-card overflow-hidden"
+                    className="rounded-2xl border bg-card overflow-hidden"
                     style={{
-                      borderLeftWidth: 4,
+                      borderLeftWidth: 6,
                       borderLeftColor:
                         state === "not_started"
                           ? "var(--border)"
                           : `var(--state-${presentation.tone})`,
                     }}
                   >
-                    <div className="p-4 space-y-3">
-                      <div className="flex items-start justify-between gap-3">
+                    <div className="p-4 space-y-4">
+                      <div className="flex items-start gap-4">
+                        <div className="size-16 shrink-0 rounded-xl border bg-muted overflow-hidden flex items-center justify-center">
+                          {r.photoUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={r.photoUrl}
+                              alt={r.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <span className="text-xs text-muted-foreground">
+                              no photo
+                            </span>
+                          )}
+                        </div>
                         <div className="min-w-0 flex-1">
-                          <div className="font-semibold text-base truncate">
+                          <div className="font-bold text-2xl leading-tight truncate">
                             {r.name}
                           </div>
-                          <div className="text-xs text-muted-foreground font-mono mt-0.5 flex items-center gap-1.5 flex-wrap">
-                            <span>{r.wristbandCode}</span>
+                          <div className="mt-1.5 flex items-center gap-2 flex-wrap text-base">
                             {r.colorHex && (
                               <span
-                                className="inline-block w-3.5 h-3.5 rounded-full border ring-1 ring-border"
+                                className="inline-block w-5 h-5 rounded-full border ring-1 ring-border"
                                 style={{ backgroundColor: r.colorHex }}
                                 aria-hidden
                                 title={r.colorName ?? undefined}
                               />
                             )}
-                            <span>{r.colorName ?? "no color"}</span>
-                            <span>·</span>
-                            <span>
+                            <span className="font-medium">
+                              {r.colorName ?? "no color"}
+                            </span>
+                            <span className="font-mono text-muted-foreground">
+                              {r.wristbandCode}
+                            </span>
+                            <span className="text-muted-foreground">
                               {r.direction === "both"
                                 ? "AM+PM"
                                 : r.direction.toUpperCase()}
                             </span>
+                            {isQueued && (
+                              <span className="font-semibold text-[var(--anomaly-warn)] whitespace-nowrap">
+                                ⏳ saved offline
+                              </span>
+                            )}
+                            {isQueued && (
+                              <button
+                                type="button"
+                                onClick={() => outbox.cancelForStudent(r.studentId)}
+                                className="font-medium text-[var(--anomaly-warn)] underline underline-offset-2 whitespace-nowrap"
+                              >
+                                cancel
+                              </button>
+                            )}
+                            {isFailed && (
+                              <span className="font-semibold text-destructive whitespace-nowrap">
+                                ⚠ didn&apos;t save — see banner
+                              </span>
+                            )}
                           </div>
                         </div>
-                        <StateBadge state={state} size="sm" />
+                        <StateBadge state={state} size="md" />
                       </div>
 
                       <SafetyCallout
                         allergies={r.allergies}
                         medicalNotes={r.medicalNotes}
-                        density="compact"
+                        density="comfortable"
                       />
 
                       {(canBoardAm || canCheckOut) && (
-                        <div className="flex flex-wrap gap-2 pt-1">
+                        <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:flex-wrap">
                           {canBoardAm && (
                             <Button
                               size="lg"
-                              disabled={isPending}
+                              className="w-full text-lg min-h-14 sm:w-auto"
+                              disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "board_am")}
                             >
                               <BusIcon /> Boarded AM van
@@ -360,10 +449,11 @@ export function VanManifest({
                           {canCheckOut && (
                             <Button
                               size="lg"
-                              disabled={isPending}
+                              className="w-full text-lg min-h-14 sm:w-auto"
+                              disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "drop_off")}
                             >
-                              <HomeIcon /> Dropped off (check out)
+                              <HomeIcon /> Dropped off
                             </Button>
                           )}
                         </div>
@@ -424,31 +514,31 @@ function PhotoVerifyModal({
       onClick={onCancel}
     >
       <div
-        className="w-full max-w-md rounded-2xl bg-card border-2 border-primary p-4 sm:p-6 space-y-4"
+        className="w-full max-w-md rounded-2xl bg-card border-2 border-primary p-5 sm:p-6 space-y-4"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="text-center space-y-1">
+        <div className="text-center space-y-1.5">
           <div
             id="photo-verify-title"
-            className="text-xs uppercase tracking-wide text-muted-foreground"
+            className="text-sm uppercase tracking-wide font-medium text-muted-foreground"
           >
             Confirm the kid
           </div>
-          <div className="text-2xl font-bold">{target.name}</div>
-          <div className="text-xs text-muted-foreground font-mono flex items-center justify-center gap-2">
-            <span>{target.wristbandCode}</span>
+          <div className="text-3xl font-bold">{target.name}</div>
+          <div className="text-base text-muted-foreground flex items-center justify-center gap-2 flex-wrap">
             {target.colorHex && (
               <span
-                className="inline-block w-4 h-4 rounded-full border ring-1 ring-border"
+                className="inline-block w-5 h-5 rounded-full border ring-1 ring-border"
                 style={{ backgroundColor: target.colorHex }}
                 aria-hidden
               />
             )}
-            {target.colorName && <span>{target.colorName}</span>}
+            {target.colorName && <span className="font-medium">{target.colorName}</span>}
+            <span className="font-mono">{target.wristbandCode}</span>
           </div>
         </div>
 
-        <div className="mx-auto w-48 h-48 rounded-xl border bg-muted flex items-center justify-center overflow-hidden">
+        <div className="mx-auto w-56 h-56 rounded-xl border bg-muted flex items-center justify-center overflow-hidden">
           {target.photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -457,14 +547,14 @@ function PhotoVerifyModal({
               className="w-full h-full object-cover"
             />
           ) : (
-            <span className="text-sm text-muted-foreground text-center px-2">
+            <span className="text-base text-muted-foreground text-center px-3">
               No photo on file. Verify by name + wristband only.
             </span>
           )}
         </div>
 
         {target.stopName && (
-          <div className="text-center text-sm">
+          <div className="text-center text-base">
             <span className="text-muted-foreground">Stop:</span>{" "}
             <strong>{target.stopName}</strong>
           </div>
@@ -474,14 +564,14 @@ function PhotoVerifyModal({
           <SafetyCallout
             allergies={target.allergies}
             medicalNotes={target.medicalNotes}
-            density="compact"
+            density="comfortable"
           />
         )}
 
-        <div className="flex gap-2 flex-col sm:flex-row">
+        <div className="flex gap-2.5 flex-col sm:flex-row">
           <Button
             size="lg"
-            className="flex-1"
+            className="flex-1 text-lg min-h-14"
             onClick={onConfirm}
             disabled={!armed}
           >
@@ -489,7 +579,12 @@ function PhotoVerifyModal({
               ? `Yes — ${actionLabel}`
               : `Wait ${Math.ceil(remainingMs / 1000)}s…`}
           </Button>
-          <Button size="lg" variant="outline" onClick={onCancel}>
+          <Button
+            size="lg"
+            variant="outline"
+            className="text-lg min-h-14"
+            onClick={onCancel}
+          >
             Cancel
           </Button>
         </div>

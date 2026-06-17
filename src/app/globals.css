@@ -191,4 +191,21 @@
   .nametag-name {
     font-size: 30pt;
   }
+
+  /* Failsafe paper backup: each van manifest and the master roster start on a
+   * fresh page; color swatches must actually print. */
+  .failsafe-page {
+    break-before: page;
+    page-break-before: always;
+  }
+
+  .failsafe-print > .failsafe-page:first-child {
+    break-before: auto;
+    page-break-before: avoid;
+  }
+
+  .failsafe-swatch {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
 }

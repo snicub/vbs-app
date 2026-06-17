@@ -554,11 +554,14 @@ export function StudentActions({
   );
 }
 
+// parent_pickup is deliberately NOT overridable: the override path routes
+// through record_event, which skips the restricted "do-not-release" block and
+// the who-picked-up requirement (the CHECK exempts override rows). Coordinators
+// release via the normal pickup picker (smartCheckOut), which enforces both.
 const OVERRIDABLE: readonly EventType[] = [
   "site_checked_in",
   "site_checked_out",
   "parent_dropoff",
-  "parent_pickup",
   "van_boarded_am",
   "van_offloaded_am",
   "van_boarded_pm",

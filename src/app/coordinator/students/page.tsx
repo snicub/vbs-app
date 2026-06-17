@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
-import { signedUrlFor } from "@/lib/storage/signed-url";
+import { signedUrlsFor } from "@/lib/storage/signed-url";
+import { ageFor } from "@/lib/failsafe/print-data";
 import { StudentsTable, type StudentRow } from "./students-table";
 
 export const dynamic = "force-dynamic";
@@ -14,11 +15,9 @@ type StudentDbRow = {
   wristband_code: string;
   dob: string | null;
   age_at_registration: number | null;
-  grade: string | null;
   allergies: string | null;
   medical_notes: string | null;
   photo_path: string | null;
-  family_id: string;
   families: { primary_guardian_name: string; primary_phone: string } | null;
 };
 
@@ -27,7 +26,6 @@ type DayStatusRow = {
   state: string;
   morning_stop_id: string | null;
   afternoon_stop_id: string | null;
-  wristband_color_name: string | null;
 };
 
 type StopRow = { id: string; name: string; town: string };
@@ -40,7 +38,7 @@ export default async function StudentsDashboardPage() {
     .from("students")
     .select(
       `id, legal_first_name, legal_last_name, preferred_first_name, wristband_code,
-       dob, age_at_registration, grade, allergies, medical_notes, photo_path, family_id,
+       dob, age_at_registration, allergies, medical_notes, photo_path,
        families(primary_guardian_name, primary_phone)`,
     )
     .order("legal_last_name")
@@ -48,7 +46,7 @@ export default async function StudentsDashboardPage() {
 
   const { data: statuses } = await supabase
     .from("student_day_status")
-    .select("student_id, state, morning_stop_id, afternoon_stop_id, wristband_color_name")
+    .select("student_id, state, morning_stop_id, afternoon_stop_id")
     .eq("event_date", today)
     .returns<DayStatusRow[]>();
 
@@ -60,12 +58,10 @@ export default async function StudentsDashboardPage() {
 
   const statusMap = new Map((statuses ?? []).map((s) => [s.student_id, s]));
 
-  // Sign photo URLs in parallel
-  const photoUrls = new Map<string, string | null>();
-  await Promise.all(
-    (students ?? []).map(async (s) => {
-      photoUrls.set(s.id, await signedUrlFor("student-photos", s.photo_path));
-    }),
+  // Batch-sign all photo URLs in a single round-trip, keyed by photo path.
+  const photoUrls = await signedUrlsFor(
+    "student-photos",
+    (students ?? []).map((s) => s.photo_path),
   );
 
   const rows: StudentRow[] = (students ?? []).map((s) => {
@@ -78,19 +74,18 @@ export default async function StudentsDashboardPage() {
       : undefined;
     return {
       id: s.id,
-      photoUrl: photoUrls.get(s.id) ?? null,
+      photoUrl: (s.photo_path ? photoUrls.get(s.photo_path) : null) ?? null,
       firstName: s.preferred_first_name ?? s.legal_first_name,
       lastName: s.legal_last_name,
       wristbandCode: s.wristband_code,
       dob: s.dob,
       ageAtRegistration: s.age_at_registration,
-      grade: s.grade,
+      age: ageFor({ ageAtRegistration: s.age_at_registration, dob: s.dob }, today),
       allergies: s.allergies,
       medicalNotes: s.medical_notes,
       familyName: s.families?.primary_guardian_name ?? "—",
       familyPhone: s.families?.primary_phone ?? "",
       state: status?.state ?? "not_started",
-      colorName: status?.wristband_color_name ?? null,
       morningStop: morningStop ? `${morningStop.name} (${morningStop.town})` : "",
       afternoonStop: afternoonStop ? `${afternoonStop.name} (${afternoonStop.town})` : "",
     };

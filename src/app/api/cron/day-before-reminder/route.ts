@@ -28,7 +28,8 @@ type DayRecord = {
 
 /**
  * Vercel cron handler. Configure in vercel.json:
- *   { "crons": [{ "path": "/api/cron/day-before-reminder", "schedule": "0 19 * * *" }] }
+ *   { "crons": [{ "path": "/api/cron/day-before-reminder", "schedule": "0 0 * * *" }] }
+ *   (00:00 UTC = 19:00 America/Chicago CDT, i.e. 7 PM the evening before.)
  *
  * Requires `Authorization: Bearer <CRON_SECRET>` header when CRON_SECRET is set.
  */
@@ -58,6 +59,22 @@ export async function GET(request: NextRequest) {
     .returns<DayRecord[]>();
   if (error) return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
 
+  // Cross-run dedup: a Vercel retry or manual re-trigger shouldn't double-text.
+  // Skip families already reminded in the last ~20h (the cron runs once/day, so
+  // the window never overlaps the next day's target).
+  const since = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+  const { data: already } = await admin
+    .from("notifications_sent")
+    .select("family_id")
+    .eq("template_key", "day_before_reminder")
+    .gte("created_at", since)
+    .returns<{ family_id: string | null }[]>();
+  const alreadyNotified = new Set(
+    (already ?? [])
+      .map((r) => r.family_id)
+      .filter((id): id is string => id !== null),
+  );
+
   // Dedupe by family — two siblings shouldn't send two messages
   const familyMessages = new Map<
     string,
@@ -66,6 +83,7 @@ export async function GET(request: NextRequest) {
   for (const r of records ?? []) {
     const family = r.students?.families;
     if (!family || family.sms_opted_out_at) continue;
+    if (alreadyNotified.has(family.id)) continue;
     if (familyMessages.has(family.id)) continue;
     const stop = r.stops;
     const studentName = r.students?.preferred_first_name ?? r.students?.legal_first_name ?? "your child";

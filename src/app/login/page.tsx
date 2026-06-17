@@ -13,7 +13,7 @@ export default async function LoginPage() {
       <div className="w-full max-w-sm">
         <h1 className="text-2xl font-semibold tracking-tight mb-2">VBS Check-In</h1>
         <p className="text-muted-foreground text-sm mb-6">
-          Enter your email to receive a sign-in link.
+          Sign in with your email and password.
         </p>
         <LoginForm />
       </div>

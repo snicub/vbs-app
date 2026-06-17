@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import "leaflet/dist/leaflet.css";
+import { gpsFreshness, type GpsFreshness } from "@/lib/gps-freshness";
 
 type VanRow = { id: string; name: string };
 type StopRow = {
@@ -56,13 +57,6 @@ export function VanMap({
       const L = await import("leaflet");
       if (cancelled || !mapHostRef.current) return;
 
-      delete (L.Icon.Default.prototype as { _getIconUrl?: unknown })._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconRetinaUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon-2x.png",
-        iconUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-icon.png",
-        shadowUrl: "https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-      });
-
       const map = L.map(mapHostRef.current, {
         zoomControl: false,
         // Wheel-zoom traps the page scroll on desktop and pinch-zoom traps
@@ -92,7 +86,7 @@ export function VanMap({
       }
 
       leafletRef.current = { map, vanMarkers: new Map(), stopMarkers, L };
-      renderVanMarkers(locations);
+      renderVanMarkers(locations, now);
     }
     init();
     return () => {
@@ -105,9 +99,9 @@ export function VanMap({
 
   // Re-render van markers when locations change.
   useEffect(() => {
-    renderVanMarkers(locations);
+    renderVanMarkers(locations, now);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [locations]);
+  }, [locations, now]);
 
   // Realtime updates.
   useEffect(() => {
@@ -132,7 +126,7 @@ export function VanMap({
     };
   }, []);
 
-  function renderVanMarkers(rows: LocationRow[]) {
+  function renderVanMarkers(rows: LocationRow[], nowMs: number) {
     const ctx = leafletRef.current;
     if (!ctx) return;
     const { map, vanMarkers, L } = ctx;
@@ -140,18 +134,20 @@ export function VanMap({
     for (const r of rows) {
       seen.add(r.van_id);
       const vanName = vans.find((v) => v.id === r.van_id)?.name ?? "Van";
+      const fresh = gpsFreshness(new Date(r.reported_at).getTime(), nowMs);
       const existing = vanMarkers.get(r.van_id);
-      const label = `<b>${vanName}</b><br/>±${Math.round(r.accuracy_m ?? 0)}m<br/>${new Date(r.reported_at).toLocaleTimeString()}`;
+      const label = `<b>${vanName}</b><br/>±${Math.round(r.accuracy_m ?? 0)}m<br/>${new Date(r.reported_at).toLocaleTimeString()}${fresh === "fresh" ? "" : ` · ${fresh}`}`;
+      const icon = L.divIcon({
+        className: "",
+        html: vanIconHtml(vanName, FRESH_MARKER_BG[fresh]),
+        iconSize: [44, 22],
+        iconAnchor: [22, 11],
+      });
       if (existing) {
         existing.setLatLng([r.lat, r.lng]);
+        existing.setIcon(icon);
         existing.getPopup()?.setContent(label);
       } else {
-        const icon = L.divIcon({
-          className: "",
-          html: vanIconHtml(vanName),
-          iconSize: [44, 22],
-          iconAnchor: [22, 11],
-        });
         const m = L.marker([r.lat, r.lng], { icon }).addTo(map).bindPopup(label);
         vanMarkers.set(r.van_id, m);
       }
@@ -241,6 +237,10 @@ function MapControls({
 }) {
   const [open, setOpen] = useState(true);
   const locMap = new Map(locations.map((l) => [l.van_id, l]));
+  const notReporting = vans.filter((v) => {
+    const loc = locMap.get(v.id);
+    return loc && gpsFreshness(new Date(loc.reported_at).getTime(), now) !== "fresh";
+  }).length;
 
   return (
     <div
@@ -260,6 +260,13 @@ function MapControls({
           {open ? "Hide" : "Show"}
         </button>
       </div>
+
+      {notReporting > 0 && (
+        <div className="px-3 py-2 text-xs font-semibold text-red-700 dark:text-red-400 bg-red-50 dark:bg-red-950/40 border-b">
+          ⚠ {notReporting} van{notReporting === 1 ? "" : "s"} not reporting — check on{" "}
+          {notReporting === 1 ? "it" : "them"}.
+        </div>
+      )}
 
       {open && (
         <>
@@ -290,8 +297,8 @@ function MapControls({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="font-medium truncate">{v.name}</div>
-                      <div className="text-xs text-muted-foreground">
-                        {loc ? <span className="text-green-700 dark:text-green-400">● {fmtAgo(loc.reported_at, now)}</span> : "no GPS"}
+                      <div className="text-xs">
+                        <VanFreshness loc={loc} now={now} />
                       </div>
                     </div>
                     <div className="flex gap-1 shrink-0">
@@ -342,8 +349,32 @@ function fmtAgo(iso: string, nowMs: number): string {
   return `${h}h ago`;
 }
 
-function vanIconHtml(name: string): string {
-  return `<div style="background:#111;color:#fff;font:600 11px system-ui;padding:3px 8px;border-radius:6px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)">${escapeHtml(name)}</div>`;
+const FRESH_MARKER_BG: Record<GpsFreshness, string> = {
+  fresh: "#15803d",
+  stale: "#b45309",
+  dark: "#b91c1c",
+};
+
+function VanFreshness({ loc, now }: { loc: LocationRow | undefined; now: number }) {
+  if (!loc) return <span className="text-muted-foreground">no GPS</span>;
+  const fresh = gpsFreshness(new Date(loc.reported_at).getTime(), now);
+  const cls =
+    fresh === "fresh"
+      ? "text-green-700 dark:text-green-400"
+      : fresh === "stale"
+        ? "text-amber-600 dark:text-amber-400"
+        : "text-red-600 dark:text-red-400";
+  const suffix = fresh === "fresh" ? "" : fresh === "stale" ? " · check" : " · not reporting";
+  return (
+    <span className={cls}>
+      ● {fmtAgo(loc.reported_at, now)}
+      {suffix}
+    </span>
+  );
+}
+
+function vanIconHtml(name: string, bg: string): string {
+  return `<div style="background:${bg};color:#fff;font:600 11px system-ui;padding:3px 8px;border-radius:6px;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,0.4)">${escapeHtml(name)}</div>`;
 }
 
 function escapeHtml(s: string): string {

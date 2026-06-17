@@ -39,58 +39,69 @@ export default async function StudentTablePage({
 
   const supabase = await createClient();
 
-  // Family contacts (always shown to anyone with check-in access)
-  const { data: family } = await supabase
-    .from("families")
-    .select("primary_guardian_name, primary_email, primary_phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
-    .eq("id", student.familyId)
-    .maybeSingle<{
-      primary_guardian_name: string;
-      primary_email: string;
-      primary_phone: string;
-      emergency_contact_name: string | null;
-      emergency_contact_phone: string | null;
-      emergency_contact_relationship: string | null;
-    }>();
+  // These queries only need ids already in hand, so they're mutually
+  // independent — run them concurrently instead of serially.
+  const [
+    { data: family },
+    { data: guardians },
+    { data: pickupPersons },
+    { data: stopsData },
+  ] = await Promise.all([
+    // Family contacts (always shown to anyone with check-in access)
+    supabase
+      .from("families")
+      .select("primary_guardian_name, primary_email, primary_phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
+      .eq("id", student.familyId)
+      .maybeSingle<{
+        primary_guardian_name: string;
+        primary_email: string;
+        primary_phone: string;
+        emergency_contact_name: string | null;
+        emergency_contact_phone: string | null;
+        emergency_contact_relationship: string | null;
+      }>(),
 
-  const { data: guardians } = await supabase
-    .from("guardians")
-    .select("full_name, email, phone, relationship")
-    .eq("family_id", student.familyId)
-    .returns<{ full_name: string; email: string | null; phone: string | null; relationship: string | null }[]>();
+    supabase
+      .from("guardians")
+      .select("full_name, email, phone, relationship")
+      .eq("family_id", student.familyId)
+      .returns<{ full_name: string; email: string | null; phone: string | null; relationship: string | null }[]>(),
 
-  // Authorized pickup persons — including restricted entries ("do NOT release
-  // to"). We display restricted as a loud banner; allowed entries become the
-  // pickup-person picker for parent-pickup events.
-  const { data: pickupPersons } = await supabase
-    .from("authorized_pickup_persons")
-    .select("id, full_name, phone, relationship, is_restricted, notes")
-    .eq("family_id", student.familyId)
-    .order("is_restricted", { ascending: false })
-    .order("full_name")
-    .returns<{
-      id: string;
-      full_name: string;
-      phone: string | null;
-      relationship: string | null;
-      is_restricted: boolean;
-      notes: string | null;
-    }[]>();
+    // Authorized pickup persons — including restricted entries ("do NOT release
+    // to"). We display restricted as a loud banner; allowed entries become the
+    // pickup-person picker for parent-pickup events.
+    supabase
+      .from("authorized_pickup_persons")
+      .select("id, full_name, phone, relationship, is_restricted, notes")
+      .eq("family_id", student.familyId)
+      .order("is_restricted", { ascending: false })
+      .order("full_name")
+      .returns<{
+        id: string;
+        full_name: string;
+        phone: string | null;
+        relationship: string | null;
+        is_restricted: boolean;
+        notes: string | null;
+      }[]>(),
+
+    // Stops list only feeds the coordinator-only change-stops panel.
+    isCoordinator(user.role)
+      ? supabase
+          .from("stops")
+          .select("id, name, town, color_name")
+          .order("sort_order")
+          .returns<{ id: string; name: string; town: string; color_name: string }[]>()
+      : Promise.resolve({ data: null }),
+  ]);
 
   const restrictedPickup = (pickupPersons ?? []).filter((p) => p.is_restricted);
   const allowedPickup = (pickupPersons ?? []).filter((p) => !p.is_restricted);
 
-  let stops: { id: string; name: string; town: string; colorName: string }[] = [];
-  if (isCoordinator(user.role)) {
-    const { data } = await supabase
-      .from("stops")
-      .select("id, name, town, color_name")
-      .order("sort_order")
-      .returns<{ id: string; name: string; town: string; color_name: string }[]>();
-    stops = (data ?? []).map((s) => ({
+  const stops: { id: string; name: string; town: string; colorName: string }[] =
+    (stopsData ?? []).map((s) => ({
       id: s.id, name: s.name, town: s.town, colorName: s.color_name,
     }));
-  }
 
   const presentation = STATE_PRESENTATION[state];
   const tone = TONE_CLASSES[presentation.tone];

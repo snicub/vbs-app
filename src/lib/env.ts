@@ -33,6 +33,18 @@ const serverSchema = z.object({
   // so an unset secret can never accidentally expose the endpoint publicly.
   CRON_SECRET: z.string().min(16).optional(),
 
+  // No-login (kiosk) mode: when "true", an unauthenticated request acts as the
+  // coordinator/admin on file so volunteers don't sign in on shared devices.
+  // OFF by default — this grants coordinator authority to anyone who can reach
+  // the app, so it must be an explicit per-environment opt-in, never the default.
+  // A deploy with this on MUST also be access-restricted (Vercel Deployment
+  // Protection / a trusted network), since the app-layer role check no longer
+  // gates anything.
+  ALLOW_NO_LOGIN: z
+    .string()
+    .optional()
+    .transform((v) => v === "true"),
+
   // Google Drive folder to embed on /photos (staff uploads + family browsing).
   // Share the folder "Anyone with link → Editor" for uploads without login.
   NEXT_PUBLIC_DRIVE_FOLDER_ID: z.string().optional(),

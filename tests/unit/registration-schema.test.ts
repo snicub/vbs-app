@@ -6,9 +6,9 @@ import {
   normalizePhone,
   splitName,
 } from "@/lib/registration/schema";
+import { deriveTransportMode } from "@/lib/registration/transport";
 
 const SAMPLE_HASH = "a".repeat(64);
-const SAMPLE_STOP_ID = "550e8400-e29b-41d4-a716-446655440000";
 
 type RawInput = ReturnType<typeof FamilyRegistrationSchema.parse>;
 function validInput(): RawInput {
@@ -43,8 +43,6 @@ function validInput(): RawInput {
         photoBytes: "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
         transport: {
           mode: "van" as const,
-          morningStopId: SAMPLE_STOP_ID,
-          afternoonStopId: SAMPLE_STOP_ID,
         },
       },
     ],
@@ -89,24 +87,34 @@ describe("registration schema: students", () => {
     }
   });
 
-  it("rejects van mode without a morning stop", () => {
+  it("requires a home address when a child needs a van", () => {
     const input = validInput();
-    input.students[0]!.transport = {
-      mode: "van",
-      morningStopId: null,
-      afternoonStopId: SAMPLE_STOP_ID,
-    };
-    const result = StudentSchema.safeParse(input.students[0]);
+    input.students[0]!.transport = { mode: "van" };
+    input.family.streetAddress = "";
+    input.family.city = "";
+    input.family.postalCode = "";
+    const result = FamilyRegistrationSchema.safeParse(input);
     expect(result.success).toBe(false);
+    if (!result.success) {
+      expect(
+        result.error.issues.some((i) => i.path.join(".") === "family.streetAddress"),
+      ).toBe(true);
+    }
   });
 
-  it("allows parent-only modes without stops", () => {
+  it("allows a missing address when every child is driven by a parent", () => {
     const input = validInput();
-    input.students[0]!.transport = {
-      mode: "parent_both",
-      morningStopId: null,
-      afternoonStopId: null,
-    };
+    input.students[0]!.transport = { mode: "parent_both" };
+    input.family.streetAddress = "";
+    input.family.city = "";
+    input.family.postalCode = "";
+    const result = FamilyRegistrationSchema.safeParse(input);
+    expect(result.success).toBe(true);
+  });
+
+  it("accepts a van mode with no stop picking at signup", () => {
+    const input = validInput();
+    input.students[0]!.transport = { mode: "parent_pickup_only" };
     const result = StudentSchema.safeParse(input.students[0]);
     expect(result.success).toBe(true);
   });
@@ -135,6 +143,21 @@ describe("splitName", () => {
 
   it("collapses extra whitespace", () => {
     expect(splitName("  Aiden   Anderson  ")).toEqual({ first: "Aiden", last: "Anderson" });
+  });
+});
+
+describe("deriveTransportMode", () => {
+  it("both legs by van", () => {
+    expect(deriveTransportMode(true, true)).toBe("van");
+  });
+  it("van in the morning only → parent picks up in the afternoon", () => {
+    expect(deriveTransportMode(true, false)).toBe("parent_pickup_only");
+  });
+  it("van in the afternoon only → parent drops off in the morning", () => {
+    expect(deriveTransportMode(false, true)).toBe("parent_dropoff_only");
+  });
+  it("neither leg → parent drives both ways", () => {
+    expect(deriveTransportMode(false, false)).toBe("parent_both");
   });
 });
 

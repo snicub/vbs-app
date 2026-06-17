@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
+import type { CSSProperties } from "react";
 import { contrastText, type NameTag } from "@/lib/nametags/tag-data";
 
 export function NameTagSheet({
@@ -96,16 +97,7 @@ export function NameTagSheet({
               key={t.studentId}
               className="nametag-card flex flex-col overflow-hidden rounded-lg border border-dashed border-gray-400 bg-white"
             >
-              <div
-                className="nametag-band px-3 py-1.5 text-sm font-semibold uppercase tracking-wide"
-                style={{
-                  backgroundColor: t.colorCode ?? "#e5e7eb",
-                  color: contrastText(t.colorCode),
-                }}
-              >
-                {t.colorName ?? "P"}
-                {t.town ? ` · ${t.town}` : " · Parent drop-off"}
-              </div>
+              <NameTagBand tag={t} />
               <div className="flex flex-1 flex-col items-center justify-center px-3 py-2 text-center text-gray-900">
                 <span className="nametag-name text-3xl font-bold leading-tight [overflow-wrap:anywhere]">
                   {t.firstName}
@@ -122,6 +114,77 @@ export function NameTagSheet({
           ))}
         </div>
       )}
+    </div>
+  );
+}
+
+function NameTagBand({ tag: t }: { tag: NameTag }) {
+  // A van kid with no resolved stop/van must shout for attention, never read as
+  // a calm parent drop-off — losing them onto no van is the failure mode here.
+  if (t.needsRouting) {
+    return (
+      <div
+        className="nametag-band px-3 py-1.5 text-sm font-bold uppercase tracking-wide"
+        style={
+          {
+            backgroundColor: "#dc2626",
+            color: "#ffffff",
+            printColorAdjust: "exact",
+            WebkitPrintColorAdjust: "exact",
+          } as CSSProperties
+        }
+      >
+        ⚠ Needs routing — see coordinator
+      </div>
+    );
+  }
+
+  const am = t.morningColorCode;
+  const pm = t.afternoonColorCode;
+  // Show both colors only when the morning and afternoon stops differ — a kid
+  // dropped off at one stop but riding the van home from another.
+  if (am && pm && am !== pm) {
+    return (
+      <div className="nametag-band flex text-sm font-semibold uppercase tracking-wide">
+        <div
+          className="flex-1 px-3 py-1.5"
+          style={
+            {
+              backgroundColor: am,
+              color: contrastText(am),
+              printColorAdjust: "exact",
+              WebkitPrintColorAdjust: "exact",
+            } as CSSProperties
+          }
+        >
+          AM {t.morningColorName ?? ""}
+        </div>
+        <div
+          className="flex-1 px-3 py-1.5 text-right"
+          style={
+            {
+              backgroundColor: pm,
+              color: contrastText(pm),
+              printColorAdjust: "exact",
+              WebkitPrintColorAdjust: "exact",
+            } as CSSProperties
+          }
+        >
+          PM {t.afternoonColorName ?? ""}
+        </div>
+      </div>
+    );
+  }
+  return (
+    <div
+      className="nametag-band px-3 py-1.5 text-sm font-semibold uppercase tracking-wide"
+      style={{
+        backgroundColor: t.colorCode ?? "#e5e7eb",
+        color: contrastText(t.colorCode),
+      }}
+    >
+      {t.colorName ?? "P"}
+      {t.town ? ` · ${t.town}` : " · Parent drop-off"}
     </div>
   );
 }

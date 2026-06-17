@@ -3,23 +3,37 @@
  * this is directly unit-testable and safe to import from client components.
  */
 
+import { needsRouting } from "@/lib/routing";
+
 export type NameTag = {
   studentId: string;
   firstName: string;
   lastName: string;
+  /** Coalesced day color (afternoon stop → morning stop) — used for the single
+   *  band and for sorting. */
   colorCode: string | null;
   colorName: string | null;
+  /** Per-leg stop colors, so the tag can show BOTH when they differ. */
+  morningColorCode: string | null;
+  morningColorName: string | null;
+  afternoonColorCode: string | null;
+  afternoonColorName: string | null;
   town: string | null;
-  stopName: string | null;
   vanName: string | null;
   wristbandCode: string;
+  /** Rides a van but isn't on one yet — the tag prints a loud "needs routing"
+   *  band instead of a calm "Parent drop-off" one, so a van kid awaiting a stop
+   *  is never mistaken for a parent-driven kid at distribution. */
+  needsRouting: boolean;
 };
 
 type StatusInput = {
   studentId: string;
+  mode?: string | null;
   morningStopId: string | null;
   afternoonStopId: string | null;
   morningVanId: string | null;
+  afternoonVanId?: string | null;
   wristbandColorForDay: string | null;
   wristbandColorName: string | null;
 };
@@ -31,7 +45,12 @@ type StudentInput = {
   wristbandCode: string;
 };
 
-type StopInfo = { name: string; town: string };
+type StopInfo = {
+  name: string;
+  town: string;
+  colorCode?: string | null;
+  colorName?: string | null;
+};
 
 /** Display rule used app-wide: preferred first name, else legal first name. */
 export function displayName(s: {
@@ -61,10 +80,9 @@ export function buildTagData(
     if (!stu) continue;
 
     const { first, last } = displayName(stu);
-    const stop =
-      (st.morningStopId ? stops.get(st.morningStopId) : undefined) ??
-      (st.afternoonStopId ? stops.get(st.afternoonStopId) : undefined) ??
-      null;
+    const amStop = st.morningStopId ? stops.get(st.morningStopId) : undefined;
+    const pmStop = st.afternoonStopId ? stops.get(st.afternoonStopId) : undefined;
+    const stop = amStop ?? pmStop ?? null;
 
     tags.push({
       studentId: st.studentId,
@@ -72,21 +90,33 @@ export function buildTagData(
       lastName: last,
       colorCode: st.wristbandColorForDay,
       colorName: st.wristbandColorName,
+      morningColorCode: amStop?.colorCode ?? null,
+      morningColorName: amStop?.colorName ?? null,
+      afternoonColorCode: pmStop?.colorCode ?? null,
+      afternoonColorName: pmStop?.colorName ?? null,
       town: stop?.town ?? null,
-      stopName: stop?.name ?? null,
       vanName: st.morningVanId ? (vans.get(st.morningVanId) ?? null) : null,
       wristbandCode: stu.wristbandCode,
+      needsRouting: needsRouting({
+        mode: st.mode ?? null,
+        morningVanId: st.morningVanId,
+        afternoonVanId: st.afternoonVanId ?? null,
+        attending: true,
+      }),
     });
   }
   return tags;
 }
 
 /**
- * Group by color (so same-color tags stack together for distribution), then by
- * name. Tags with no color (parent-both kids) sort last.
+ * Needs-routing tags sort first (so the coordinator can't miss a van kid with no
+ * stop while handing out tags), then group by color (same-color tags stack
+ * together for distribution), then by name. Tags with no color (parent-both
+ * kids) sort last.
  */
 export function sortTags(tags: NameTag[]): NameTag[] {
   return tags.slice().sort((a, b) => {
+    if (a.needsRouting !== b.needsRouting) return a.needsRouting ? -1 : 1;
     const ac = a.colorName ?? "￿";
     const bc = b.colorName ?? "￿";
     return (

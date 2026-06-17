@@ -15,13 +15,12 @@ export type StudentRow = {
   wristbandCode: string;
   dob: string | null;
   ageAtRegistration: number | null;
-  grade: string | null;
+  age: number | null;
   allergies: string | null;
   medicalNotes: string | null;
   familyName: string;
   familyPhone: string;
   state: string;
-  colorName: string | null;
   morningStop: string;
   afternoonStop: string;
 };
@@ -44,12 +43,20 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [minAge, setMinAge] = useState<number | null>(null);
+  const [maxAge, setMaxAge] = useState<number | null>(null);
+
+  const ageBounds = useMemo(() => {
+    const ages = rows.map((r) => r.age).filter((a): a is number => a != null);
+    if (ages.length === 0) return null;
+    return { min: Math.min(...ages), max: Math.max(...ages) };
+  }, [rows]);
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     let arr = rows;
     if (q) {
-      arr = rows.filter(
+      arr = arr.filter(
         (r) =>
           r.firstName.toLowerCase().includes(q) ||
           r.lastName.toLowerCase().includes(q) ||
@@ -57,6 +64,14 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
           r.familyName.toLowerCase().includes(q) ||
           r.morningStop.toLowerCase().includes(q) ||
           r.afternoonStop.toLowerCase().includes(q),
+      );
+    }
+    if (minAge != null || maxAge != null) {
+      arr = arr.filter(
+        (r) =>
+          r.age != null &&
+          (minAge == null || r.age >= minAge) &&
+          (maxAge == null || r.age <= maxAge),
       );
     }
     const sorted = arr.slice().sort((a, b) => {
@@ -83,7 +98,9 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
       return sortDir === "asc" ? cmp : -cmp;
     });
     return sorted;
-  }, [rows, query, sortKey, sortDir]);
+  }, [rows, query, sortKey, sortDir, minAge, maxAge]);
+
+  const ageFilterActive = minAge != null || maxAge != null;
 
   function toggleSort(k: SortKey) {
     if (sortKey === k) {
@@ -107,6 +124,71 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
           {filtered.length} of {rows.length}
         </span>
       </div>
+
+      {ageBounds && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-xs font-medium text-muted-foreground">Age</span>
+          <div className="flex flex-wrap gap-1.5">
+            {Array.from(
+              { length: ageBounds.max - ageBounds.min + 1 },
+              (_, i) => ageBounds.min + i,
+            ).map((age) => {
+              const active = minAge === age && maxAge === age;
+              return (
+                <button
+                  key={age}
+                  type="button"
+                  onClick={() => {
+                    if (active) {
+                      setMinAge(null);
+                      setMaxAge(null);
+                    } else {
+                      setMinAge(age);
+                      setMaxAge(age);
+                    }
+                  }}
+                  className={
+                    "rounded-full border px-3 min-h-11 md:min-h-9 text-sm md:text-xs " +
+                    (active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card")
+                  }
+                >
+                  {age}
+                </button>
+              );
+            })}
+          </div>
+          <label className="flex items-center gap-1.5 text-xs text-muted-foreground">
+            <span>Range</span>
+            <NumberInput
+              value={minAge}
+              placeholder="min"
+              onChange={setMinAge}
+              ariaLabel="Minimum age"
+            />
+            <span aria-hidden>–</span>
+            <NumberInput
+              value={maxAge}
+              placeholder="max"
+              onChange={setMaxAge}
+              ariaLabel="Maximum age"
+            />
+          </label>
+          {ageFilterActive && (
+            <button
+              type="button"
+              onClick={() => {
+                setMinAge(null);
+                setMaxAge(null);
+              }}
+              className="rounded-full border px-3 min-h-11 md:min-h-9 text-sm md:text-xs bg-card hover:bg-muted/40"
+            >
+              Clear age
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Desktop table */}
       <div className="hidden md:block rounded-xl border bg-card overflow-hidden">
@@ -251,6 +333,36 @@ function SortableHeader({
         <span className="text-xs">{active ? (sortDir === "asc" ? "↑" : "↓") : "↕"}</span>
       </button>
     </th>
+  );
+}
+
+function NumberInput({
+  value,
+  placeholder,
+  onChange,
+  ariaLabel,
+}: {
+  value: number | null;
+  placeholder: string;
+  onChange: (n: number | null) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={0}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(e) => {
+        const v = e.target.value.trim();
+        if (v === "") return onChange(null);
+        const n = Number(v);
+        onChange(Number.isFinite(n) ? n : null);
+      }}
+      className="w-16 rounded-md border bg-background px-2 min-h-11 md:min-h-9 text-base md:text-sm text-foreground"
+    />
   );
 }
 

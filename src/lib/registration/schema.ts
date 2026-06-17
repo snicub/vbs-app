@@ -51,8 +51,6 @@ export const AuthorizedPickupSchema = z.object({
 
 export const StudentTransportSchema = z.object({
   mode: z.enum(["van", "parent_dropoff_only", "parent_pickup_only", "parent_both"]),
-  morningStopId: z.string().uuid().nullable(),
-  afternoonStopId: z.string().uuid().nullable(),
 });
 
 /**
@@ -101,13 +99,6 @@ export const StudentSchema = z.object({
       message: "Provide either date of birth or age",
     });
   }
-  if (s.transport.mode === "van" && !s.transport.morningStopId) {
-    ctx.addIssue({
-      code: "custom",
-      path: ["transport", "morningStopId"],
-      message: "Van mode requires a morning stop",
-    });
-  }
 });
 
 export const ConsentInputSchema = z.object({
@@ -139,6 +130,21 @@ export const FamilyRegistrationSchema = z.object({
   consents: z.object({
     agreed: z.array(ConsentInputSchema).min(3, "All consents are required"),
   }),
+}).superRefine((data, ctx) => {
+  // Address is the routing input: required when any child needs a van. Stops are
+  // no longer picked at registration — the coordinator builds routes from these
+  // addresses later. Children driven by a parent both ways don't need an address.
+  const needsVan = data.students.some((s) => s.transport.mode !== "parent_both");
+  if (!needsVan) return;
+  if (!data.family.streetAddress?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["family", "streetAddress"], message: "Home address is required for van transportation" });
+  }
+  if (!data.family.city?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["family", "city"], message: "City is required for van transportation" });
+  }
+  if (!data.family.postalCode?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["family", "postalCode"], message: "ZIP code is required for van transportation" });
+  }
 });
 
 export type FamilyRegistrationInput = z.infer<typeof FamilyRegistrationSchema>;

@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
+import { boardedStopConflict } from "@/lib/routing";
 
 // -- Update student profile (name, allergies, medical notes) --
 
@@ -131,6 +132,41 @@ export async function updateStudentDayRecord(
   }
 
   const supabase = await createClient();
+
+  // If a stop is changing, don't re-point a van out from under a boarded child
+  // (would strip the aide's offload authz). Only check when a stop field is part
+  // of this update.
+  if (fields.morningStopId !== undefined || fields.afternoonStopId !== undefined) {
+    const { data: rec } = await supabase
+      .from("student_day_status")
+      .select("state, morning_stop_id, afternoon_stop_id")
+      .eq("student_id", studentId)
+      .eq("event_date", eventDate)
+      .maybeSingle<{
+        state: string;
+        morning_stop_id: string | null;
+        afternoon_stop_id: string | null;
+      }>();
+    if (rec) {
+      const conflict = boardedStopConflict(
+        rec.state,
+        { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
+        {
+          morningStopId:
+            fields.morningStopId !== undefined ? fields.morningStopId : rec.morning_stop_id,
+          afternoonStopId:
+            fields.afternoonStopId !== undefined ? fields.afternoonStopId : rec.afternoon_stop_id,
+        },
+      );
+      if (conflict) {
+        return {
+          ok: false,
+          error: `This child is on the ${conflict} van right now — changing their ${conflict} stop would strip the aide's check-out authority. Undo their boarding first.`,
+        };
+      }
+    }
+  }
+
   const { error } = await supabase
     .from("student_day_records")
     .update(updates as never)

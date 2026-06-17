@@ -11,9 +11,11 @@ export const metadata = { title: "Name Tags — Coordinator" };
 
 type StatusRow = {
   student_id: string;
+  mode: string | null;
   morning_stop_id: string | null;
   afternoon_stop_id: string | null;
   morning_van_id: string | null;
+  afternoon_van_id: string | null;
   wristband_color_for_day: string | null;
   wristband_color_name: string | null;
 };
@@ -24,7 +26,13 @@ type StudentRow = {
   preferred_first_name: string | null;
   wristband_code: string;
 };
-type StopRow = { id: string; name: string; town: string };
+type StopRow = {
+  id: string;
+  name: string;
+  town: string;
+  color_code: string | null;
+  color_name: string | null;
+};
 type VanRow = { id: string; name: string };
 
 export default async function NameTagsPage({
@@ -45,7 +53,7 @@ export default async function NameTagsPage({
   const { data: statuses } = await supabase
     .from("student_day_status")
     .select(
-      "student_id, morning_stop_id, afternoon_stop_id, morning_van_id, wristband_color_for_day, wristband_color_name",
+      "student_id, mode, morning_stop_id, afternoon_stop_id, morning_van_id, afternoon_van_id, wristband_color_for_day, wristband_color_name",
     )
     .eq("event_date", day)
     .eq("attending", true)
@@ -62,7 +70,7 @@ export default async function NameTagsPage({
 
   const { data: stops } = await supabase
     .from("stops")
-    .select("id, name, town")
+    .select("id, name, town, color_code, color_name")
     .order("sort_order")
     .returns<StopRow[]>();
 
@@ -83,7 +91,10 @@ export default async function NameTagsPage({
     ]),
   );
   const stopMap = new Map(
-    (stops ?? []).map((s) => [s.id, { name: s.name, town: s.town }]),
+    (stops ?? []).map((s) => [
+      s.id,
+      { name: s.name, town: s.town, colorCode: s.color_code, colorName: s.color_name },
+    ]),
   );
   const vanMap = new Map((vans ?? []).map((v) => [v.id, v.name]));
 
@@ -91,9 +102,11 @@ export default async function NameTagsPage({
     buildTagData(
       (statuses ?? []).map((s) => ({
         studentId: s.student_id,
+        mode: s.mode,
         morningStopId: s.morning_stop_id,
         afternoonStopId: s.afternoon_stop_id,
         morningVanId: s.morning_van_id,
+        afternoonVanId: s.afternoon_van_id,
         wristbandColorForDay: s.wristband_color_for_day,
         wristbandColorName: s.wristband_color_name,
       })),

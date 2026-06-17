@@ -28,6 +28,9 @@ const Schema = z.object({
   // picks which authorized person is here (or types in an unlisted name
   // which is logged as wasUnlisted=true for the coordinator to review).
   pickup: PickupMetadataSchema.optional(),
+  // Client capture time so an offline checkout records the real drop-off time,
+  // not the later sync time.
+  occurredAt: z.string().datetime().optional(),
 });
 
 /**
@@ -49,6 +52,38 @@ export async function smartCheckOut(
 
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Bad input" };
+
+  // Hard safety block: never release a child to a pickup person marked
+  // "do not release to". Covers both the on-file picker (by id) and a free-form
+  // typed name. smart_checkout() backstops this at the DB for direct RPC calls.
+  if (parsed.data.pickup) {
+    const guard = createAdminClient();
+    const { data: stu } = await guard
+      .from("students")
+      .select("family_id")
+      .eq("id", parsed.data.studentId)
+      .maybeSingle<{ family_id: string }>();
+    if (stu?.family_id) {
+      const { data: restricted } = await guard
+        .from("authorized_pickup_persons")
+        .select("id, full_name")
+        .eq("family_id", stu.family_id)
+        .eq("is_restricted", true)
+        .returns<{ id: string; full_name: string }[]>();
+      const list = restricted ?? [];
+      const pickedId = parsed.data.pickup.authorizedPickupPersonId;
+      const pickedName = parsed.data.pickup.name.trim().toLowerCase();
+      const barred =
+        (pickedId != null && list.some((r) => r.id === pickedId)) ||
+        list.some((r) => r.full_name.trim().toLowerCase() === pickedName);
+      if (barred) {
+        return {
+          ok: false,
+          error: "This person is marked DO NOT RELEASE TO — get a coordinator.",
+        };
+      }
+    }
+  }
 
   const supabase = user.role === "parent"
     ? await createClient()
@@ -75,6 +110,7 @@ export async function smartCheckOut(
     p_actor_role: user.role,
     p_pm_path: parsed.data.pmPath ?? "auto",
     p_pickup_metadata: pickupMetadata,
+    p_occurred_at: parsed.data.occurredAt ?? null,
   } as never);
 
   if (error) {

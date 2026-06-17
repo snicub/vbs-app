@@ -4,7 +4,7 @@ import { headers } from "next/headers";
 import { FamilyRegistrationSchema, splitName } from "@/lib/registration/schema";
 import { VBS_DATES } from "@/lib/registration/dates";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { CONSENT_TEXT } from "@/lib/consents/text";
+import { CONSENT_TEXT, CONSENT_VERSION } from "@/lib/consents/text";
 import { hashConsentText } from "@/lib/consents/hash";
 
 export type RegistrationResult =
@@ -31,6 +31,19 @@ export async function registerFamily(
   }
 
   const data = parsed.data;
+
+  // Enforce the required consent KINDS, not just the count. The schema only
+  // checks `min(3)`; without this, a crafted payload (this is a public,
+  // unauthenticated endpoint) could send three copies of one consent and omit
+  // the medical/liability ones while still passing the per-kind hash check.
+  const requiredKinds = Object.keys(CONSENT_TEXT[CONSENT_VERSION]);
+  const submittedKinds = new Set<string>(data.consents.agreed.map((c) => c.kind));
+  if (
+    submittedKinds.size !== requiredKinds.length ||
+    !requiredKinds.every((k) => submittedKinds.has(k))
+  ) {
+    return { ok: false, error: "Please agree to all required consents." };
+  }
 
   // Verify consent hashes: recompute from canonical text, reject if mismatch
   for (const consent of data.consents.agreed) {
@@ -182,8 +195,10 @@ export async function registerFamily(
       event_date: d,
       attending: true,
       mode: s.transport.mode,
-      morning_stop_id: s.transport.morningStopId,
-      afternoon_stop_id: s.transport.afternoonStopId,
+      // Stops are assigned later when the coordinator builds van routes from
+      // addresses; families no longer pick a stop at registration.
+      morning_stop_id: null,
+      afternoon_stop_id: null,
     }));
   });
   const { error: dayErr } = await admin.from("student_day_records").insert(dayRows as never);

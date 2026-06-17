@@ -5,22 +5,12 @@ import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Select } from "@/components/ui/select";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoInput, type PhotoValue } from "@/components/photo-input";
 import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
-import type { ConsentKind, TransportMode } from "@/types/domain";
+import type { ConsentKind } from "@/types/domain";
 import Link from "next/link";
-
-type StopOption = {
-  id: string;
-  name: string;
-  town: string;
-  colorName: string;
-  scheduledAm: string;
-  scheduledPm: string;
-};
 
 type ConsentItem = {
   kind: ConsentKind;
@@ -35,9 +25,7 @@ type StudentDraft = {
   age: string;
   allergies: string;
   medicalNotes: string;
-  mode: TransportMode;
-  morningStopId: string;
-  afternoonStopId: string;
+  ridesVan: boolean;
   photo: PhotoValue;
 };
 
@@ -47,9 +35,7 @@ const emptyStudent = (): StudentDraft => ({
   age: "",
   allergies: "",
   medicalNotes: "",
-  mode: "van",
-  morningStopId: "",
-  afternoonStopId: "",
+  ridesVan: true,
   photo: null,
 });
 
@@ -69,13 +55,7 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export function SignupForm({
-  stops,
-  consents,
-}: {
-  stops: StopOption[];
-  consents: ConsentItem[];
-}) {
+export function SignupForm({ consents }: { consents: ConsentItem[] }) {
   const [family, setFamily] = useState({
     primaryGuardianName: "",
     primaryEmail: "",
@@ -98,6 +78,8 @@ export function SignupForm({
     }
   >(null);
 
+  const needsVan = students.some((s) => s.ridesVan);
+
   function updateStudent(i: number, patch: Partial<StudentDraft>) {
     setStudents((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
   }
@@ -106,32 +88,37 @@ export function SignupForm({
     e.preventDefault();
     if (submittingRef.current) return;
     if (agreedKinds.size !== consents.length) {
-      toast.error("All consents must be agreed to before submitting.");
+      toast.error("Please agree to all the items at the bottom before submitting.");
       return;
     }
     const missingDobAge = students.findIndex((s) => !s.dob && !s.age.trim());
     if (missingDobAge !== -1) {
-      toast.error(`Enter date of birth or age for child #${missingDobAge + 1}.`);
+      toast.error(`Enter a date of birth or age for child #${missingDobAge + 1}.`);
+      return;
+    }
+    if (
+      needsVan &&
+      (!family.streetAddress.trim() || !family.city.trim() || !family.postalCode.trim())
+    ) {
+      toast.error("Please add your home address so we can plan the van ride.");
       return;
     }
 
     submittingRef.current = true;
     setPending(true);
     try {
-      const studentsPayload = await Promise.all(students.map(async (s) => ({
-        name: s.name,
-        dob: s.dob || null,
-        ageAtRegistration: s.age.trim() ? Number(s.age) : null,
-        grade: null,
-        allergies: s.allergies || null,
-        medicalNotes: s.medicalNotes || null,
-        photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
-        transport: {
-          mode: s.mode,
-          morningStopId: s.mode === "van" || s.mode === "parent_pickup_only" ? s.morningStopId || null : null,
-          afternoonStopId: s.mode === "van" || s.mode === "parent_dropoff_only" ? s.afternoonStopId || null : null,
-        },
-      })));
+      const studentsPayload = await Promise.all(
+        students.map(async (s) => ({
+          name: s.name,
+          dob: s.dob || null,
+          ageAtRegistration: s.age.trim() ? Number(s.age) : null,
+          grade: null,
+          allergies: s.allergies || null,
+          medicalNotes: s.medicalNotes || null,
+          photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
+          transport: { mode: s.ridesVan ? "van" : "parent_both" },
+        })),
+      );
 
       const payload = {
         family,
@@ -175,20 +162,30 @@ export function SignupForm({
 
   if (success) {
     return (
-      <div className="space-y-5 rounded-lg border bg-card p-4 sm:p-6">
-        <div>
-          <h2 className="text-xl font-semibold">You&apos;re registered.</h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            We&apos;ve generated a wristband code for each child. Bring them on the
-            first day of VBS — staff will scan or type these codes for check-in.
-          </p>
+      <div className="space-y-6 rounded-lg border bg-card p-5 sm:p-6">
+        <div className="flex items-start gap-3">
+          <div
+            aria-hidden
+            className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--state-safe)]/15 text-[var(--state-safe)] text-xl"
+          >
+            ✓
+          </div>
+          <div>
+            <h2 className="text-2xl font-semibold">You&apos;re all set!</h2>
+            <p className="text-base text-muted-foreground mt-1">
+              {success.codes.length === 1 ? "Your child is" : "Your children are"} registered for VBS.
+            </p>
+          </div>
         </div>
 
         <div>
-          <h3 className="text-sm font-medium mb-2">Wristband codes</h3>
+          <h3 className="text-base font-medium mb-2">Wristband codes</h3>
+          <p className="text-sm text-muted-foreground mb-2">
+            Staff scan or type these at check-in. No need to memorize them — we have them on file.
+          </p>
           <ul className="rounded-lg border bg-muted/30 divide-y">
             {success.codes.map((c) => (
-              <li key={c.code} className="flex justify-between items-center px-3 py-2 text-sm">
+              <li key={c.code} className="flex justify-between items-center px-3 py-2.5 text-base">
                 <span className="truncate pr-2">{c.studentName}</span>
                 <code className="font-mono tracking-widest shrink-0">{c.code}</code>
               </li>
@@ -196,22 +193,21 @@ export function SignupForm({
           </ul>
         </div>
 
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-3 space-y-2">
-          <div className="text-sm font-medium">Your family status link</div>
-          <p className="text-xs text-muted-foreground">
-            Bookmark this link to see live updates during VBS — pickup, check-in,
-            drop-off. No sign-in required from this device.
+        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
+          <div className="text-base font-medium">Your family status link</div>
+          <p className="text-sm text-muted-foreground">
+            Bookmark this to follow your child during VBS — pickup, check-in, and drop-off.
+            No sign-in needed.
           </p>
           <div className="flex flex-col sm:flex-row gap-2">
             <input
               readOnly
               value={success.statusUrl}
               onClick={(e) => (e.target as HTMLInputElement).select()}
-              className="flex-1 rounded border bg-background px-2 py-1.5 text-base sm:text-xs font-mono min-w-0 min-h-11 sm:min-h-8"
+              className="flex-1 rounded border bg-background px-2 py-1.5 text-base sm:text-sm font-mono min-w-0 min-h-11 sm:min-h-9"
             />
             <Button
               type="button"
-              size="sm"
               variant="outline"
               onClick={() => {
                 navigator.clipboard?.writeText(success.statusUrl);
@@ -223,13 +219,13 @@ export function SignupForm({
           </div>
           <Link
             href={success.statusUrl.replace(/^https?:\/\/[^/]+/, "")}
-            className={buttonVariants({ variant: "default", size: "sm" })}
+            className={buttonVariants({ variant: "default", size: "lg" })}
           >
-            Open status page now →
+            Open my status page →
           </Link>
         </div>
 
-        <Link href="/" className={buttonVariants({ variant: "ghost", size: "sm" })}>
+        <Link href="/" className={buttonVariants({ variant: "ghost" })}>
           Done
         </Link>
       </div>
@@ -237,148 +233,122 @@ export function SignupForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-8">
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Your info</h2>
+    <form onSubmit={onSubmit} className="space-y-6">
+      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+        <h2 className="text-xl font-semibold">Your info</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Your name" required>
-            <Input required value={family.primaryGuardianName}
-              onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })} />
+            <Input
+              required
+              value={family.primaryGuardianName}
+              onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })}
+            />
           </Field>
           <Field label="Mobile phone" required>
-            <Input required type="tel" autoComplete="tel" value={family.primaryPhone}
-              onChange={(e) => setFamily({ ...family, primaryPhone: e.target.value })} />
+            <Input
+              required
+              type="tel"
+              autoComplete="tel"
+              value={family.primaryPhone}
+              onChange={(e) => setFamily({ ...family, primaryPhone: e.target.value })}
+            />
           </Field>
         </div>
       </section>
 
-      <details className="rounded-lg border bg-card px-4 py-3">
-        <summary className="cursor-pointer text-sm font-medium min-h-11 flex items-center">
-          Add email, address &amp; emergency contact (optional)
-        </summary>
-        <div className="mt-4 space-y-4">
-          <Field label="Email">
-            <Input type="email" autoComplete="email" value={family.primaryEmail}
-              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })} />
-          </Field>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Field label="Street address">
-              <Input value={family.streetAddress}
-                onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })} />
-            </Field>
-            <Field label="City">
-              <Input value={family.city}
-                onChange={(e) => setFamily({ ...family, city: e.target.value })} />
-            </Field>
-            <Field label="State">
-              <Input value={family.state}
-                onChange={(e) => setFamily({ ...family, state: e.target.value })} />
-            </Field>
-            <Field label="Postal code">
-              <Input value={family.postalCode}
-                onChange={(e) => setFamily({ ...family, postalCode: e.target.value })} />
-            </Field>
-          </div>
-          <div className="space-y-3">
-            <div className="text-sm font-medium">Emergency contact</div>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Name">
-                <Input value={emergency.name}
-                  onChange={(e) => setEmergency({ ...emergency, name: e.target.value })} />
-              </Field>
-              <Field label="Phone">
-                <Input type="tel" value={emergency.phone}
-                  onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })} />
-              </Field>
-              <Field label="Relationship">
-                <Input value={emergency.relationship}
-                  onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })} />
-              </Field>
-            </div>
-          </div>
-        </div>
-      </details>
-
-      <section className="space-y-4">
+      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold">Children</h2>
-          <Button type="button" variant="outline" size="sm"
-            onClick={() => setStudents([...students, emptyStudent()])}>+ Add child</Button>
+          <h2 className="text-xl font-semibold">Children</h2>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setStudents([...students, emptyStudent()])}
+          >
+            + Add child
+          </Button>
         </div>
         {students.map((s, i) => (
-          <fieldset key={i} className="rounded-lg border p-4 space-y-3 bg-card">
-            <legend className="px-1 text-sm font-medium">Child #{i + 1}</legend>
-
-            <Field label="Photo (optional)">
-              <PhotoInput
-                value={s.photo}
-                onChange={(p) => updateStudent(i, { photo: p })}
-              />
-            </Field>
+          <fieldset key={i} className="rounded-xl border bg-muted/30 p-4 space-y-4">
+            <legend className="px-1 text-base font-medium">Child #{i + 1}</legend>
 
             <Field label="Child's name" required>
-              <Input required value={s.name}
-                onChange={(e) => updateStudent(i, { name: e.target.value })} />
+              <Input
+                required
+                value={s.name}
+                onChange={(e) => updateStudent(i, { name: e.target.value })}
+              />
             </Field>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Date of birth">
-                <Input type="date" value={s.dob}
-                  onChange={(e) => updateStudent(i, { dob: e.target.value })} />
+                <Input
+                  type="date"
+                  value={s.dob}
+                  onChange={(e) => updateStudent(i, { dob: e.target.value })}
+                />
               </Field>
               <Field label="Age">
-                <Input type="number" inputMode="numeric" min={1} max={18} value={s.age}
-                  onChange={(e) => updateStudent(i, { age: e.target.value })} />
+                <Input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  max={18}
+                  value={s.age}
+                  onChange={(e) => updateStudent(i, { age: e.target.value })}
+                />
               </Field>
             </div>
-            <p className="text-xs text-muted-foreground">Enter date of birth or age — either one is fine.</p>
+            <p className="text-sm text-muted-foreground">
+              Date of birth or age — either one is fine.
+            </p>
+
+            <div className="space-y-2">
+              <Label className="text-base">VBS van</Label>
+              <label className="flex items-start gap-3 rounded-lg border bg-card p-3 min-h-12 cursor-pointer">
+                <Checkbox
+                  checked={s.ridesVan}
+                  onCheckedChange={(c: boolean) => updateStudent(i, { ridesVan: c })}
+                  className="mt-0.5"
+                />
+                <span className="text-base">
+                  My child will ride the VBS van
+                  <span className="mt-0.5 block text-sm font-normal text-muted-foreground">
+                    Leave unchecked if you&apos;ll drive them yourself. We&apos;ll sort out
+                    morning vs. afternoon pickup with you.
+                  </span>
+                </span>
+              </label>
+            </div>
+
             <Field label="Allergies (one per line)">
-              <Textarea value={s.allergies}
-                onChange={(e) => updateStudent(i, { allergies: e.target.value })} />
+              <Textarea
+                value={s.allergies}
+                onChange={(e) => updateStudent(i, { allergies: e.target.value })}
+              />
             </Field>
             <Field label="Medical notes">
-              <Textarea value={s.medicalNotes}
-                onChange={(e) => updateStudent(i, { medicalNotes: e.target.value })} />
+              <Textarea
+                value={s.medicalNotes}
+                onChange={(e) => updateStudent(i, { medicalNotes: e.target.value })}
+              />
             </Field>
-            <div className="grid gap-3 sm:grid-cols-3">
-              <Field label="Transportation" required>
-                <Select value={s.mode}
-                  onChange={(e) => updateStudent(i, { mode: e.target.value as TransportMode })}>
-                  <option value="van">Both ways by van</option>
-                  <option value="parent_dropoff_only">Parent dropoff, van home</option>
-                  <option value="parent_pickup_only">Van out, parent pickup</option>
-                  <option value="parent_both">Parent both ways</option>
-                </Select>
-              </Field>
-              {(s.mode === "van" || s.mode === "parent_pickup_only") && (
-                <Field label="Morning stop" required>
-                  <Select required value={s.morningStopId}
-                    onChange={(e) => updateStudent(i, { morningStopId: e.target.value })}>
-                    <option value="">— select —</option>
-                    {stops.map((stop) => (
-                      <option key={stop.id} value={stop.id}>
-                        {stop.name} ({stop.town}, {stop.colorName} {stop.scheduledAm})
-                      </option>
-                    ))}
-                  </Select>
+
+            <details className="rounded-lg border bg-card px-4 py-3">
+              <summary className="cursor-pointer text-base font-medium min-h-11 flex items-center">
+                Add a photo (optional)
+              </summary>
+              <div className="mt-4">
+                <Field label="Photo">
+                  <PhotoInput value={s.photo} onChange={(p) => updateStudent(i, { photo: p })} />
                 </Field>
-              )}
-              {(s.mode === "van" || s.mode === "parent_dropoff_only") && (
-                <Field label="Afternoon stop" required>
-                  <Select required value={s.afternoonStopId}
-                    onChange={(e) => updateStudent(i, { afternoonStopId: e.target.value })}>
-                    <option value="">— select —</option>
-                    {stops.map((stop) => (
-                      <option key={stop.id} value={stop.id}>
-                        {stop.name} ({stop.town}, {stop.colorName} {stop.scheduledPm})
-                      </option>
-                    ))}
-                  </Select>
-                </Field>
-              )}
-            </div>
+              </div>
+            </details>
+
             {students.length > 1 && (
-              <Button type="button" variant="ghost" size="sm"
-                onClick={() => setStudents((prev) => prev.filter((_, idx) => idx !== i))}>
+              <Button
+                type="button"
+                variant="ghost"
+                onClick={() => setStudents((prev) => prev.filter((_, idx) => idx !== i))}
+              >
                 Remove this child
               </Button>
             )}
@@ -386,11 +356,97 @@ export function SignupForm({
         ))}
       </section>
 
-      <section className="space-y-4">
-        <h2 className="text-lg font-semibold">Consents</h2>
+      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+        <div>
+          <h2 className="text-xl font-semibold">
+            Home address
+            {needsVan && <span className="text-destructive ml-0.5">*</span>}
+          </h2>
+          <p className="text-sm text-muted-foreground mt-1">
+            {needsVan
+              ? "We use your address to plan your child's van pickup and the ride home."
+              : "Optional — you're driving your child, so we don't need it for routing."}
+          </p>
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <Field label="Street address" required={needsVan}>
+            <Input
+              autoComplete="street-address"
+              required={needsVan}
+              value={family.streetAddress}
+              onChange={(e) => setFamily({ ...family, streetAddress: e.target.value })}
+            />
+          </Field>
+          <Field label="City" required={needsVan}>
+            <Input
+              required={needsVan}
+              value={family.city}
+              onChange={(e) => setFamily({ ...family, city: e.target.value })}
+            />
+          </Field>
+          <Field label="State">
+            <Input
+              value={family.state}
+              onChange={(e) => setFamily({ ...family, state: e.target.value })}
+            />
+          </Field>
+          <Field label="ZIP code" required={needsVan}>
+            <Input
+              inputMode="numeric"
+              autoComplete="postal-code"
+              required={needsVan}
+              value={family.postalCode}
+              onChange={(e) => setFamily({ ...family, postalCode: e.target.value })}
+            />
+          </Field>
+        </div>
+      </section>
+
+      <details className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
+        <summary className="cursor-pointer text-base font-medium min-h-11 flex items-center">
+          Add email &amp; emergency contact (optional)
+        </summary>
+        <div className="mt-4 space-y-4">
+          <Field label="Email">
+            <Input
+              type="email"
+              autoComplete="email"
+              value={family.primaryEmail}
+              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })}
+            />
+          </Field>
+          <div className="space-y-3">
+            <div className="text-base font-medium">Emergency contact</div>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <Field label="Name">
+                <Input
+                  value={emergency.name}
+                  onChange={(e) => setEmergency({ ...emergency, name: e.target.value })}
+                />
+              </Field>
+              <Field label="Phone">
+                <Input
+                  type="tel"
+                  value={emergency.phone}
+                  onChange={(e) => setEmergency({ ...emergency, phone: e.target.value })}
+                />
+              </Field>
+              <Field label="Relationship">
+                <Input
+                  value={emergency.relationship}
+                  onChange={(e) => setEmergency({ ...emergency, relationship: e.target.value })}
+                />
+              </Field>
+            </div>
+          </div>
+        </div>
+      </details>
+
+      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+        <h2 className="text-xl font-semibold">Please agree to the following</h2>
         <div className="space-y-3">
           {consents.map((c) => (
-            <label key={c.kind} className="flex gap-3 items-start rounded border bg-card p-3">
+            <label key={c.kind} className="flex gap-3 items-start rounded-lg border bg-muted/30 p-3">
               <Checkbox
                 checked={agreedKinds.has(c.kind)}
                 onCheckedChange={(checked: boolean) =>
@@ -404,20 +460,20 @@ export function SignupForm({
                 className="mt-0.5"
               />
               <span className="text-sm">
-                <strong>{CONSENT_LABELS[c.kind]}</strong>
+                <strong className="text-base">{CONSENT_LABELS[c.kind]}</strong>
                 <br />
                 <span className="text-muted-foreground">{c.text}</span>
               </span>
             </label>
           ))}
         </div>
-        <p className="text-xs text-muted-foreground">
-          By submitting this form you agree to the items above on behalf of your family.
+        <p className="text-sm text-muted-foreground">
+          By submitting, you agree to the items above on behalf of your family.
         </p>
       </section>
 
-      <Button type="submit" disabled={pending} size="lg">
-        {pending ? "Registering…" : "Register family"}
+      <Button type="submit" disabled={pending} size="lg" className="w-full sm:w-auto">
+        {pending ? "Registering…" : "Register my family"}
       </Button>
     </form>
   );

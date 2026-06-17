@@ -29,6 +29,13 @@ const EventArgsSchema = z.object({
   stopId: z.string().uuid().nullish(),
   overrideReason: z.string().nullish(),
   metadata: z.record(z.string(), z.unknown()).optional(),
+  // Optional client-generated key so an offline action replayed from the outbox
+  // dedupes to a single event (record_event dedups on idempotency_key).
+  idempotencyKey: z.string().min(1).optional(),
+  // Optional client capture time so an OFFLINE action records when it actually
+  // happened, not when it later syncs — keeps the timeline and the overdue-van
+  // anomaly alarms (is_boarded_but_not_arrived, is_pm_van_stuck) honest.
+  occurredAt: z.string().datetime().optional(),
 });
 
 export type EventActionResult =
@@ -62,11 +69,12 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
     eventType: args.eventType as EventType,
     actorUserId: session.id,
     actorRole: session.role,
-    idempotencyKey: newIdempotencyKey(args.eventType),
+    idempotencyKey: args.idempotencyKey ?? newIdempotencyKey(args.eventType),
     vanId: args.vanId ?? null,
     stopId: args.stopId ?? null,
     overrideReason: args.overrideReason ?? null,
     metadata: args.metadata,
+    occurredAt: args.occurredAt,
   });
 
   if (!result.ok) return result;

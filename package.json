@@ -21,7 +21,8 @@
     "supabase:gen-types": "supabase gen types typescript --local > src/lib/supabase/types.ts",
     "seed:dev": "tsx scripts/seed-dev.ts",
     "promote": "tsx scripts/promote-coordinator.ts",
-    "set-role": "tsx scripts/set-role.ts"
+    "set-role": "tsx scripts/set-role.ts",
+    "set-password": "tsx scripts/set-password.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.4.1",

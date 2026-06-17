@@ -10,7 +10,12 @@ import { estimatedEtaSeconds, formatEta } from "@/lib/geo";
 import { ClockIcon, PhoneIcon, RefreshCwIcon } from "lucide-react";
 
 export const dynamic = "force-dynamic";
-export const metadata = { title: "Family Status — VBS" };
+// Token URL exposes a family's children + wristband codes — never let it be
+// indexed if the link is shared somewhere crawlable.
+export const metadata = {
+  title: "Family Status — VBS",
+  robots: { index: false, follow: false },
+};
 
 type FamilyRow = { id: string; primary_guardian_name: string };
 

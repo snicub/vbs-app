@@ -22,3 +22,35 @@ export async function signedUrlFor(
   if (error) return null;
   return data.signedUrl;
 }
+
+/**
+ * Batch-sign many objects in a single round-trip (one admin client, one request)
+ * instead of N calls to signedUrlFor. Returns a map keyed by the input path;
+ * null/duplicate paths are handled, and a path that fails to sign maps to null.
+ * Use this on list pages (roster, van manifest) where ~100 photos are signed at
+ * once. Look up by the object's path: `urls.get(student.photo_path)`.
+ */
+export async function signedUrlsFor(
+  bucket: "student-photos" | "wristbands",
+  paths: (string | null | undefined)[],
+  ttlSeconds = DEFAULT_TTL_SECONDS,
+): Promise<Map<string, string | null>> {
+  const result = new Map<string, string | null>();
+  const real = Array.from(
+    new Set(paths.filter((p): p is string => typeof p === "string" && p.length > 0)),
+  );
+  if (real.length === 0) return result;
+
+  const admin = createAdminClient();
+  const { data, error } = await admin.storage.from(bucket).createSignedUrls(real, ttlSeconds);
+  if (error || !data) {
+    for (const p of real) result.set(p, null);
+    return result;
+  }
+  for (const item of data) {
+    if (item.path) result.set(item.path, item.error ? null : item.signedUrl);
+  }
+  // Any path the API silently omitted → explicit null, never undefined.
+  for (const p of real) if (!result.has(p)) result.set(p, null);
+  return result;
+}

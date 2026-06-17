@@ -50,9 +50,11 @@ describe("buildTagData", () => {
     const tags = buildTagData(
       [{
         studentId: "s1",
+        mode: null,
         morningStopId: "st1",
         afternoonStopId: null,
         morningVanId: "v1",
+        afternoonVanId: null,
         wristbandColorForDay: "#3b82f6",
         wristbandColorName: "Blue",
       }],
@@ -63,7 +65,6 @@ describe("buildTagData", () => {
       firstName: "Ada",
       lastName: "Byron",
       town: "Maple Falls",
-      stopName: "Maple Town Hall",
       vanName: "Van 2",
       colorCode: "#3b82f6",
       colorName: "Blue",
@@ -75,24 +76,28 @@ describe("buildTagData", () => {
     const tags = buildTagData(
       [{
         studentId: "s1",
+        mode: null,
         morningStopId: null,
         afternoonStopId: null,
         morningVanId: null,
+        afternoonVanId: null,
         wristbandColorForDay: null,
         wristbandColorName: null,
       }],
       students, stops, vans,
     );
-    expect(tags[0]).toMatchObject({ town: null, stopName: null, vanName: null, colorCode: null });
+    expect(tags[0]).toMatchObject({ town: null, vanName: null, colorCode: null });
   });
 
   it("falls back to the afternoon stop for the label when there's no morning stop", () => {
     const tags = buildTagData(
       [{
         studentId: "s1",
+        mode: null,
         morningStopId: null,
         afternoonStopId: "st1",
         morningVanId: null,
+        afternoonVanId: null,
         wristbandColorForDay: "#3b82f6",
         wristbandColorName: "Blue",
       }],
@@ -105,9 +110,11 @@ describe("buildTagData", () => {
     const tags = buildTagData(
       [{
         studentId: "ghost",
+        mode: null,
         morningStopId: null,
         afternoonStopId: null,
         morningVanId: null,
+        afternoonVanId: null,
         wristbandColorForDay: null,
         wristbandColorName: null,
       }],
@@ -127,24 +134,84 @@ describe("buildTagData", () => {
     ]);
     const tags = buildTagData(
       [
-        { studentId: "s2", morningStopId: "st1", afternoonStopId: null, morningVanId: "v1", wristbandColorForDay: "#3b82f6", wristbandColorName: "Blue" },
-        { studentId: "s1", morningStopId: null, afternoonStopId: null, morningVanId: null, wristbandColorForDay: null, wristbandColorName: null },
+        { studentId: "s2", mode: null, morningStopId: "st1", afternoonStopId: null, morningVanId: "v1", afternoonVanId: null, wristbandColorForDay: "#3b82f6", wristbandColorName: "Blue" },
+        { studentId: "s1", mode: null, morningStopId: null, afternoonStopId: null, morningVanId: null, afternoonVanId: null, wristbandColorForDay: null, wristbandColorName: null },
       ],
       many, stops, vans,
     );
     expect(tags.map((t) => t.firstName)).toEqual(["Bee", "Ada"]);
   });
+
+  it("flags needsRouting for a van kid missing a van id", () => {
+    const tags = buildTagData(
+      [{
+        studentId: "s1",
+        mode: "van",
+        morningStopId: null,
+        afternoonStopId: null,
+        morningVanId: null,
+        afternoonVanId: null,
+        wristbandColorForDay: null,
+        wristbandColorName: null,
+      }],
+      students, stops, vans,
+    );
+    expect(tags[0]?.needsRouting).toBe(true);
+  });
+
+  it("does not flag needsRouting for a parent-both kid", () => {
+    const tags = buildTagData(
+      [{
+        studentId: "s1",
+        mode: "parent_both",
+        morningStopId: null,
+        afternoonStopId: null,
+        morningVanId: null,
+        afternoonVanId: null,
+        wristbandColorForDay: null,
+        wristbandColorName: null,
+      }],
+      students, stops, vans,
+    );
+    expect(tags[0]?.needsRouting).toBe(false);
+  });
+
+  it("does not flag needsRouting for a fully-routed van kid", () => {
+    const tags = buildTagData(
+      [{
+        studentId: "s1",
+        mode: "van",
+        morningStopId: "st1",
+        afternoonStopId: "st1",
+        morningVanId: "v1",
+        afternoonVanId: "v1",
+        wristbandColorForDay: "#3b82f6",
+        wristbandColorName: "Blue",
+      }],
+      students, stops, vans,
+    );
+    expect(tags[0]?.needsRouting).toBe(false);
+  });
 });
 
 describe("sortTags", () => {
-  const mk = (colorName: string | null, last: string, first: string): NameTag => ({
+  const mk = (
+    colorName: string | null,
+    last: string,
+    first: string,
+    needsRouting = false,
+  ): NameTag => ({
     studentId: `${colorName}-${last}-${first}`,
     firstName: first,
     lastName: last,
     colorCode: colorName ? "#000000" : null,
     colorName,
+    morningColorCode: null,
+    morningColorName: null,
+    afternoonColorCode: null,
+    afternoonColorName: null,
+    needsRouting,
     town: null,
-    stopName: null,
     vanName: null,
     wristbandCode: "X",
   });
@@ -172,6 +239,28 @@ describe("sortTags", () => {
   it("orders multiple no-color tags among themselves by name", () => {
     const sorted = sortTags([mk(null, "Young", "Zoe"), mk(null, "Adams", "Al")]);
     expect(sorted.map((t) => t.lastName)).toEqual(["Adams", "Young"]);
+  });
+
+  it("sorts needs-routing tags first regardless of color, then by color/name", () => {
+    const sorted = sortTags([
+      mk("Blue", "Adams", "Aaron"),
+      mk("Red", "Young", "Zed", true),
+      mk(null, "Zane", "Sam"),
+      mk("Blue", "Abbot", "Ann", true),
+    ]);
+    // Both needs-routing tags lead (ordered among themselves by color then name:
+    // Blue before Red), then the remaining color/name ordering holds.
+    expect(sorted.map((t) => t.studentId)).toEqual([
+      "Blue-Abbot-Ann",
+      "Red-Young-Zed",
+      "Blue-Adams-Aaron",
+      "null-Zane-Sam",
+    ]);
+  });
+
+  it("a needs-routing no-color tag still beats a routed color tag", () => {
+    const sorted = sortTags([mk("Blue", "Adams", "Aaron"), mk(null, "Zane", "Sam", true)]);
+    expect(sorted.map((t) => t.studentId)).toEqual(["null-Zane-Sam", "Blue-Adams-Aaron"]);
   });
 
   it("does not mutate its input", () => {

@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan } from "@/lib/auth/roles";
-import { signedUrlFor } from "@/lib/storage/signed-url";
+import { signedUrlsFor } from "@/lib/storage/signed-url";
 import { VanManifest } from "./van-manifest";
 
 export const dynamic = "force-dynamic";
@@ -60,6 +60,7 @@ export default async function VanPage({
       "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_name, wristband_color_for_day, morning_stop_id, afternoon_stop_id",
     )
     .eq("event_date", today)
+    .eq("attending", true)
     .or(`morning_van_id.eq.${vanId},afternoon_van_id.eq.${vanId}`)
     .returns<StatusRow[]>();
 
@@ -76,14 +77,12 @@ export default async function VanPage({
     students = studentRows ?? [];
   }
 
-  // Sign photo URLs in parallel for the manifest. Driver needs to see the
-  // kid's face before tapping "Boarded PM van" — this is the cheapest
+  // Batch-sign photo URLs for the manifest in one request. Driver needs to see
+  // the kid's face before tapping "Boarded PM van" — this is the cheapest
   // way to prevent kid-to-van mismatches.
-  const photoUrls = new Map<string, string | null>();
-  await Promise.all(
-    students.map(async (s) => {
-      photoUrls.set(s.id, await signedUrlFor("student-photos", s.photo_path));
-    }),
+  const photoUrls = await signedUrlsFor(
+    "student-photos",
+    students.map((s) => s.photo_path),
   );
 
   const { data: stops } = await supabase
@@ -104,8 +103,10 @@ export default async function VanPage({
   const orderedStopIds = amRoute?.stop_ids ?? pmRoute?.stop_ids ?? [];
   const stopOrderMap = new Map(orderedStopIds.map((id, i) => [id, i]));
 
+  const studentMap = new Map(students.map((s) => [s.id, s]));
+
   const rosterUnsorted = (statuses ?? []).map((status) => {
-    const student = students.find((s) => s.id === status.student_id);
+    const student = studentMap.get(status.student_id);
     const direction: "am" | "pm" | "both" =
       status.morning_van_id === vanId && status.afternoon_van_id === vanId
         ? "both"
@@ -131,7 +132,7 @@ export default async function VanPage({
       direction,
       stopName: stopMap.get(stopId)?.name ?? null,
       stopOrder: stopOrderMap.get(stopId) ?? Infinity,
-      photoUrl: photoUrls.get(status.student_id) ?? null,
+      photoUrl: student?.photo_path ? (photoUrls.get(student.photo_path) ?? null) : null,
     };
   });
 
@@ -143,13 +144,18 @@ export default async function VanPage({
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
       <header className="space-y-1">
-        <h1 className="text-2xl font-semibold">{van.name} — manifest</h1>
-        <p className="text-muted-foreground text-sm">
-          {today} · {roster.length} student{roster.length === 1 ? "" : "s"}
+        <h1 className="text-3xl font-semibold">{van.name} — riders</h1>
+        <p className="text-muted-foreground text-base">
+          {today} · {roster.length} kid{roster.length === 1 ? "" : "s"}
         </p>
       </header>
 
-      <VanManifest vanId={vanId} eventDate={today} roster={roster} />
+      <VanManifest
+        vanId={vanId}
+        eventDate={today}
+        roster={roster}
+        loadedAt={new Date().toISOString()}
+      />
     </main>
   );
 }

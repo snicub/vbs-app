@@ -39,14 +39,18 @@ export default async function VanIndexPage() {
       .order("name")
       .returns<{ id: string; name: string }[]>();
     return (
-      <main className="mx-auto max-w-md p-6 space-y-4">
-        <h1 className="text-xl font-semibold">Pick a van</h1>
-        <ul className="space-y-2">
+      <main className="mx-auto max-w-md p-6 space-y-5">
+        <h1 className="text-2xl font-bold">Pick a van</h1>
+        <ul className="space-y-3">
           {(vans ?? []).map((v) => (
             <li key={v.id}>
               <Link
                 href={`/van/${v.id}`}
-                className={buttonVariants({ variant: "outline" })}
+                className={buttonVariants({
+                  variant: "outline",
+                  size: "lg",
+                  className: "w-full justify-start text-lg min-h-14",
+                })}
               >
                 {v.name}
               </Link>
@@ -58,9 +62,9 @@ export default async function VanIndexPage() {
   }
 
   return (
-    <main className="mx-auto max-w-md p-6 text-sm space-y-3">
-      <h1 className="text-xl font-semibold">No van assigned today</h1>
-      <p className="text-muted-foreground">
+    <main className="mx-auto max-w-md p-6 space-y-3">
+      <h1 className="text-2xl font-bold">No van assigned today</h1>
+      <p className="text-base text-muted-foreground">
         Ask the coordinator to add you to a van assignment for today.
       </p>
     </main>

@@ -7,16 +7,18 @@ import { isCoordinator } from "@/lib/auth/roles";
 import { type DayState } from "@/lib/events/state-machine";
 import { anomaliesFor } from "@/lib/anomaly";
 import { ANOMALY_PRESENTATION } from "@/lib/state-presentation";
-import { signedUrlFor } from "@/lib/storage/signed-url";
+import { signedUrlsFor } from "@/lib/storage/signed-url";
 import { Badge } from "@/components/ui/badge";
 import {
   AnomalyBadge,
 } from "@/components/state-badge";
 import { buttonVariants } from "@/components/ui/button";
-import { AlertTriangleIcon } from "lucide-react";
+import { AlertTriangleIcon, MapPinOffIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
 import { DashboardCards } from "./dashboard-cards";
 import { computeMetrics, computeTownBreakdown } from "@/lib/coordinator/dashboard";
+import { needsRouting } from "@/lib/routing";
+import { RouteBuildButton } from "./route-build-button";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator — Today" };
@@ -62,13 +64,40 @@ export default async function CoordinatorTodayPage({
   const today = date ?? getLocalDate();
 
   const supabase = await createClient();
-  const { data: statuses } = await supabase
-    .from("student_day_status")
-    .select(
-      "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_for_day, wristband_color_name, is_late_am, is_boarded_but_not_arrived, is_in_but_not_out, is_pm_van_stuck",
-    )
-    .eq("event_date", today)
-    .returns<StatusRow[]>();
+
+  // Everything keyed only on `today` can fetch in one round-trip layer:
+  // the per-kid statuses, the day records (attendance + stops), the stop
+  // catalog, and the closeout. None depends on another's result.
+  const [
+    { data: statuses },
+    { data: dayRecords },
+    { data: stops },
+    { data: closeout },
+  ] = await Promise.all([
+    supabase
+      .from("student_day_status")
+      .select(
+        "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_for_day, wristband_color_name, is_late_am, is_boarded_but_not_arrived, is_in_but_not_out, is_pm_van_stuck",
+      )
+      .eq("event_date", today)
+      .returns<StatusRow[]>(),
+    supabase
+      .from("student_day_records")
+      .select("student_id, mode, morning_stop_id, afternoon_stop_id, attending")
+      .eq("event_date", today)
+      .returns<{ student_id: string; mode: string | null; morning_stop_id: string | null; afternoon_stop_id: string | null; attending: boolean }[]>(),
+    supabase
+      .from("stops")
+      .select("id, town, color_code, color_name")
+      .returns<{ id: string; town: string; color_code: string; color_name: string }[]>(),
+    supabase
+      .from("daily_closeouts")
+      .select("closed_at, notes")
+      .eq("event_date", today)
+      .maybeSingle<{ closed_at: string; notes: string | null }>(),
+  ]);
+  const stopMap = new Map((stops ?? []).map((s) => [s.id, s]));
+  const dayRecMap = new Map((dayRecords ?? []).map((d) => [d.student_id, d]));
 
   const studentIds = (statuses ?? []).map((s) => s.student_id);
   const { data: students } = studentIds.length > 0
@@ -79,46 +108,33 @@ export default async function CoordinatorTodayPage({
         .returns<StudentRow[]>()
     : { data: [] as StudentRow[] };
 
-  // Fetch family names for roster search
+  // Family names (for roster search) and signed photo URLs both depend only on
+  // the student rows, so fetch them concurrently.
   const familyIds = Array.from(new Set((students ?? []).map((s) => s.family_id)));
-  const { data: families } = familyIds.length > 0
-    ? await supabase
-        .from("families")
-        .select("id, primary_guardian_name")
-        .in("id", familyIds)
-        .returns<{ id: string; primary_guardian_name: string }[]>()
-    : { data: [] as { id: string; primary_guardian_name: string }[] };
+  const [{ data: families }, photoUrlMap] = await Promise.all([
+    familyIds.length > 0
+      ? supabase
+          .from("families")
+          .select("id, primary_guardian_name")
+          .in("id", familyIds)
+          .returns<{ id: string; primary_guardian_name: string }[]>()
+      : Promise.resolve({ data: [] as { id: string; primary_guardian_name: string }[] }),
+    signedUrlsFor("student-photos", (students ?? []).map((s) => s.photo_path)),
+  ]);
   const familyNameMap = new Map((families ?? []).map((f) => [f.id, f.primary_guardian_name]));
-
-  // Day records (for attendance + stop assignment) and stops (for town names),
-  // both used to drive the dashboard cards.
-  const { data: dayRecords } = await supabase
-    .from("student_day_records")
-    .select("student_id, morning_stop_id, afternoon_stop_id, attending")
-    .eq("event_date", today)
-    .returns<{ student_id: string; morning_stop_id: string | null; afternoon_stop_id: string | null; attending: boolean }[]>();
-  const { data: stops } = await supabase
-    .from("stops")
-    .select("id, town, color_code, color_name")
-    .returns<{ id: string; town: string; color_code: string; color_name: string }[]>();
-  const stopMap = new Map((stops ?? []).map((s) => [s.id, s]));
-  const dayRecMap = new Map((dayRecords ?? []).map((d) => [d.student_id, d]));
-
-  const { data: closeout } = await supabase
-    .from("daily_closeouts")
-    .select("closed_at, notes")
-    .eq("event_date", today)
-    .maybeSingle<{ closed_at: string; notes: string | null }>();
-
-  const photoUrls = new Map<string, string | null>();
-  await Promise.all(
-    (students ?? []).map(async (s) => {
-      photoUrls.set(s.id, await signedUrlFor("student-photos", s.photo_path));
-    }),
+  const photoUrls = new Map<string, string | null>(
+    (students ?? []).map((s) => [s.id, s.photo_path ? (photoUrlMap.get(s.photo_path) ?? null) : null]),
   );
 
   const studentMap = new Map((students ?? []).map((s) => [s.id, s]));
-  const enriched = (statuses ?? []).map((s) => {
+  // The dashboard cards count attending kids only; the header count and roster
+  // must match, so we drop non-attending kids here. (A missing day-record
+  // defaults to attending, same as the dashboard.) Non-attending kids are also
+  // already excluded from the dashboard helpers and the needs-routing list, so
+  // filtering here keeps all three views in agreement.
+  const enriched = (statuses ?? [])
+    .filter((s) => dayRecMap.get(s.student_id)?.attending ?? true)
+    .map((s) => {
     const stu = studentMap.get(s.student_id);
     return {
       ...s,
@@ -166,6 +182,16 @@ export default async function CoordinatorTodayPage({
   });
   const metrics = computeMetrics(dashRows);
   const towns = computeTownBreakdown(dashRows);
+
+  const needsRoutingList = enriched.filter((s) => {
+    const dr = dayRecMap.get(s.student_id);
+    return needsRouting({
+      mode: dr?.mode ?? null,
+      morningVanId: s.morning_van_id,
+      afternoonVanId: s.afternoon_van_id,
+      attending: dr?.attending ?? true,
+    });
+  });
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
@@ -225,6 +251,46 @@ export default async function CoordinatorTodayPage({
                     <AnomalyBadge key={a} kind={a} size="sm" />
                   ))}
                 </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {needsRoutingList.length > 0 && (
+        <section className="rounded-xl border-2 border-[var(--anomaly-warn)]/30 bg-[var(--anomaly-warn)]/5 p-3 sm:p-4">
+          <div className="flex items-center gap-2 mb-1">
+            <MapPinOffIcon className="size-5 text-[var(--anomaly-warn)]" aria-hidden />
+            <h2 className="font-semibold text-sm sm:text-base">
+              Needs routing ({needsRoutingList.length})
+            </h2>
+            <div className="ml-auto">
+              <RouteBuildButton date={today} />
+            </div>
+          </div>
+          <p className="text-sm text-muted-foreground mb-3">
+            These kids ride a van but aren&apos;t on one yet — no stop assigned, or their stop
+            isn&apos;t on a route. Assign a routed stop so they show up on a van and get the
+            late-arrival alert.
+          </p>
+          <ul className="space-y-2">
+            {needsRoutingList.map((s) => (
+              <li
+                key={s.student_id}
+                className="flex flex-wrap items-center gap-2 rounded-lg bg-card border px-2.5 py-2"
+              >
+                <Link
+                  href={`/coordinator/students/${s.student_id}/edit`}
+                  className="font-medium hover:underline text-sm"
+                >
+                  {s.name}
+                </Link>
+                <code className="font-mono text-xs text-muted-foreground hidden sm:inline">
+                  {s.wristbandCode}
+                </code>
+                <span className="ml-auto text-xs font-medium text-[var(--anomaly-warn)]">
+                  Assign stop →
+                </span>
               </li>
             ))}
           </ul>
