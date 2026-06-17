@@ -14,7 +14,7 @@
 -- without a live run — confirm with `pnpm test:db` before trusting green.
 
 begin;
-select plan(23);
+select plan(30);
 
 -- ---------------------------------------------------------------------------
 -- Fixtures
@@ -79,6 +79,45 @@ insert into public.student_day_records (
    '40000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001'),
   ('20000000-0000-0000-0000-000000000003', current_date, true, 'van',
    '40000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000001');
+
+-- Extra fixtures for the negative-authz + restricted-release matrix (24-30):
+-- a second aide with NO van assignment, a third aide assigned to a DIFFERENT
+-- van, a restricted "do-not-release" pickup person, and a parent-pickup kid
+-- who's been dropped off (so a parent-path smart_checkout has a chain to run).
+insert into auth.users (id, email) values
+  ('00000000-0000-0000-0000-000000000005', 'aide2@example.com'),
+  ('00000000-0000-0000-0000-000000000006', 'aide3@example.com');
+insert into public.users (id, full_name, role) values
+  ('00000000-0000-0000-0000-000000000005', 'Aide Unassigned', 'aide'),
+  ('00000000-0000-0000-0000-000000000006', 'Aide Van2',       'aide');
+
+insert into public.vans (id, name) values
+  ('30000000-0000-0000-0000-000000000002', 'Van 2');
+insert into public.van_assignments (assignment_date, van_id, aide_user_id) values (
+  current_date, '30000000-0000-0000-0000-000000000002',
+  '00000000-0000-0000-0000-000000000006'
+);
+
+insert into public.authorized_pickup_persons (id, family_id, full_name, is_restricted) values (
+  '50000000-0000-0000-0000-000000000001',
+  '10000000-0000-0000-0000-000000000001',
+  'Banned Adult', true
+);
+
+insert into public.students (id, family_id, legal_first_name, legal_last_name, dob, wristband_code)
+  values ('20000000-0000-0000-0000-000000000004', '10000000-0000-0000-0000-000000000001',
+          'Pickup', 'Kid', '2018-08-08', 'GH56P');
+insert into public.student_day_records (student_id, event_date, attending, mode)
+  values ('20000000-0000-0000-0000-000000000004', current_date, true, 'parent_both');
+do $$
+begin
+  perform public.record_event(
+    '20000000-0000-0000-0000-000000000004'::uuid, current_date,
+    'parent_dropoff'::public.event_type,
+    '00000000-0000-0000-0000-000000000003'::uuid, 'coordinator'::public.user_role,
+    'test-key-pickup-dropoff'
+  );
+end$$;
 
 -- ---------------------------------------------------------------------------
 -- Tests
@@ -431,6 +470,96 @@ select is(
     where idempotency_key = 'test-key-occurredat'),
   '2026-06-23 08:02:00-05'::timestamptz,
   'record_event stores the client-supplied occurred_at (offline replay records real time)'
+);
+
+-- ---------------------------------------------------------------------------
+-- (24-30) Negative authorization matrix + restricted-release. _authorize_event
+-- runs BEFORE the lock/legality in record_event, so an unauthorized actor 42501s
+-- regardless of the kid's current state. smart_checkout refuses release to a
+-- do-not-release person (matched by id OR case-insensitive name) and requires a
+-- non-empty pickup name.
+-- ---------------------------------------------------------------------------
+
+-- (24) Aide with NO van assignment can't board a kid
+select throws_ok(
+  $$select public.record_event(
+      '20000000-0000-0000-0000-000000000001'::uuid, current_date,
+      'van_boarded_am'::public.event_type,
+      '00000000-0000-0000-0000-000000000005'::uuid, 'aide'::public.user_role,
+      'neg-aide-noassign'
+    )$$,
+  '42501', null,
+  'aide with no van assignment cannot record van_boarded_am'
+);
+
+-- (25) Aide assigned to a DIFFERENT van can't board a kid on Van 1
+select throws_ok(
+  $$select public.record_event(
+      '20000000-0000-0000-0000-000000000001'::uuid, current_date,
+      'van_boarded_am'::public.event_type,
+      '00000000-0000-0000-0000-000000000006'::uuid, 'aide'::public.user_role,
+      'neg-aide-wrongvan'
+    )$$,
+  '42501', null,
+  'aide assigned to a different van cannot board this kid'
+);
+
+-- (26) Table volunteer can't record a van event
+select throws_ok(
+  $$select public.record_event(
+      '20000000-0000-0000-0000-000000000001'::uuid, current_date,
+      'van_boarded_pm'::public.event_type,
+      '00000000-0000-0000-0000-000000000004'::uuid, 'table_volunteer'::public.user_role,
+      'neg-vol-vanpm'
+    )$$,
+  '42501', null,
+  'table volunteer cannot record van_boarded_pm'
+);
+
+-- (27) Parent can't record events at all
+select throws_ok(
+  $$select public.record_event(
+      '20000000-0000-0000-0000-000000000001'::uuid, current_date,
+      'site_checked_in'::public.event_type,
+      '00000000-0000-0000-0000-000000000001'::uuid, 'parent'::public.user_role,
+      'neg-parent'
+    )$$,
+  '42501', null,
+  'parent role cannot record events'
+);
+
+-- (28) Release refused when the pickup name matches a restricted person (case-insensitive)
+select throws_ok(
+  $$select public.smart_checkout(
+      '20000000-0000-0000-0000-000000000004'::uuid, current_date,
+      '00000000-0000-0000-0000-000000000003'::uuid, 'coordinator'::public.user_role,
+      'parent', '{"name": "banned adult"}'::jsonb
+    )$$,
+  '42501', null,
+  'smart_checkout refuses release to a restricted person matched by name'
+);
+
+-- (29) Release refused when the pickup id is a restricted person
+select throws_ok(
+  $$select public.smart_checkout(
+      '20000000-0000-0000-0000-000000000004'::uuid, current_date,
+      '00000000-0000-0000-0000-000000000003'::uuid, 'coordinator'::public.user_role,
+      'parent',
+      '{"name": "Some Other Name", "authorized_pickup_person_id": "50000000-0000-0000-0000-000000000001"}'::jsonb
+    )$$,
+  '42501', null,
+  'smart_checkout refuses release to a restricted person matched by id'
+);
+
+-- (30) parent_pickup requires a non-empty pickup name
+select throws_ok(
+  $$select public.smart_checkout(
+      '20000000-0000-0000-0000-000000000004'::uuid, current_date,
+      '00000000-0000-0000-0000-000000000003'::uuid, 'coordinator'::public.user_role,
+      'parent', '{}'::jsonb
+    )$$,
+  'P0001', null,
+  'smart_checkout requires a pickup person name'
 );
 
 select * from finish();
