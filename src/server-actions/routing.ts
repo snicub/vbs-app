@@ -8,6 +8,7 @@ import { isCoordinator } from "@/lib/auth/roles";
 import { geocodeAddress, familyAddressQuery } from "@/lib/geocode";
 import { assignStopsForMode, type StopPoint } from "@/lib/route-build";
 import { ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
+import { VBS_DATES } from "@/lib/registration/dates";
 
 const Schema = z.object({ eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 
@@ -28,6 +29,7 @@ type Family = {
 };
 type Rec = {
   student_id: string;
+  event_date: string;
   mode: string | null;
   morning_stop_id: string | null;
   afternoon_stop_id: string | null;
@@ -56,7 +58,6 @@ export async function autoAssignStopsFromAddresses(
   }
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: "Bad input" };
-  const date = parsed.data.eventDate;
 
   const admin = createAdminClient();
 
@@ -71,12 +72,16 @@ export async function autoAssignStopsFromAddresses(
     return { ok: false, error: "No stops have coordinates yet — add stops first." };
   }
 
+  // Route the WHOLE event in one pass: addresses (hence stops) are the same
+  // every day, so a kid routed for Day 1 must be routed for Days 2–5 too. We
+  // pull every VBS day's records, geocode each family once (shared across days),
+  // then assign stops per (student, day).
   const { data: recs } = await admin
     .from("student_day_records")
     .select(
-      "student_id, mode, morning_stop_id, afternoon_stop_id, attending, students(family_id, families(id, lat, lng, street_address, city, state, postal_code))",
+      "student_id, event_date, mode, morning_stop_id, afternoon_stop_id, attending, students(family_id, families(id, lat, lng, street_address, city, state, postal_code))",
     )
-    .eq("event_date", date)
+    .in("event_date", [...VBS_DATES])
     .eq("attending", true)
     .returns<Rec[]>();
 
@@ -106,9 +111,11 @@ export async function autoAssignStopsFromAddresses(
     }
   }
 
-  // Assign nearest stops to un-routed van kids that now have coordinates.
+  // Assign nearest stops to un-routed van kids that now have coordinates, across
+  // every day. `assigned` counts day-slots filled; `flagged` is DISTINCT kids
+  // with no usable address (deduped — a no-address kid recurs on every day).
   let assigned = 0;
-  let flagged = 0;
+  const flaggedStudents = new Set<string>();
   for (const r of recs ?? []) {
     if (!r.mode || r.mode === "parent_both") continue;
     const needsAm = ridesMorningVan(r.mode) && !r.morning_stop_id;
@@ -121,7 +128,7 @@ export async function autoAssignStopsFromAddresses(
         ? { lat: fam.lat, lng: fam.lng }
         : (fam ? geocoded.get(fam.id) ?? null : null);
     if (!point) {
-      flagged++; // no address or geocode failed — coordinator handles by hand
+      flaggedStudents.add(r.student_id); // no address — coordinator handles by hand
       continue;
     }
 
@@ -140,7 +147,7 @@ export async function autoAssignStopsFromAddresses(
           afternoon_stop_id: next.afternoonStopId,
         } as never)
         .eq("student_id", r.student_id)
-        .eq("event_date", date);
+        .eq("event_date", r.event_date);
       assigned++;
     }
   }
@@ -149,7 +156,7 @@ export async function autoAssignStopsFromAddresses(
   revalidatePath("/table", "layout");
   revalidatePath("/van", "layout");
 
-  return { ok: true, geocoded: geocoded.size, assigned, flagged, pending };
+  return { ok: true, geocoded: geocoded.size, assigned, flagged: flaggedStudents.size, pending };
 }
 
 function toAddr(f: Family) {
