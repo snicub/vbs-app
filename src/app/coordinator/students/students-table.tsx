@@ -4,7 +4,15 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Input } from "@/components/ui/input";
 import { type DayState } from "@/lib/events/state-machine";
+import { STATE_PRESENTATION } from "@/lib/state-presentation";
 import { StateBadge, SafetyPills } from "@/components/state-badge";
+import {
+  filterStudents,
+  sortStudents,
+  presentStates,
+  type SortKey,
+  type SortDir,
+} from "@/lib/coordinator/student-filter";
 import { PencilIcon } from "lucide-react";
 
 export type StudentRow = {
@@ -25,26 +33,13 @@ export type StudentRow = {
   afternoonStop: string;
 };
 
-type SortKey = "name" | "status" | "dob" | "morningStop" | "afternoonStop";
-type SortDir = "asc" | "desc";
-
-const STATE_RANK: Record<DayState, number> = {
-  not_started: 0,
-  van_boarded_am: 1,
-  arrived_at_site: 2,
-  site_checked_in: 3,
-  site_checked_out: 4,
-  van_boarded_pm: 5,
-  home: 6,
-  marked_no_show: 7,
-};
-
 export function StudentsTable({ rows }: { rows: StudentRow[] }) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
+  const [status, setStatus] = useState<string | null>(null);
 
   const ageBounds = useMemo(() => {
     const ages = rows.map((r) => r.age).filter((a): a is number => a != null);
@@ -52,53 +47,13 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
     return { min: Math.min(...ages), max: Math.max(...ages) };
   }, [rows]);
 
-  const filtered = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    let arr = rows;
-    if (q) {
-      arr = arr.filter(
-        (r) =>
-          r.firstName.toLowerCase().includes(q) ||
-          r.lastName.toLowerCase().includes(q) ||
-          r.wristbandCode.toLowerCase().includes(q) ||
-          r.familyName.toLowerCase().includes(q) ||
-          r.morningStop.toLowerCase().includes(q) ||
-          r.afternoonStop.toLowerCase().includes(q),
-      );
-    }
-    if (minAge != null || maxAge != null) {
-      arr = arr.filter(
-        (r) =>
-          r.age != null &&
-          (minAge == null || r.age >= minAge) &&
-          (maxAge == null || r.age <= maxAge),
-      );
-    }
-    const sorted = arr.slice().sort((a, b) => {
-      let cmp = 0;
-      switch (sortKey) {
-        case "name":
-          cmp =
-            a.lastName.localeCompare(b.lastName) ||
-            a.firstName.localeCompare(b.firstName);
-          break;
-        case "status":
-          cmp = (STATE_RANK[a.state as DayState] ?? 99) - (STATE_RANK[b.state as DayState] ?? 99);
-          break;
-        case "dob":
-          cmp = (a.dob ?? "").localeCompare(b.dob ?? "");
-          break;
-        case "morningStop":
-          cmp = a.morningStop.localeCompare(b.morningStop);
-          break;
-        case "afternoonStop":
-          cmp = a.afternoonStop.localeCompare(b.afternoonStop);
-          break;
-      }
-      return sortDir === "asc" ? cmp : -cmp;
-    });
-    return sorted;
-  }, [rows, query, sortKey, sortDir, minAge, maxAge]);
+  const statuses = useMemo(() => presentStates(rows), [rows]);
+
+  const filtered = useMemo(
+    () =>
+      sortStudents(filterStudents(rows, { query, minAge, maxAge, status }), sortKey, sortDir),
+    [rows, query, sortKey, sortDir, minAge, maxAge, status],
+  );
 
   const ageFilterActive = minAge != null || maxAge != null;
 
@@ -124,6 +79,41 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
           {filtered.length} of {rows.length}
         </span>
       </div>
+
+      {statuses.length > 1 && (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+          <span className="text-xs font-medium text-muted-foreground">Status</span>
+          <div className="flex flex-wrap gap-1.5">
+            {statuses.map((s) => {
+              const active = status === s;
+              return (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatus(active ? null : s)}
+                  className={
+                    "rounded-full border px-3 min-h-11 md:min-h-9 text-sm md:text-xs " +
+                    (active
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "bg-card")
+                  }
+                >
+                  {STATE_PRESENTATION[s as DayState]?.label ?? s}
+                </button>
+              );
+            })}
+            {status != null && (
+              <button
+                type="button"
+                onClick={() => setStatus(null)}
+                className="rounded-full border px-3 min-h-11 md:min-h-9 text-sm md:text-xs bg-card hover:bg-muted/40"
+              >
+                Clear status
+              </button>
+            )}
+          </div>
+        </div>
+      )}
 
       {ageBounds && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
