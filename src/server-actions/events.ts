@@ -6,6 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { recordEvent } from "@/lib/events/record-event";
+import { canUndo } from "@/lib/events/undo";
 import type { EventType } from "@/lib/events/state-machine";
 import { newIdempotencyKey } from "@/lib/idempotency";
 import { getLocalDate } from "@/lib/date";
@@ -133,35 +134,14 @@ export async function undoEvent(input: unknown): Promise<
     }>();
 
   if (!original) return { ok: false, error: "Event not found" };
-  if (original.superseded_by_event_id) {
-    return { ok: false, error: "This event was already undone" };
-  }
-  if (original.event_type === "override") {
-    return { ok: false, error: "Override events can't be undone — record a new override" };
-  }
 
-  const isOwner = original.actor_user_id === session.id;
   const isCoord = session.role === "coordinator" || session.role === "admin";
-  if (!isOwner && !isCoord) {
-    return { ok: false, error: "You can only undo your own events" };
-  }
-  if (original.event_type === "no_show" && !isCoord) {
-    return { ok: false, error: "Only a coordinator can reverse a no-show" };
-  }
-  if (!isCoord) {
-    const ageMs = Date.now() - new Date(original.occurred_at).getTime();
-    if (ageMs > 60_000) {
-      return {
-        ok: false,
-        error: "Too late to undo — ask a coordinator to override",
-      };
-    }
-  }
 
-  // Reject undo if newer non-superseded events exist for this student/date.
-  // Undoing an earlier event while later ones stand would silently rewrite
-  // the audit trail and could leave the kid in a state that's historically
-  // impossible (e.g., site_checked_in with no preceding board/dropoff).
+  // The "newer non-superseded events exist" guard only applies to
+  // non-coordinators; query it lazily so coordinators skip the round-trip.
+  // Undoing an earlier event while later ones stand would silently rewrite the
+  // audit trail and could leave a historically-impossible state.
+  let hasNewerEvents = false;
   if (!isCoord) {
     const { data: newer } = await admin
       .from("student_day_events")
@@ -172,13 +152,20 @@ export async function undoEvent(input: unknown): Promise<
       .is("superseded_by_event_id", null)
       .neq("event_type", "override")
       .limit(1);
-    if (newer && newer.length > 0) {
-      return {
-        ok: false,
-        error: "Newer events exist — ask a coordinator to override instead",
-      };
-    }
+    hasNewerEvents = !!(newer && newer.length > 0);
   }
+
+  const decision = canUndo(
+    {
+      eventType: original.event_type,
+      actorUserId: original.actor_user_id,
+      occurredAt: original.occurred_at,
+      supersededByEventId: original.superseded_by_event_id,
+    },
+    { id: session.id, role: session.role },
+    { now: Date.now(), hasNewerEvents },
+  );
+  if (!decision.ok) return decision;
 
   const result = await recordEvent({
     studentId: original.student_id,

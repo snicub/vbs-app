@@ -1,97 +1,104 @@
 /**
- * Undo-event policy — the rules around who can undo and when. The actual
- * server action talks to Supabase; here we cover the authorization matrix
- * and the staleness check.
+ * Undo-event policy — who can undo and when. These assertions exercise the REAL
+ * decision function (`canUndo` in src/lib/events/undo.ts) that the undoEvent
+ * server action calls, so the test can't drift from the action's behavior. The
+ * action only adds the DB lookups (`now`, `hasNewerEvents`) on top.
  */
 import { describe, it, expect } from "vitest";
+import { canUndo, type UndoableEvent } from "@/lib/events/undo";
 import type { UserRole } from "@/types/domain";
-
-type EventRow = {
-  id: string;
-  actor_user_id: string | null;
-  occurred_at: string;
-  event_type: string;
-  superseded_by_event_id: string | null;
-};
-
-function canUndo(
-  session: { id: string; role: UserRole },
-  event: EventRow,
-  now: number = Date.now(),
-): { ok: boolean; reason?: string } {
-  if (event.superseded_by_event_id) return { ok: false, reason: "already undone" };
-  if (event.event_type === "override") return { ok: false, reason: "override not undoable" };
-
-  const isOwner = event.actor_user_id === session.id;
-  const isCoord = session.role === "coordinator" || session.role === "admin";
-  if (!isOwner && !isCoord) return { ok: false, reason: "not owner / not coord" };
-  if (isCoord) return { ok: true };
-
-  const ageMs = now - new Date(event.occurred_at).getTime();
-  if (ageMs > 60_000) return { ok: false, reason: "too old" };
-  return { ok: true };
-}
 
 const NOW = new Date("2026-06-23T15:00:00Z").getTime();
 
-function event(over: Partial<EventRow>): EventRow {
+function ev(over: Partial<UndoableEvent>): UndoableEvent {
   return {
-    id: "e1",
-    actor_user_id: "user1",
-    occurred_at: new Date(NOW - 1000).toISOString(),
-    event_type: "site_checked_in",
-    superseded_by_event_id: null,
+    eventType: "site_checked_in",
+    actorUserId: "user1",
+    occurredAt: new Date(NOW - 1000).toISOString(),
+    supersededByEventId: null,
     ...over,
   };
 }
 
-describe("undo-event authorization", () => {
+const ctx = (over?: Partial<{ now: number; hasNewerEvents: boolean }>) => ({
+  now: NOW,
+  hasNewerEvents: false,
+  ...over,
+});
+
+const owner = (role: UserRole) => ({ id: "user1", role });
+const other = (role: UserRole) => ({ id: "user2", role });
+
+describe("canUndo — ownership + window", () => {
   it("allows the owner to undo within 60 seconds", () => {
-    expect(canUndo({ id: "user1", role: "table_volunteer" }, event({}), NOW).ok).toBe(true);
+    expect(canUndo(ev({}), owner("table_volunteer"), ctx()).ok).toBe(true);
   });
 
   it("blocks the owner after 60 seconds", () => {
-    expect(
-      canUndo(
-        { id: "user1", role: "table_volunteer" },
-        event({ occurred_at: new Date(NOW - 70_000).toISOString() }),
-        NOW,
-      ).ok,
-    ).toBe(false);
-  });
-
-  it("allows a coordinator to undo anytime within the day", () => {
-    const result = canUndo(
-      { id: "user2", role: "coordinator" },
-      event({ occurred_at: new Date(NOW - 60 * 60 * 1000).toISOString() }),
-      NOW,
+    const r = canUndo(
+      ev({ occurredAt: new Date(NOW - 70_000).toISOString() }),
+      owner("table_volunteer"),
+      ctx(),
     );
-    expect(result.ok).toBe(true);
+    expect(r).toEqual({ ok: false, error: "Too late to undo — ask a coordinator to override" });
   });
 
-  it("blocks a different non-coord user", () => {
+  it("allows a coordinator to undo well past the window", () => {
     expect(
-      canUndo({ id: "user2", role: "table_volunteer" }, event({}), NOW).ok,
-    ).toBe(false);
+      canUndo(ev({ occurredAt: new Date(NOW - 60 * 60 * 1000).toISOString() }), other("coordinator"), ctx())
+        .ok,
+    ).toBe(true);
   });
 
+  it("blocks a different non-coordinator user", () => {
+    expect(canUndo(ev({}), other("table_volunteer"), ctx()).ok).toBe(false);
+  });
+});
+
+describe("canUndo — terminal cases", () => {
   it("blocks an already-superseded event", () => {
-    const result = canUndo(
-      { id: "user1", role: "coordinator" },
-      event({ superseded_by_event_id: "e2" }),
-      NOW,
-    );
-    expect(result.ok).toBe(false);
-    expect(result.reason).toBe("already undone");
+    expect(canUndo(ev({ supersededByEventId: "e2" }), owner("coordinator"), ctx())).toEqual({
+      ok: false,
+      error: "This event was already undone",
+    });
   });
 
-  it("blocks an override event from being undone", () => {
-    expect(
-      canUndo(
-        { id: "user1", role: "coordinator" },
-        event({ event_type: "override" }),
-        NOW,
-      ).ok,
-    ).toBe(false);
+  it("blocks undoing an override event", () => {
+    expect(canUndo(ev({ eventType: "override" }), owner("coordinator"), ctx()).ok).toBe(false);
+  });
+});
+
+describe("canUndo — no_show is coordinator-only (rule the old test missed)", () => {
+  it("blocks a non-coordinator from reversing a no_show even as the owner within the window", () => {
+    expect(canUndo(ev({ eventType: "no_show" }), owner("table_volunteer"), ctx())).toEqual({
+      ok: false,
+      error: "Only a coordinator can reverse a no-show",
+    });
+  });
+
+  it("allows a coordinator to reverse a no_show", () => {
+    expect(canUndo(ev({ eventType: "no_show" }), other("coordinator"), ctx()).ok).toBe(true);
+  });
+});
+
+describe("canUndo — newer-events guard (rule the old test missed)", () => {
+  it("blocks a non-coordinator when newer events exist", () => {
+    expect(canUndo(ev({}), owner("table_volunteer"), ctx({ hasNewerEvents: true }))).toEqual({
+      ok: false,
+      error: "Newer events exist — ask a coordinator to override instead",
+    });
+  });
+
+  it("does NOT block a coordinator when newer events exist", () => {
+    expect(canUndo(ev({}), other("coordinator"), ctx({ hasNewerEvents: true })).ok).toBe(true);
+  });
+
+  it("the too-late check takes precedence over the newer-events check", () => {
+    const r = canUndo(
+      ev({ occurredAt: new Date(NOW - 70_000).toISOString() }),
+      owner("table_volunteer"),
+      ctx({ hasNewerEvents: true }),
+    );
+    expect(r).toEqual({ ok: false, error: "Too late to undo — ask a coordinator to override" });
   });
 });
