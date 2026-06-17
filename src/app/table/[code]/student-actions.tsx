@@ -19,6 +19,7 @@ import {
 import { STATE_PRESENTATION } from "@/lib/state-presentation";
 import type { UserRole } from "@/types/domain";
 import { isCoordinator } from "@/lib/auth/roles";
+import { buildPickupOptions, type PickupOption } from "@/lib/checkin/pickup-options";
 import {
   BusIcon,
   CheckIcon,
@@ -26,16 +27,6 @@ import {
   OctagonXIcon,
   UserCheckIcon,
 } from "lucide-react";
-
-type PickupOption = {
-  id: string | null;
-  fullName: string;
-  relationship: string | null;
-  /** "auth" = authorized_pickup_persons row; "guardian" = guardians row;
-   *  "primary" = the family's primary guardian; "emergency" = emergency
-   *  contact on the family; "unlisted" = entered free-form by volunteer */
-  kind: "auth" | "guardian" | "primary" | "emergency" | "unlisted";
-};
 
 /**
  * Action surface for a single student on the table check-in page.
@@ -171,45 +162,14 @@ export function StudentActions({
     });
   }
 
-  /** Build the pickup-picker options, dedup'd by name. */
-  const pickupOptions: PickupOption[] = [];
-  if (primaryGuardianName) {
-    pickupOptions.push({
-      id: null,
-      fullName: primaryGuardianName,
-      relationship: "Primary guardian",
-      kind: "primary",
-    });
-  }
-  for (const g of guardians) {
-    if (pickupOptions.some((o) => o.fullName === g.fullName)) continue;
-    pickupOptions.push({
-      id: null,
-      fullName: g.fullName,
-      relationship: g.relationship,
-      kind: "guardian",
-    });
-  }
-  for (const p of authorizedPickup) {
-    if (pickupOptions.some((o) => o.fullName === p.fullName)) continue;
-    pickupOptions.push({
-      id: p.id,
-      fullName: p.fullName,
-      relationship: p.relationship,
-      kind: "auth",
-    });
-  }
-  if (
-    emergencyContact &&
-    !pickupOptions.some((o) => o.fullName === emergencyContact.name)
-  ) {
-    pickupOptions.push({
-      id: null,
-      fullName: emergencyContact.name,
-      relationship: emergencyContact.relationship,
-      kind: "emergency",
-    });
-  }
+  // Pickup-picker options (dedup'd by name) — shared pure builder, pinned by
+  // pickup-options.test.ts.
+  const pickupOptions: PickupOption[] = buildPickupOptions({
+    primaryGuardianName,
+    emergencyContact,
+    guardians,
+    authorizedPickup,
+  });
 
   function submitPickup() {
     if (pickupSelection === "__unlisted__") {

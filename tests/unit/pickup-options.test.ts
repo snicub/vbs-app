@@ -1,74 +1,10 @@
 /**
- * Pickup-person picker — pure logic. The component itself is rendered, but
- * the option-building logic (dedup, ordering, kind tagging) is what we
- * really need to pin. Extracted here so it can be tested standalone.
+ * Pickup-person picker option builder — exercises the REAL buildPickupOptions
+ * the component uses (dedup, ordering, kind tagging), so the test can't drift
+ * from what the picker actually offers a volunteer.
  */
 import { describe, it, expect } from "vitest";
-
-type PickupKind = "auth" | "guardian" | "primary" | "emergency" | "unlisted";
-
-type PickupOption = {
-  id: string | null;
-  fullName: string;
-  relationship: string | null;
-  kind: PickupKind;
-};
-
-/**
- * Mirror of the option-building in student-actions.tsx. If the component
- * ever drifts from this contract, the test should fail loudly.
- */
-function buildPickupOptions({
-  primaryGuardianName,
-  emergencyContact,
-  guardians,
-  authorizedPickup,
-}: {
-  primaryGuardianName: string | null;
-  emergencyContact: { name: string; relationship: string | null } | null;
-  guardians: { fullName: string; relationship: string | null }[];
-  authorizedPickup: { id: string; fullName: string; relationship: string | null }[];
-}): PickupOption[] {
-  const out: PickupOption[] = [];
-  if (primaryGuardianName) {
-    out.push({
-      id: null,
-      fullName: primaryGuardianName,
-      relationship: "Primary guardian",
-      kind: "primary",
-    });
-  }
-  for (const g of guardians) {
-    if (out.some((o) => o.fullName === g.fullName)) continue;
-    out.push({
-      id: null,
-      fullName: g.fullName,
-      relationship: g.relationship,
-      kind: "guardian",
-    });
-  }
-  for (const p of authorizedPickup) {
-    if (out.some((o) => o.fullName === p.fullName)) continue;
-    out.push({
-      id: p.id,
-      fullName: p.fullName,
-      relationship: p.relationship,
-      kind: "auth",
-    });
-  }
-  if (
-    emergencyContact &&
-    !out.some((o) => o.fullName === emergencyContact.name)
-  ) {
-    out.push({
-      id: null,
-      fullName: emergencyContact.name,
-      relationship: emergencyContact.relationship,
-      kind: "emergency",
-    });
-  }
-  return out;
-}
+import { buildPickupOptions } from "@/lib/checkin/pickup-options";
 
 describe("pickup-person picker option list", () => {
   it("puts primary guardian first when present", () => {
