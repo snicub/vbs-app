@@ -3,17 +3,14 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { env } from "@/lib/env";
 import { getLocalDate } from "@/lib/date";
 import { sendSms } from "@/lib/notifications/send";
-import { anomaliesFor, type AnomalyKind } from "@/lib/anomaly";
+import { type AnomalyKind } from "@/lib/anomaly";
+import {
+  anomalyPairs,
+  unnotifiedPairs,
+  type AnomalyStatusRow,
+} from "@/lib/notifications/anomaly-watch";
 
 export const dynamic = "force-dynamic";
-
-type AnomalyRow = {
-  student_id: string;
-  is_late_am: boolean;
-  is_boarded_but_not_arrived: boolean;
-  is_in_but_not_out: boolean;
-  is_pm_van_stuck: boolean;
-};
 
 type StudentRow = {
   id: string;
@@ -58,7 +55,7 @@ export async function GET(request: NextRequest) {
     .or(
       "is_late_am.eq.true,is_boarded_but_not_arrived.eq.true,is_in_but_not_out.eq.true,is_pm_van_stuck.eq.true",
     )
-    .returns<AnomalyRow[]>();
+    .returns<AnomalyStatusRow[]>();
 
   if (error) {
     return NextResponse.json({ ok: false, error: error.message }, { status: 500 });
@@ -68,20 +65,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ ok: true, scanned: 0, sent: 0 });
   }
 
-  // Flatten to (student_id, anomaly_kind) pairs
-  type Pair = { studentId: string; kind: AnomalyKind };
-  const pairs: Pair[] = [];
-  for (const a of anomalies) {
-    const kinds = anomaliesFor({
-      isLateAm: a.is_late_am,
-      isBoardedButNotArrived: a.is_boarded_but_not_arrived,
-      isInButNotOut: a.is_in_but_not_out,
-      isPmVanStuck: a.is_pm_van_stuck,
-    });
-    for (const kind of kinds) pairs.push({ studentId: a.student_id, kind });
-  }
+  // Flatten to (student_id, anomaly_kind) pairs, then drop already-texted ones.
+  const pairs = anomalyPairs(anomalies);
 
-  // Filter pairs against already-notified rows
   const studentIds = Array.from(new Set(pairs.map((p) => p.studentId)));
   const { data: alreadyNotified } = await admin
     .from("anomaly_notifications")
@@ -89,11 +75,8 @@ export async function GET(request: NextRequest) {
     .eq("event_date", today)
     .in("student_id", studentIds)
     .returns<{ student_id: string; anomaly_kind: string }[]>();
-  const seen = new Set<string>(
-    (alreadyNotified ?? []).map((r) => `${r.student_id}:${r.anomaly_kind}`),
-  );
 
-  const newAlerts = pairs.filter((p) => !seen.has(`${p.studentId}:${p.kind}`));
+  const newAlerts = unnotifiedPairs(pairs, alreadyNotified ?? []);
   if (newAlerts.length === 0) {
     return NextResponse.json({ ok: true, scanned: pairs.length, sent: 0 });
   }
