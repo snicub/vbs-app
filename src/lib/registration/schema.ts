@@ -77,7 +77,7 @@ export const StudentSchema = z.object({
     .number()
     .int()
     .min(1)
-    .max(18)
+    .max(99)
     .optional()
     .nullable(),
   grade: z.string().trim().optional().nullable(),
@@ -142,14 +142,8 @@ export const FamilyRegistrationSchema = z.object({
   if (!data.family.city?.trim()) {
     ctx.addIssue({ code: "custom", path: ["family", "city"], message: "City is required for van transportation" });
   }
-  // State disambiguates a city name for geocoding — without it "Springfield"
-  // can silently resolve to the wrong town when routes are built later.
-  if (!data.family.state?.trim()) {
-    ctx.addIssue({ code: "custom", path: ["family", "state"], message: "State is required for van transportation" });
-  }
-  if (!data.family.postalCode?.trim()) {
-    ctx.addIssue({ code: "custom", path: ["family", "postalCode"], message: "ZIP code is required for van transportation" });
-  }
+  // State + ZIP aren't collected (the event is in Sisseton, SD): state is hard-set
+  // to "SD" on the client, ZIP is omitted. Street + city geocodes the home fine.
 });
 
 export type FamilyRegistrationInput = z.infer<typeof FamilyRegistrationSchema>;

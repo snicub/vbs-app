@@ -22,10 +22,7 @@ export default async function Home() {
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <header className="mb-8">
-        <h1 className="text-2xl font-semibold tracking-tight">Register your family for VBS</h1>
-        <p className="text-muted-foreground text-base mt-1">
-          One form per family. It only takes a few minutes — no account needed.
-        </p>
+        <h1 className="text-2xl font-semibold tracking-tight">South Dakota Vacation Bible School 2026: Better Together</h1>
       </header>
       <SignupForm consents={consents} />
     </main>

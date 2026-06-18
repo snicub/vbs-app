@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoInput, type PhotoValue } from "@/components/photo-input";
+import { clientId } from "@/lib/offline/uuid";
 import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
 import type { ConsentKind } from "@/types/domain";
@@ -20,20 +21,22 @@ type ConsentItem = {
 };
 
 type StudentDraft = {
+  // Stable id so list keys survive removing a middle child — an index key would
+  // otherwise re-pair a child's photo/state onto the wrong sibling's fieldset.
+  id: string;
   name: string;
   dob: string;
   age: string;
-  allergies: string;
   medicalNotes: string;
   ridesVan: boolean;
   photo: PhotoValue;
 };
 
 const emptyStudent = (): StudentDraft => ({
+  id: clientId(),
   name: "",
   dob: "",
   age: "",
-  allergies: "",
   medicalNotes: "",
   ridesVan: true,
   photo: null,
@@ -62,7 +65,9 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
     primaryPhone: "",
     streetAddress: "",
     city: "",
-    state: "",
+    // The event is in Sisseton, SD — state is constant, so we don't ask for it
+    // (or ZIP). Hard-set so route-building still has a state to geocode against.
+    state: "SD",
     postalCode: "",
   });
   const [emergency, setEmergency] = useState({ name: "", phone: "", relationship: "" });
@@ -96,14 +101,8 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
       toast.error(`Enter a date of birth or age for child #${missingDobAge + 1}.`);
       return;
     }
-    if (
-      needsVan &&
-      (!family.streetAddress.trim() ||
-        !family.city.trim() ||
-        !family.state.trim() ||
-        !family.postalCode.trim())
-    ) {
-      toast.error("Please add your full home address (including state) so we can plan the van ride.");
+    if (needsVan && (!family.streetAddress.trim() || !family.city.trim())) {
+      toast.error("Please add your home street address and town so we can plan the van ride.");
       return;
     }
 
@@ -116,7 +115,7 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           dob: s.dob || null,
           ageAtRegistration: s.age.trim() ? Number(s.age) : null,
           grade: null,
-          allergies: s.allergies || null,
+          allergies: null,
           medicalNotes: s.medicalNotes || null,
           photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
           transport: { mode: s.ridesVan ? "van" : "parent_both" },
@@ -246,7 +245,7 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
   return (
     <form onSubmit={onSubmit} className="space-y-6">
       <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
-        <h2 className="text-xl font-semibold">Your info</h2>
+        <h2 className="text-xl font-semibold">Caregiver&apos;s info</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Your name" required>
             <Input
@@ -266,6 +265,14 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
             />
           </Field>
         </div>
+        <Field label="Email">
+          <Input
+            type="email"
+            autoComplete="email"
+            value={family.primaryEmail}
+            onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })}
+          />
+        </Field>
       </section>
 
       <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
@@ -280,8 +287,12 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           </Button>
         </div>
         {students.map((s, i) => (
-          <fieldset key={i} className="rounded-xl border bg-muted/30 p-4 space-y-4">
+          <fieldset key={s.id} className="rounded-xl border bg-muted/30 p-4 space-y-4">
             <legend className="px-1 text-base font-medium">Child #{i + 1}</legend>
+
+            <Field label="Photo">
+              <PhotoInput value={s.photo} onChange={(p) => updateStudent(i, { photo: p })} />
+            </Field>
 
             <Field label="Child's name" required>
               <Input
@@ -303,7 +314,7 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
                   type="number"
                   inputMode="numeric"
                   min={1}
-                  max={18}
+                  max={99}
                   value={s.age}
                   onChange={(e) => updateStudent(i, { age: e.target.value })}
                 />
@@ -331,29 +342,13 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
               </label>
             </div>
 
-            <Field label="Allergies (one per line)">
-              <Textarea
-                value={s.allergies}
-                onChange={(e) => updateStudent(i, { allergies: e.target.value })}
-              />
-            </Field>
-            <Field label="Medical notes">
+            <Field label="Allergies & medical notes">
               <Textarea
                 value={s.medicalNotes}
                 onChange={(e) => updateStudent(i, { medicalNotes: e.target.value })}
+                placeholder="Anything staff should know — allergies, medications, conditions"
               />
             </Field>
-
-            <details className="rounded-lg border bg-card px-4 py-3">
-              <summary className="cursor-pointer text-base font-medium min-h-11 flex items-center">
-                Add a photo (optional)
-              </summary>
-              <div className="mt-4">
-                <Field label="Photo">
-                  <PhotoInput value={s.photo} onChange={(p) => updateStudent(i, { photo: p })} />
-                </Field>
-              </div>
-            </details>
 
             {students.length > 1 && (
               <Button
@@ -397,39 +392,14 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
               onChange={(e) => setFamily({ ...family, city: e.target.value })}
             />
           </Field>
-          <Field label="State" required={needsVan}>
-            <Input
-              required={needsVan}
-              autoComplete="address-level1"
-              value={family.state}
-              onChange={(e) => setFamily({ ...family, state: e.target.value })}
-            />
-          </Field>
-          <Field label="ZIP code" required={needsVan}>
-            <Input
-              inputMode="numeric"
-              autoComplete="postal-code"
-              required={needsVan}
-              value={family.postalCode}
-              onChange={(e) => setFamily({ ...family, postalCode: e.target.value })}
-            />
-          </Field>
         </div>
       </section>
 
       <details className="rounded-2xl border bg-card px-4 py-3 shadow-sm">
         <summary className="cursor-pointer text-base font-medium min-h-11 flex items-center">
-          Add email &amp; emergency contact (optional)
+          Add emergency contact (optional)
         </summary>
         <div className="mt-4 space-y-4">
-          <Field label="Email">
-            <Input
-              type="email"
-              autoComplete="email"
-              value={family.primaryEmail}
-              onChange={(e) => setFamily({ ...family, primaryEmail: e.target.value })}
-            />
-          </Field>
           <div className="space-y-3">
             <div className="text-base font-medium">Emergency contact</div>
             <div className="grid gap-3 sm:grid-cols-3">
