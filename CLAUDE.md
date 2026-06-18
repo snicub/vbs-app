@@ -209,9 +209,67 @@ User-level preferences and prior conversation memories live at:
 
 These do NOT auto-load from inside `vbs-app/` (auto-memory is project-scoped to the directory Claude is launched from). The most load-bearing pieces are baked into the "How to work with this user" section above. If you need more, read that directory.
 
+## Agent team (16 specialists — delegate by flow)
+
+This app is maintained via flow-specialist subagents in `.claude/agents/`, each with durable cross-session memory in `.claude/agent-memory/<name>/`. When working on a flow, delegate to its owner (build/review/audit); for an app-wide pass, dispatch them per flow and cross-reference. (Supersedes the stale "9/12 agents" notes in the dated entries below — current roster is 16.)
+
+- **registration-flow-expert** — `/signup`, registerFamily, consents, parent token page
+- **check-in-flow-expert** — `/table` + `/table/[code]`, action surface, override/Undo, release
+- **van-flow-expert** — `/van/[vanId]` driver/aide experience, AM board + PM checkout, GPS broadcast
+- **van-management-expert** — `/coordinator/vans/manage` fleet setup: vans, routes, per-day driver/aide
+- **live-map-flow-expert** — `/coordinator/vans/map`, gps-freshness, van_locations realtime
+- **location-routing-expert** — address→route builder, geocode, shared `needsRouting`, cron TZ
+- **coordinator-ops-expert** — `/coordinator` dashboard, worklists, closeout, announcements, groups, print failsafe
+- **student-edit-flow-expert** — `/coordinator/students` roster + edit, filters, age groups, boarded-stop guard
+- **nametag-flow-expert** — `/coordinator/nametags` + stop colors, print bands, needs-routing tag
+- **notifications-expert** — Twilio SMS, Resend, crons, webhooks, STOP/opt-out
+- **offline-pwa-expert** — offline outbox (`lib/offline/*`), service worker, replay safety
+- **auth-session-expert** — `/login`, getSessionUser, `ALLOW_NO_LOGIN` kiosk gate, roles, middleware
+- **photos-storage-expert** — `/photos` Drive embed, private buckets, signed-url (+ batch), image resize
+- **design-system-expert** — `globals.css` OKLCH theme + print CSS, state-presentation/state-badge, `ui/*`, responsive
+- **data-integrity-expert** — event log, record_event/smart_checkout, the view + anomalies, RLS, migrations, idempotency
+- **test-suite-expert** — Vitest + pgTAP + Playwright, `pnpm check`/`test:db`, coverage strategy
+
 ## Current status (2026-05-31 — morning name tags + editable town colors)
 
 All 5 phases on `main`. **193 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
+
+### 2026-06-17 (cont.) — door-to-door hardening: registration is now orphan-safe (380 tests)
+
+Three fixes so the signup link is safe to send out for on-a-phone, door-to-door use (all green: 380 tests / typecheck / lint / `next build`):
+- **Network-failure feedback:** `signup-form.tsx` submit now has a `catch` → a dropped connection (or a payload the server rejects pre-handler) shows "Couldn't reach the server — tap Register again. Your info is still here." (was a dead spinner, no message).
+- **Photo payload ceiling:** `next.config.mjs` `experimental.serverActions.bodySizeLimit = "4mb"` — several kids' inline base64 photos could exceed Next's 1MB default and fail the whole submit opaquely.
+- **Orphan-safe registration (the real fix for the non-transactional chain, done WITHOUT a migration):** `registerFamily` now compensates — any failure after the family row exists deletes the half-written family. `src/lib/registration/cleanup.ts` (`partialFamilyDeletes`, tested) defines the FK-safe delete order (consents → students → families; the first two are ON DELETE RESTRICT, students cascades its day-records, the family cascades guardians/pickup/tokens); `cleanupPartialFamily` executes it. This eliminates the "half-created family / invisible kid / tokenless family" risk in production with zero deploy risk. The plpgsql `register_family` RPC remains the textbook ideal for a Docker session but is no longer needed to send the link safely.
+
+### 2026-06-17 (cont.) — deep regression tests + safety-logic extraction (376 tests)
+
+Acted on the code-review's #10/#11 (untested safety logic + duplicated rules): pulled the five safety-critical decisions out of the server actions into pure, framework-free, exhaustively-tested modules — fixing review bugs #2/#3/#4/#5 + the I3 duplicate-consent gap along the way. **376 unit tests / typecheck / lint / `next build` (25 routes) all green** (+74 tests).
+
+New pure modules + suites:
+- **`src/lib/day-record-plan.ts`** (`resolveDayRecordUpdate`) — mode↔stop consistency + boarded-leg safety in ONE tested resolver reusing `ridesMorningVan`/`ridesAfternoonVan`/`boardedStopConflict` (kills the 4 inlined copies). `updateStudentDayRecord` delegates (now also fetches `mode`). 30+ cases: boarded-but-untouched leg, same-value no-op while boarded, pm-boarded→pickup_only reject, unknown/null mode, minimal-diff updates.
+- **`src/lib/events/occurred-at.ts`** (`clampOccurredAt`) — single home for the future-timestamp drop; `submitEvent` + `smartCheckOut` both call it (was copy-pasted).
+- **`src/lib/registration/consent-check.ts`** (`validateConsentSet`) — version pin + exactly-the-required-kinds. **Tightened to require exactly N items → closes the duplicate-consent-row gap (audit I3).**
+- **`src/lib/registration/insert-error.ts`** (`classifyStudentInsertError`) — wristband-vs-duplicate-child matched on message AND details (review #4); unattributable 23505 → duplicate_child (never an infinite retry).
+- **`src/lib/parent/card-state.ts`** (`parentCardState`) — review #2 (not-attending flag never masks a LIVE checked-in/on-van state) + #5 (missing row → calm "not attending", not a false "Not arrived").
+
+Still NOT done (need Docker): transactional `register_family` RPC (the one real registration gap — non-transactional insert chain can orphan a family on a mid-chain network blip) and a DB-level `least(occurred_at, now())` backstop.
+
+### 2026-06-17 — register+admin deep audit (6 agents), safety fixes, teachers-per-group, dead-code sweep
+
+**Security posture DECIDED:** `/coordinator` stays **public** (user's call for this one-time event). With `ALLOW_NO_LOGIN=true` anyone who knows the URL has full admin (all PII + release power); the login chain is broken in the flag-off path but unused, so it's left as-is. Do NOT re-flag this — it's intentional. (Suggested-but-not-done: delete the dead `/login` + `signIn` so the contradictory "secure default" doesn't mislead.)
+
+6-agent audit of registration + admin flows. **Fixed (app-layer, verified green — 302 unit tests / typecheck / lint / `next build` 25 routes):**
+- **Consent version pinned** — `registerFamily` now rejects any `textVersion !== CONSENT_VERSION` (public endpoint could otherwise record weaker v1 medical wording).
+- **Duplicate-child no longer misread as a wristband collision** — a 23505 from the name/age dedup index returns a clear "already registered" message instead of burning 16 retries then aborting mid-chain into an orphan family.
+- **Parent page** shows "Not attending today" instead of a false "Not arrived" for kids with `attending=false` (added `attending` to the status query).
+- **Coordinator mode↔stop consistency enforced server-side** (`updateStudentDayRecord`): a mode change now clears the unused-leg stop (kills ghost-van manifests) AND refuses to switch a kid off a van they're currently boarded on (was only guarded in the form, not the action).
+- **Future client timestamps dropped** in `submitEvent` + `smartCheckOut` (`occurredAt > now()` → undefined) so a fast van-tablet clock can't silence `is_pm_van_stuck`/`is_boarded_but_not_arrived` or poison the checkout anchor.
+
+**Audit items NOT yet done (need a Docker/`pnpm test:db` session, deliberately deferred):** transactional `register_family` RPC (full atomicity — the dup-child fix covers the common orphan trigger but a mid-chain network failure can still orphan); DB-level `least(occurredAt, now())` clamp as defense-in-depth; `is_late_am` fallback for null-stop van kids (the late-arrival alarm can't fire until they're routed — **blocked on a global AM start time**, which isn't set yet; the needs-routing worklist is the interim). Under no-login the undo guards (no-show reversal, 60s window, newer-events) are all bypassed since every actor is "coordinator" — acceptable for solo-you, noted.
+
+**Class-group builder extended** (`/coordinator/groups`): added a **Teachers / group** stepper (set 2 for two-per-class) and a **By teachers** mode (enter available teachers → makes `floor(teachers ÷ per-group)` groups). Summary shows needs/spare/⚠short. Pure `buildGroups` gained mode `"teachers"` + `teachersNeeded()` helper; +7 tests.
+
+**Dead-code sweep (1 agent):** codebase already lean (no unused deps). Deleted: `src/app/auth/callback/route.ts` (dead magic-link callback), `src/lib/registration/transport.ts` + its `deriveTransportMode` tests (the single-checkbox signup inlines the mapping; the 4 modes still live in domain/day-records), and 7 unused type aliases from `src/types/domain.ts` (AuthorizedPickupPerson, IncidentSeverity, NotificationChannel, NotificationStatus, StudentDayRecord, VanAssignment, VanLocation). Kept (NOT dead): the SW kill-switch (`public/sw.js` + register), the whole login chain, v1/v2 consent text + retired consent-kind enum entries (historical records reference them).
 
 ### 2026-06-17 (overnight) — autonomous review loop, 8 waves on a branch
 

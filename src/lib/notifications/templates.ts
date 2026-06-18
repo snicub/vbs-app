@@ -32,7 +32,8 @@ export function confirmationOnRegister(ctx: TemplateContext): Rendered {
     subject: "VBS registration confirmed",
     body:
       `Thanks, ${ctx.guardianName}! ${ctx.studentName} is registered for VBS. ` +
-      `Watch ${ctx.statusUrl ?? ""} during the event for real-time status.`,
+      `Watch ${ctx.statusUrl ?? ""} during the event for real-time status.` +
+      `\n\nReply STOP to opt out.`,
   };
 }
 

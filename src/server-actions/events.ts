@@ -9,6 +9,7 @@ import { recordEvent } from "@/lib/events/record-event";
 import { canUndo } from "@/lib/events/undo";
 import type { EventType } from "@/lib/events/state-machine";
 import { newIdempotencyKey } from "@/lib/idempotency";
+import { clampOccurredAt } from "@/lib/events/occurred-at";
 import { getLocalDate } from "@/lib/date";
 
 const EventArgsSchema = z.object({
@@ -64,6 +65,10 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
     return { ok: false, error: "Override requires a written reason." };
   }
 
+  // Drop a future client timestamp (fast van-tablet clock) so it can't silence
+  // the overdue-van alarms or reorder the log. See clampOccurredAt.
+  const occurredAt = clampOccurredAt(args.occurredAt, Date.now());
+
   const result = await recordEvent({
     studentId: args.studentId,
     eventDate: args.eventDate,
@@ -75,7 +80,7 @@ export async function submitEvent(input: unknown): Promise<EventActionResult> {
     stopId: args.stopId ?? null,
     overrideReason: args.overrideReason ?? null,
     metadata: args.metadata,
-    occurredAt: args.occurredAt,
+    occurredAt,
   });
 
   if (!result.ok) return result;

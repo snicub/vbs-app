@@ -6,6 +6,9 @@ import { VBS_DATES } from "@/lib/registration/dates";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { CONSENT_TEXT, CONSENT_VERSION } from "@/lib/consents/text";
 import { hashConsentText } from "@/lib/consents/hash";
+import { validateConsentSet } from "@/lib/registration/consent-check";
+import { classifyStudentInsertError } from "@/lib/registration/insert-error";
+import { partialFamilyDeletes } from "@/lib/registration/cleanup";
 
 export type RegistrationResult =
   | {
@@ -24,32 +27,25 @@ export async function registerFamily(
   if (!parsed.success) {
     return {
       ok: false,
-      error: parsed.error.issues
-        .map((i) => `${i.path.join(".")}: ${i.message}`)
-        .join("; "),
+      // Plain messages only — a parent shouldn't see "family.primaryPhone:" jargon.
+      error: Array.from(new Set(parsed.error.issues.map((i) => i.message))).join("; "),
     };
   }
 
   const data = parsed.data;
 
-  // Enforce the required consent KINDS, not just the count. The schema only
-  // checks `min(3)`; without this, a crafted payload (this is a public,
-  // unauthenticated endpoint) could send three copies of one consent and omit
-  // the medical/liability ones while still passing the per-kind hash check.
+  // Enforce required KINDS + pin the current version (a crafted payload on this
+  // public, unauthenticated endpoint must not omit a consent or downgrade to
+  // weaker old wording). See validateConsentSet.
   const requiredKinds = Object.keys(CONSENT_TEXT[CONSENT_VERSION]);
-  const submittedKinds = new Set<string>(data.consents.agreed.map((c) => c.kind));
-  if (
-    submittedKinds.size !== requiredKinds.length ||
-    !requiredKinds.every((k) => submittedKinds.has(k))
-  ) {
-    return { ok: false, error: "Please agree to all required consents." };
-  }
+  const consentCheck = validateConsentSet(data.consents.agreed, requiredKinds, CONSENT_VERSION);
+  if (!consentCheck.ok) return consentCheck;
 
-  // Verify consent hashes: recompute from canonical text, reject if mismatch
+  // Hash verification stays here (needs async crypto): recompute each consent
+  // from the canonical current-version text and reject on any mismatch.
+  const currentTexts = CONSENT_TEXT[CONSENT_VERSION] as Record<string, string>;
   for (const consent of data.consents.agreed) {
-    const version = consent.textVersion as keyof typeof CONSENT_TEXT;
-    const versionTexts = CONSENT_TEXT[version] as Record<string, string> | undefined;
-    const canonical = versionTexts?.[consent.kind];
+    const canonical = currentTexts[consent.kind];
     if (!canonical) {
       return { ok: false, error: "Consent text has changed. Please reload the page and try again." };
     }
@@ -84,6 +80,14 @@ export async function registerFamily(
 
   const familyId = family.id;
 
+  // The chain below isn't one DB transaction, so on any failure AFTER the family
+  // row exists we compensate by deleting the half-written family — no orphan
+  // (kids invisible on manifests, or a family with no access token to reach).
+  const fail = async (error: string): Promise<RegistrationResult> => {
+    await cleanupPartialFamily(admin, familyId);
+    return { ok: false, error };
+  };
+
   // 2) Guardians
   const guardianRows = data.guardians.map((g) => ({
     family_id: familyId,
@@ -94,7 +98,7 @@ export async function registerFamily(
   }));
   const { error: guardianErr } = await admin.from("guardians").insert(guardianRows as never);
   if (guardianErr) {
-    return { ok: false, error: `could not create guardians: ${guardianErr.message}` };
+    return fail(`could not create guardians: ${guardianErr.message}`);
   }
 
   // 3) Authorized pickup persons (optional)
@@ -109,7 +113,7 @@ export async function registerFamily(
     }));
     const { error } = await admin.from("authorized_pickup_persons").insert(rows as never);
     if (error) {
-      return { ok: false, error: `could not record pickup contacts: ${error.message}` };
+      return fail(`could not record pickup contacts: ${error.message}`);
     }
   }
 
@@ -151,14 +155,19 @@ export async function registerFamily(
         break;
       }
       lastErr = error;
-      // 23505 = unique_violation. Anything else is fatal.
-      if (error?.code !== "23505") break;
+      const outcome = classifyStudentInsertError(error ?? {});
+      if (outcome === "fatal") break;
+      if (outcome === "duplicate_child") {
+        // Regenerating the code won't help — this child is already registered.
+        // Fail fast with a clear message instead of burning all 16 attempts.
+        return fail(
+          `${s.name} looks already registered in this family (same name and age). Remove the duplicate or adjust the details.`,
+        );
+      }
+      // outcome === "retry_wristband": transient code collision — regenerate.
     }
     if (!result) {
-      return {
-        ok: false,
-        error: `could not create student ${s.name}: ${lastErr?.message ?? "unknown"}`,
-      };
+      return fail(`could not create student ${s.name}: ${lastErr?.message ?? "unknown"}`);
     }
     inserted.push(result);
   }
@@ -203,7 +212,7 @@ export async function registerFamily(
   });
   const { error: dayErr } = await admin.from("student_day_records").insert(dayRows as never);
   if (dayErr) {
-    return { ok: false, error: `could not create day records: ${dayErr.message}` };
+    return fail(`could not create day records: ${dayErr.message}`);
   }
 
   // 6) Consents — snapshot each text+hash with typed name, ip, ua
@@ -221,7 +230,7 @@ export async function registerFamily(
   }));
   const { error: consentErr } = await admin.from("consents").insert(consentRows as never);
   if (consentErr) {
-    return { ok: false, error: `could not record consents: ${consentErr.message}` };
+    return fail(`could not record consents: ${consentErr.message}`);
   }
 
   // 7) Family access token for the parent status URL
@@ -231,16 +240,18 @@ export async function registerFamily(
     .select("token")
     .single<{ token: string }>();
   if (tokenErr || !tokenRow) {
-    return { ok: false, error: `could not create access token: ${tokenErr?.message ?? "unknown"}` };
+    return fail(`could not create access token: ${tokenErr?.message ?? "unknown"}`);
   }
 
   const { env } = await import("@/lib/env");
   const familyStatusUrl = `${env.NEXT_PUBLIC_BASE_URL}/parent/${tokenRow.token}`;
 
-  // Fire-and-forget SMS confirmation. We don't await — if Twilio is slow
-  // or down the registration still succeeds; the message lands in
-  // notifications_sent as 'queued'/'failed' for coordinator follow-up.
-  void sendConfirmationSms({
+  // Await the confirmation SMS: a server action's runtime can be frozen the
+  // instant it returns, so a fire-and-forget send often never reaches Twilio.
+  // sendConfirmationSms swallows its own errors (logging to notifications_sent),
+  // so awaiting it can't fail the registration — it just guarantees the attempt
+  // completes (and is recorded) before we respond.
+  await sendConfirmationSms({
     familyId,
     phone: data.family.primaryPhone,
     guardianName: data.family.primaryGuardianName,
@@ -285,5 +296,35 @@ async function sendConfirmationSms(args: {
     });
   } catch (err) {
     console.error("confirmation SMS failed:", err);
+  }
+}
+
+/**
+ * Compensating delete for a half-written family (the insert chain above isn't
+ * one transaction). `partialFamilyDeletes` gives the FK-safe order; this just
+ * executes it. Best-effort — a failure is logged, not thrown, and stops the
+ * sequence (a later delete depends on the earlier one having succeeded).
+ */
+type DeletableDb = {
+  from: (table: string) => {
+    delete: () => {
+      eq: (column: string, value: string) => PromiseLike<{ error: { message: string } | null }>;
+    };
+  };
+};
+
+async function cleanupPartialFamily(
+  admin: ReturnType<typeof createAdminClient>,
+  familyId: string,
+): Promise<void> {
+  const db = admin as unknown as DeletableDb;
+  for (const d of partialFamilyDeletes(familyId)) {
+    const { error } = await db.from(d.table).delete().eq(d.column, d.value);
+    if (error) {
+      console.error(
+        `cleanup of partial family ${familyId} failed at ${d.table}: ${error.message}`,
+      );
+      return;
+    }
   }
 }

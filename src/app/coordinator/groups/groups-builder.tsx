@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { buildGroups, type GroupKid } from "@/lib/coordinator/groups";
+import { buildGroups, teachersNeeded, type GroupKid } from "@/lib/coordinator/groups";
 import { cn } from "@/lib/utils";
 
 export type BuilderKid = GroupKid & { present: boolean };
@@ -19,21 +19,33 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   const [source, setSource] = useState<"present" | "all">(
     presentCount > 0 ? "present" : "all",
   );
-  const [mode, setMode] = useState<"size" | "count">("size");
+  const [mode, setMode] = useState<"size" | "count" | "teachers">("size");
   const [size, setSize] = useState(10);
   const [count, setCount] = useState(6);
+  const [teachers, setTeachers] = useState(6);
+  const [perGroupTeachers, setPerGroupTeachers] = useState(1);
   const [mix, setMix] = useState(false);
 
   const { groups, poolCount } = useMemo(() => {
     const pool = source === "present" ? kids.filter((k) => k.present) : kids;
     return {
-      groups: buildGroups(pool, { mode, targetSize: size, groupCount: count, mix }),
+      groups: buildGroups(pool, {
+        mode,
+        targetSize: size,
+        groupCount: count,
+        availableTeachers: teachers,
+        teachersPerGroup: perGroupTeachers,
+        mix,
+      }),
       poolCount: pool.length,
     };
-  }, [kids, source, mode, size, count, mix]);
+  }, [kids, source, mode, size, count, teachers, perGroupTeachers, mix]);
 
   const perGroup =
     groups.length > 0 ? Math.round((poolCount / groups.length) * 10) / 10 : 0;
+  const needed = teachersNeeded(groups.length, perGroupTeachers);
+  // In "by teachers" mode, surface whether the staff covers the groups made.
+  const teacherDiff = mode === "teachers" ? teachers - needed : 0;
 
   return (
     <div className="space-y-4">
@@ -51,23 +63,27 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
           <Seg
             label="Make groups by"
             value={mode}
-            onChange={(v) => setMode(v as "size" | "count")}
+            onChange={(v) => setMode(v as "size" | "count" | "teachers")}
             options={[
               { value: "size", label: "Kids per group" },
               { value: "count", label: "# of groups" },
+              { value: "teachers", label: "By teachers" },
             ]}
           />
           {mode === "size" ? (
             <NumberField label="Kids per group" value={size} min={2} max={40} onChange={setSize} />
+          ) : mode === "count" ? (
+            <NumberField label="Number of groups" value={count} min={1} max={30} onChange={setCount} />
           ) : (
-            <NumberField
-              label="Groups (1 teacher each)"
-              value={count}
-              min={1}
-              max={30}
-              onChange={setCount}
-            />
+            <NumberField label="Available teachers" value={teachers} min={1} max={40} onChange={setTeachers} />
           )}
+          <NumberField
+            label="Teachers / group"
+            value={perGroupTeachers}
+            min={1}
+            max={5}
+            onChange={setPerGroupTeachers}
+          />
           <Seg
             label="Ages"
             value={mix ? "mix" : "similar"}
@@ -89,7 +105,7 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
         <p className="text-sm text-muted-foreground">
           {poolCount === 0
             ? "No kids in this pool yet."
-            : `${poolCount} kids → ${groups.length} ${groups.length === 1 ? "group" : "groups"} · ~${perGroup} per group · needs ${groups.length} ${groups.length === 1 ? "teacher" : "teachers"}.`}
+            : `${poolCount} kids → ${groups.length} ${groups.length === 1 ? "group" : "groups"} · ~${perGroup} per group · needs ${needed} ${needed === 1 ? "teacher" : "teachers"}${perGroupTeachers > 1 ? ` (${perGroupTeachers} per group)` : ""}${teacherDiff > 0 ? ` · ${teacherDiff} spare` : ""}${teacherDiff < 0 ? ` · ⚠ ${-teacherDiff} short` : ""}.`}
         </p>
       </div>
 

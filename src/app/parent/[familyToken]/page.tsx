@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { STATE_PRESENTATION, TONE_CLASSES, safeDayState } from "@/lib/state-presentation";
+import { STATE_PRESENTATION, TONE_CLASSES } from "@/lib/state-presentation";
+import { parentCardState } from "@/lib/parent/card-state";
 import { StateBadge } from "@/components/state-badge";
 import { AutoRefresh } from "@/components/auto-refresh";
 import { getLocalDate, formatLocalTime } from "@/lib/date";
@@ -31,6 +32,7 @@ type StatusRow = {
   student_id: string;
   event_date: string;
   state: string;
+  attending: boolean;
   mode: string | null;
   wristband_color_name: string | null;
   wristband_color_for_day: string | null;
@@ -108,7 +110,7 @@ export default async function ParentStatusPage({
   const { data: statuses } = studentIds.length > 0
     ? await admin
         .from("student_day_status")
-        .select("student_id, event_date, state, mode, wristband_color_name, wristband_color_for_day, last_event_at, morning_van_id, afternoon_van_id, morning_stop_id, afternoon_stop_id, scheduled_am_time, scheduled_pm_time")
+        .select("student_id, event_date, state, attending, mode, wristband_color_name, wristband_color_for_day, last_event_at, morning_van_id, afternoon_van_id, morning_stop_id, afternoon_stop_id, scheduled_am_time, scheduled_pm_time")
         .eq("event_date", today)
         .in("student_id", studentIds)
         .returns<StatusRow[]>()
@@ -169,7 +171,29 @@ export default async function ParentStatusPage({
       <ul className="space-y-3">
         {(students ?? []).map((s) => {
           const status = statusMap.get(s.id);
-          const state = safeDayState(status?.state ?? "not_started");
+          const card = parentCardState(
+            status ? { attending: status.attending, state: status.state } : null,
+          );
+
+          // Not attending today (or no plan for today) → a calm line, never a
+          // false "Not arrived". But a LIVE state (checked in / on a van) wins.
+          if (card.kind === "not_attending") {
+            return (
+              <li key={s.id} className="rounded-xl border bg-card p-4 opacity-80">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="font-semibold text-base">
+                    {s.preferred_first_name ?? s.legal_first_name} {s.legal_last_name}
+                  </div>
+                  <code className="font-mono text-xs text-muted-foreground">
+                    {s.wristband_code}
+                  </code>
+                </div>
+                <div className="text-sm text-muted-foreground pt-1">Not attending today.</div>
+              </li>
+            );
+          }
+
+          const state = card.state;
           const p = STATE_PRESENTATION[state];
           const tone = TONE_CLASSES[p.tone];
           const Icon = p.icon;

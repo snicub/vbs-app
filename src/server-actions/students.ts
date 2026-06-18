@@ -6,7 +6,7 @@ import { createClient } from "@/lib/supabase/server";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
-import { boardedStopConflict } from "@/lib/routing";
+import { resolveDayRecordUpdate } from "@/lib/day-record-plan";
 
 // -- Update student profile (name, allergies, medical notes) --
 
@@ -121,51 +121,54 @@ export async function updateStudentDayRecord(
 
   const { studentId, eventDate, ...fields } = parsed.data;
 
-  const updates: Record<string, unknown> = {};
-  if (fields.mode !== undefined) updates.mode = fields.mode;
-  if (fields.morningStopId !== undefined) updates.morning_stop_id = fields.morningStopId;
-  if (fields.afternoonStopId !== undefined) updates.afternoon_stop_id = fields.afternoonStopId;
-  if (fields.attending !== undefined) updates.attending = fields.attending;
-
-  if (Object.keys(updates).length === 0) {
-    return { ok: true };
-  }
-
   const supabase = await createClient();
 
-  // If a stop is changing, don't re-point a van out from under a boarded child
-  // (would strip the aide's offload authz). Only check when a stop field is part
-  // of this update.
-  if (fields.morningStopId !== undefined || fields.afternoonStopId !== undefined) {
+  // An attendance-only edit doesn't touch the van plan, so it needs no current
+  // state. Anything that changes mode or a stop is resolved against the current
+  // plan by resolveDayRecordUpdate, which enforces mode↔stop consistency and
+  // refuses to disturb the leg a child is currently riding (boarded safety).
+  const touchesPlan =
+    fields.mode !== undefined ||
+    fields.morningStopId !== undefined ||
+    fields.afternoonStopId !== undefined;
+
+  let updates: Record<string, unknown>;
+  if (!touchesPlan) {
+    if (fields.attending === undefined) return { ok: true };
+    updates = { attending: fields.attending };
+  } else {
     const { data: rec } = await supabase
       .from("student_day_status")
-      .select("state, morning_stop_id, afternoon_stop_id")
+      .select("state, mode, morning_stop_id, afternoon_stop_id")
       .eq("student_id", studentId)
       .eq("event_date", eventDate)
       .maybeSingle<{
         state: string;
+        mode: string | null;
         morning_stop_id: string | null;
         afternoon_stop_id: string | null;
       }>();
-    if (rec) {
-      const conflict = boardedStopConflict(
-        rec.state,
-        { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
-        {
-          morningStopId:
-            fields.morningStopId !== undefined ? fields.morningStopId : rec.morning_stop_id,
-          afternoonStopId:
-            fields.afternoonStopId !== undefined ? fields.afternoonStopId : rec.afternoon_stop_id,
-        },
-      );
-      if (conflict) {
-        return {
-          ok: false,
-          error: `This child is on the ${conflict} van right now — changing their ${conflict} stop would strip the aide's check-out authority. Undo their boarding first.`,
-        };
-      }
-    }
+    if (!rec) return { ok: false, error: "No plan found for this student on this day." };
+
+    const resolved = resolveDayRecordUpdate(
+      {
+        state: rec.state,
+        mode: rec.mode,
+        morningStopId: rec.morning_stop_id,
+        afternoonStopId: rec.afternoon_stop_id,
+      },
+      {
+        mode: fields.mode,
+        morningStopId: fields.morningStopId,
+        afternoonStopId: fields.afternoonStopId,
+        attending: fields.attending,
+      },
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    updates = resolved.updates;
   }
+
+  if (Object.keys(updates).length === 0) return { ok: true };
 
   const { error } = await supabase
     .from("student_day_records")

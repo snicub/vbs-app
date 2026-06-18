@@ -142,6 +142,11 @@ export const FamilyRegistrationSchema = z.object({
   if (!data.family.city?.trim()) {
     ctx.addIssue({ code: "custom", path: ["family", "city"], message: "City is required for van transportation" });
   }
+  // State disambiguates a city name for geocoding — without it "Springfield"
+  // can silently resolve to the wrong town when routes are built later.
+  if (!data.family.state?.trim()) {
+    ctx.addIssue({ code: "custom", path: ["family", "state"], message: "State is required for van transportation" });
+  }
   if (!data.family.postalCode?.trim()) {
     ctx.addIssue({ code: "custom", path: ["family", "postalCode"], message: "ZIP code is required for van transportation" });
   }

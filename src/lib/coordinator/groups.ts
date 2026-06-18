@@ -51,24 +51,42 @@ function ageRangeLabel(kids: GroupKid[]): string {
 
 export type GroupStrategy = {
   /** "size": aim for ~targetSize kids per group. "count": make exactly
-   *  groupCount groups (e.g. one per teacher). */
-  mode: "size" | "count";
+   *  groupCount groups. "teachers": make as many groups as the available
+   *  teachers can staff (availableTeachers ÷ teachersPerGroup). */
+  mode: "size" | "count" | "teachers";
   targetSize: number;
   groupCount: number;
+  /** Total teachers on hand — used in "teachers" mode. */
+  availableTeachers?: number;
+  /** How many teachers staff each group (default 1). Sets the group count in
+   *  "teachers" mode and the "teachers needed" total in every mode. */
+  teachersPerGroup?: number;
   /** false: keep similar ages together (grade-like classes). true: spread the
    *  age range across every group (mixed/buddy groups). */
   mix: boolean;
 };
 
+/** Teachers required to staff `groupCount` groups at `teachersPerGroup` each. */
+export function teachersNeeded(groupCount: number, teachersPerGroup = 1): number {
+  return groupCount * Math.max(1, Math.floor(teachersPerGroup));
+}
+
 export function buildGroups(kids: GroupKid[], strat: GroupStrategy): AgeGroup[] {
   if (kids.length === 0) return [];
 
   const sorted = kids.slice().sort(byAgeThenName);
-  const count =
-    strat.mode === "count"
-      ? Math.max(1, Math.min(Math.floor(strat.groupCount), sorted.length))
-      : // ceil so a group never exceeds targetSize (23 @ 10 → 3 groups, not 2).
-        Math.max(1, Math.ceil(sorted.length / Math.max(1, Math.floor(strat.targetSize))));
+  const perGroupTeachers = Math.max(1, Math.floor(strat.teachersPerGroup ?? 1));
+  let count: number;
+  if (strat.mode === "count") {
+    count = Math.floor(strat.groupCount);
+  } else if (strat.mode === "teachers") {
+    // As many groups as the staff can cover, one team of teachersPerGroup each.
+    count = Math.floor((strat.availableTeachers ?? 0) / perGroupTeachers);
+  } else {
+    // ceil so a group never exceeds targetSize (23 @ 10 → 3 groups, not 2).
+    count = Math.ceil(sorted.length / Math.max(1, Math.floor(strat.targetSize)));
+  }
+  count = Math.max(1, Math.min(count, sorted.length));
 
   if (strat.mix) {
     // Round-robin the age-sorted kids so each group spans the full range. The

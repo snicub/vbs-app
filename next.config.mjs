@@ -20,6 +20,11 @@ const nextConfig = {
       : false,
   },
   experimental: {
+    // Registration sends client-resized photos inline in the Server Action
+    // payload (base64, ~33% larger than the bytes). A family with several kids
+    // can blow past Next's 1MB default and fail the whole submit opaquely, so
+    // raise the ceiling. Photos target ≤~200KB each; 4mb is generous headroom.
+    serverActions: { bodySizeLimit: "4mb" },
     // Tree-shake barrel files (lucide-react, etc.) for smaller bundles
     optimizePackageImports: [
       "lucide-react",

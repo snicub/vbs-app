@@ -20,23 +20,12 @@ export type TransportMode =
 
 export type RouteDirection = "am" | "pm";
 
-export type NotificationChannel = "sms" | "email";
-
-export type NotificationStatus =
-  | "queued"
-  | "sent"
-  | "delivered"
-  | "failed"
-  | "undelivered";
-
 export type ConsentKind =
   | "media_release"
   | "medical"
   | "transport"
   | "general_liability"
   | "photo_release";
-
-export type IncidentSeverity = "info" | "warning" | "critical";
 
 export type Family = {
   id: string;
@@ -66,16 +55,6 @@ export type Guardian = {
   phone: string | null;
   relationship: string | null;
   userId: string | null;
-};
-
-export type AuthorizedPickupPerson = {
-  id: string;
-  familyId: string;
-  fullName: string;
-  phone: string | null;
-  relationship: string | null;
-  isRestricted: boolean;
-  notes: string | null;
 };
 
 export type Student = {
@@ -124,26 +103,6 @@ export type Route = {
   stopIds: string[];
 };
 
-export type VanAssignment = {
-  id: string;
-  assignmentDate: string;
-  vanId: string;
-  driverUserId: string | null;
-  aideUserId: string | null;
-  notes: string | null;
-};
-
-export type StudentDayRecord = {
-  id: string;
-  studentId: string;
-  eventDate: string;
-  attending: boolean;
-  mode: TransportMode;
-  morningStopId: string | null;
-  afternoonStopId: string | null;
-  notes: string | null;
-};
-
 export type StudentDayStatus = {
   recordId: string;
   studentId: string;
@@ -166,17 +125,6 @@ export type StudentDayStatus = {
   isBoardedButNotArrived: boolean;
   isInButNotOut: boolean;
   isPmVanStuck: boolean;
-};
-
-export type VanLocation = {
-  vanId: string;
-  lat: number;
-  lng: number;
-  accuracyM: number | null;
-  headingDeg: number | null;
-  speedMps: number | null;
-  reportedAt: string;
-  reportedByUserId: string | null;
 };
 
 export type RecordEventResult = {

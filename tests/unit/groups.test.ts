@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { buildAgeGroups, buildGroups, type GroupKid } from "@/lib/coordinator/groups";
+import {
+  buildAgeGroups,
+  buildGroups,
+  teachersNeeded,
+  type GroupKid,
+} from "@/lib/coordinator/groups";
 
 const mk = (id: string, age: number | null, last = "L", first = "F"): GroupKid => ({
   studentId: id,
@@ -45,6 +50,75 @@ describe("buildGroups", () => {
   });
   it("empty input → no groups", () => {
     expect(buildGroups([], { mode: "size", targetSize: 10, groupCount: 1, mix: false })).toEqual([]);
+  });
+
+  it("teachers mode makes one group per team of teachers (8 teachers, 2 each → 4 groups)", () => {
+    const groups = buildGroups(makeKids(Array(20).fill(8)), {
+      mode: "teachers",
+      targetSize: 10,
+      groupCount: 1,
+      availableTeachers: 8,
+      teachersPerGroup: 2,
+      mix: false,
+    });
+    expect(groups).toHaveLength(4);
+    expect(groups.map((g) => g.count)).toEqual([5, 5, 5, 5]);
+  });
+
+  it("teachers mode floors leftover staff (7 teachers, 2 each → 3 groups)", () => {
+    const groups = buildGroups(makeKids(Array(20).fill(8)), {
+      mode: "teachers",
+      targetSize: 10,
+      groupCount: 1,
+      availableTeachers: 7,
+      teachersPerGroup: 2,
+      mix: false,
+    });
+    expect(groups).toHaveLength(3);
+  });
+
+  it("teachers mode never makes more groups than kids", () => {
+    const groups = buildGroups(makeKids([5, 6, 7]), {
+      mode: "teachers",
+      targetSize: 10,
+      groupCount: 1,
+      availableTeachers: 100,
+      teachersPerGroup: 1,
+      mix: false,
+    });
+    expect(groups).toHaveLength(3);
+  });
+
+  it("teachers mode makes at least one group even when staff can't cover a full team", () => {
+    const groups = buildGroups(makeKids(Array(12).fill(8)), {
+      mode: "teachers",
+      targetSize: 10,
+      groupCount: 1,
+      availableTeachers: 1,
+      teachersPerGroup: 2,
+      mix: false,
+    });
+    expect(groups).toHaveLength(1);
+  });
+
+  it("teachersPerGroup defaults to 1 when omitted", () => {
+    const groups = buildGroups(makeKids(Array(20).fill(8)), {
+      mode: "teachers",
+      targetSize: 10,
+      groupCount: 1,
+      availableTeachers: 4,
+      mix: false,
+    });
+    expect(groups).toHaveLength(4);
+  });
+});
+
+describe("teachersNeeded", () => {
+  it("multiplies groups by teachers-per-group", () => {
+    expect(teachersNeeded(4, 2)).toBe(8);
+  });
+  it("defaults to one teacher per group", () => {
+    expect(teachersNeeded(3)).toBe(3);
   });
 });
 

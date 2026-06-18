@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
+import { clampOccurredAt } from "@/lib/events/occurred-at";
 
 const PickupMetadataSchema = z.object({
   authorizedPickupPersonId: z.string().uuid().nullable(),
@@ -103,6 +104,10 @@ export async function smartCheckOut(
       }
     : {};
 
+  // Drop a future client timestamp (see clampOccurredAt); smart_checkout
+  // defaults a null to now().
+  const occurredAt = clampOccurredAt(parsed.data.occurredAt, Date.now()) ?? null;
+
   const { data, error } = await supabase.rpc("smart_checkout", {
     p_student_id: parsed.data.studentId,
     p_event_date: parsed.data.eventDate,
@@ -110,7 +115,7 @@ export async function smartCheckOut(
     p_actor_role: user.role,
     p_pm_path: parsed.data.pmPath ?? "auto",
     p_pickup_metadata: pickupMetadata,
-    p_occurred_at: parsed.data.occurredAt ?? null,
+    p_occurred_at: occurredAt,
   } as never);
 
   if (error) {

@@ -15,6 +15,9 @@ export const metadata: Metadata = {
   title: "VBS Check-In",
   description: "Vacation Bible School check-in and transportation tracker",
   manifest: "/manifest.webmanifest",
+  // Private one-time event: the signup form collects child names/allergies/
+  // addresses and the staff screens hold PII. Keep the whole app out of search.
+  robots: { index: false, follow: false },
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",

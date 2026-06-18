@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useId, cloneElement, isValidElement } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -98,9 +98,12 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
     }
     if (
       needsVan &&
-      (!family.streetAddress.trim() || !family.city.trim() || !family.postalCode.trim())
+      (!family.streetAddress.trim() ||
+        !family.city.trim() ||
+        !family.state.trim() ||
+        !family.postalCode.trim())
     ) {
-      toast.error("Please add your home address so we can plan the van ride.");
+      toast.error("Please add your full home address (including state) so we can plan the van ride.");
       return;
     }
 
@@ -154,6 +157,14 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
       } else {
         toast.error(result.error);
       }
+    } catch {
+      // A thrown (vs. returned) error means the request never completed —
+      // a dropped connection in a weak-signal driveway, or a payload the
+      // server rejected before our code ran (e.g. photos over the size limit).
+      // Tell the family to retry; their entries are still on screen.
+      toast.error(
+        "Couldn't reach the server — check your signal and tap Register again. Your info is still here.",
+      );
     } finally {
       submittingRef.current = false;
       setPending(false);
@@ -240,6 +251,7 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           <Field label="Your name" required>
             <Input
               required
+              autoComplete="name"
               value={family.primaryGuardianName}
               onChange={(e) => setFamily({ ...family, primaryGuardianName: e.target.value })}
             />
@@ -380,12 +392,15 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           <Field label="City" required={needsVan}>
             <Input
               required={needsVan}
+              autoComplete="address-level2"
               value={family.city}
               onChange={(e) => setFamily({ ...family, city: e.target.value })}
             />
           </Field>
-          <Field label="State">
+          <Field label="State" required={needsVan}>
             <Input
+              required={needsVan}
+              autoComplete="address-level1"
               value={family.state}
               onChange={(e) => setFamily({ ...family, state: e.target.value })}
             />
@@ -488,13 +503,16 @@ function Field({
   required?: boolean;
   children: React.ReactNode;
 }) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <Label>
+      <Label htmlFor={id}>
         {label}
         {required && <span className="text-destructive ml-0.5">*</span>}
       </Label>
-      {children}
+      {isValidElement(children)
+        ? cloneElement(children as React.ReactElement<{ id?: string }>, { id })
+        : children}
     </div>
   );
 }

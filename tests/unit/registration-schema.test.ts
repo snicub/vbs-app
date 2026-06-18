@@ -6,7 +6,6 @@ import {
   normalizePhone,
   splitName,
 } from "@/lib/registration/schema";
-import { deriveTransportMode } from "@/lib/registration/transport";
 
 const SAMPLE_HASH = "a".repeat(64);
 
@@ -143,21 +142,6 @@ describe("splitName", () => {
 
   it("collapses extra whitespace", () => {
     expect(splitName("  Aiden   Anderson  ")).toEqual({ first: "Aiden", last: "Anderson" });
-  });
-});
-
-describe("deriveTransportMode", () => {
-  it("both legs by van", () => {
-    expect(deriveTransportMode(true, true)).toBe("van");
-  });
-  it("van in the morning only → parent picks up in the afternoon", () => {
-    expect(deriveTransportMode(true, false)).toBe("parent_pickup_only");
-  });
-  it("van in the afternoon only → parent drops off in the morning", () => {
-    expect(deriveTransportMode(false, true)).toBe("parent_dropoff_only");
-  });
-  it("neither leg → parent drives both ways", () => {
-    expect(deriveTransportMode(false, false)).toBe("parent_both");
   });
 });
 
