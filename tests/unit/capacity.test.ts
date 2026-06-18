@@ -3,7 +3,7 @@
  * morning/afternoon_van_id columns from student_day_status.
  *
  * Mirrors the math in /coordinator/vans/page.tsx and the
- * day-before-reminder capacity check.
+ * capacity-check cron.
  */
 import { describe, it, expect } from "vitest";
 

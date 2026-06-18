@@ -41,8 +41,16 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
   const [maxAge, setMaxAge] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
 
+  // Quick-pick age chips are for the K–12 kids (kindergarten ≈ 4 through 12th
+  // grade ≈ 18). Adult leaders/helpers can register at higher ages, but we don't
+  // render a chip for every one of them — the manual "Range" inputs below stay
+  // unbounded for the rare case you need to filter an adult.
+  const K12_MIN = 4;
+  const K12_MAX = 18;
   const ageBounds = useMemo(() => {
-    const ages = rows.map((r) => r.age).filter((a): a is number => a != null);
+    const ages = rows
+      .map((r) => r.age)
+      .filter((a): a is number => a != null && a >= K12_MIN && a <= K12_MAX);
     if (ages.length === 0) return null;
     return { min: Math.min(...ages), max: Math.max(...ages) };
   }, [rows]);

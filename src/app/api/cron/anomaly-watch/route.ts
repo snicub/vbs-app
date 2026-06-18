@@ -25,7 +25,7 @@ type StudentRow = {
  * to the coordinator phone per (student, date, anomaly_kind) tuple. Schedule
  * every 5–10 minutes during operating hours via vercel.json.
  *
- * Auth: same Bearer CRON_SECRET as the day-before-reminder route.
+ * Auth: same Bearer CRON_SECRET as the capacity-check route.
  */
 export async function GET(request: NextRequest) {
   if (!env.CRON_SECRET) {

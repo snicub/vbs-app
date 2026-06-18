@@ -1,6 +1,5 @@
 import { describe, it, expect } from "vitest";
 import {
-  dayBeforeReminder,
   confirmationOnRegister,
   arrivedAtSite,
   checkedOut,
@@ -13,18 +12,11 @@ const base = {
 };
 
 describe("notification templates", () => {
-  it("dayBeforeReminder includes the student name + time + STOP instructions", () => {
-    const r = dayBeforeReminder({ ...base, pickupTime: "7:30 AM", stopName: "First Baptist" });
-    expect(r.body).toContain("Joey");
-    expect(r.body).toContain("7:30 AM");
-    expect(r.body).toContain("First Baptist");
-    expect(r.body).toContain("STOP");
-  });
-
-  it("confirmationOnRegister addresses the guardian", () => {
+  it("confirmationOnRegister addresses the guardian and includes the STOP opt-out", () => {
     const r = confirmationOnRegister(base);
     expect(r.body).toContain("Jane");
     expect(r.body).toContain("Joey");
+    expect(r.body).toContain("STOP");
   });
 
   it("arrivedAtSite is short", () => {

@@ -7,25 +7,10 @@
 export type TemplateContext = {
   guardianName: string;
   studentName: string;
-  pickupTime?: string;
-  stopName?: string;
-  date?: string;
   statusUrl?: string;
 };
 
 export type Rendered = { subject: string; body: string };
-
-export function dayBeforeReminder(ctx: TemplateContext): Rendered {
-  const time = ctx.pickupTime ?? "your scheduled time";
-  const stop = ctx.stopName ?? "your scheduled stop";
-  return {
-    subject: `Reminder: VBS tomorrow at ${time}`,
-    body:
-      `Hi ${ctx.guardianName} — quick reminder that ${ctx.studentName} ` +
-      `will be picked up at ${stop} at ${time} tomorrow. ` +
-      `Live status: ${ctx.statusUrl ?? ""}\n\nReply STOP to opt out.`,
-  };
-}
 
 export function confirmationOnRegister(ctx: TemplateContext): Rendered {
   return {

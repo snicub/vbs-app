@@ -1,7 +1,7 @@
 {
   "crons": [
     {
-      "path": "/api/cron/day-before-reminder",
+      "path": "/api/cron/capacity-check",
       "schedule": "0 0 * * *"
     },
     {
