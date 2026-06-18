@@ -15,6 +15,17 @@ import type { Database } from "./types";
  */
 export async function createClient() {
   const cookieStore = await cookies();
+
+  // No-login mode: there's no real authenticated session to satisfy RLS, so a
+  // cookie-bound (anon) client would read ZERO rows — blanking every page. A
+  // stale/partial `-auth-token` cookie (e.g. left over from hitting /login once)
+  // must NOT flip us onto that locked-down client. So when no-login is on, always
+  // operate as the service role. (getSessionUser still attributes writes to the
+  // on-file coordinator/admin; the parent token page uses its own scoped client.)
+  if (env.ALLOW_NO_LOGIN) {
+    return createAdminClient();
+  }
+
   const hasAuthCookie = cookieStore.getAll().some((c) => c.name.includes("-auth-token"));
   if (!hasAuthCookie) {
     return createAdminClient();

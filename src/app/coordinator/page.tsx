@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
+import { defaultVbsDate } from "@/lib/registration/dates";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { type DayState } from "@/lib/events/state-machine";
@@ -61,7 +62,7 @@ export default async function CoordinatorTodayPage({
   }
 
   const { date } = await searchParams;
-  const today = date ?? getLocalDate();
+  const today = date ?? defaultVbsDate(getLocalDate());
 
   const supabase = await createClient();
 

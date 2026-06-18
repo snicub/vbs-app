@@ -188,55 +188,8 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           </div>
         </div>
 
-        <div>
-          <h3 className="text-base font-medium mb-2">Wristband codes</h3>
-          <p className="text-sm text-muted-foreground mb-2">
-            Staff scan or type these at check-in. No need to memorize them — we have them on file.
-          </p>
-          <ul className="rounded-lg border bg-muted/30 divide-y">
-            {success.codes.map((c) => (
-              <li key={c.code} className="flex justify-between items-center px-3 py-2.5 text-base">
-                <span className="truncate pr-2">{c.studentName}</span>
-                <code className="font-mono tracking-widest shrink-0">{c.code}</code>
-              </li>
-            ))}
-          </ul>
-        </div>
-
-        <div className="rounded-lg border border-primary/30 bg-primary/5 p-4 space-y-3">
-          <div className="text-base font-medium">Your family status link</div>
-          <p className="text-sm text-muted-foreground">
-            Bookmark this to follow your child during VBS — pickup, check-in, and drop-off.
-            No sign-in needed.
-          </p>
-          <div className="flex flex-col sm:flex-row gap-2">
-            <input
-              readOnly
-              value={success.statusUrl}
-              onClick={(e) => (e.target as HTMLInputElement).select()}
-              className="flex-1 rounded border bg-background px-2 py-1.5 text-base sm:text-sm font-mono min-w-0 min-h-11 sm:min-h-9"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                navigator.clipboard?.writeText(success.statusUrl);
-                toast.success("Copied");
-              }}
-            >
-              Copy link
-            </Button>
-          </div>
-          <Link
-            href={success.statusUrl.replace(/^https?:\/\/[^/]+/, "")}
-            className={buttonVariants({ variant: "default", size: "lg" })}
-          >
-            Open my status page →
-          </Link>
-        </div>
-
         <Link href="/" className={buttonVariants({ variant: "ghost" })}>
-          Done
+          Register another
         </Link>
       </div>
     );

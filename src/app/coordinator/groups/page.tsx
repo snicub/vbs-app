@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
+import { defaultVbsDate } from "@/lib/registration/dates";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { displayName } from "@/lib/nametags/tag-data";
@@ -33,7 +34,7 @@ export default async function GroupsPage({
   }
 
   const { date } = await searchParams;
-  const day = date ?? getLocalDate();
+  const day = date ?? defaultVbsDate(getLocalDate());
 
   const supabase = await createClient();
   const { data: statuses } = await supabase
