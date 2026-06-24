@@ -12,7 +12,7 @@ import { FamilyAccessPanel } from "./family-access-panel";
 import { STATE_PRESENTATION, TONE_CLASSES } from "@/lib/state-presentation";
 import { StateBadge, SafetyCallout } from "@/components/state-badge";
 import Link from "next/link";
-import { ArrowLeftIcon, PencilIcon, CalendarOffIcon } from "lucide-react";
+import { ArrowLeftIcon, PencilIcon, CalendarOffIcon, MapPinIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
 
@@ -54,12 +54,16 @@ export default async function StudentTablePage({
     // Family contacts (always shown to anyone with check-in access)
     supabase
       .from("families")
-      .select("primary_guardian_name, primary_email, primary_phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
+      .select("primary_guardian_name, primary_email, primary_phone, street_address, city, state, postal_code, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
       .eq("id", student.familyId)
       .maybeSingle<{
         primary_guardian_name: string;
         primary_email: string;
         primary_phone: string;
+        street_address: string | null;
+        city: string | null;
+        state: string | null;
+        postal_code: string | null;
         emergency_contact_name: string | null;
         emergency_contact_phone: string | null;
         emergency_contact_relationship: string | null;
@@ -106,6 +110,13 @@ export default async function StudentTablePage({
     (stopsData ?? []).map((s) => ({
       id: s.id, name: s.name, town: s.town, colorName: s.color_name,
     }));
+
+  const streetLine = family?.street_address?.trim() || "";
+  const cityStateZip = [family?.city, family?.state, family?.postal_code]
+    .map((p) => p?.trim())
+    .filter(Boolean)
+    .join(", ");
+  const hasAddress = !!(streetLine || cityStateZip);
 
   const presentation = STATE_PRESENTATION[state];
   const tone = TONE_CLASSES[presentation.tone];
@@ -305,6 +316,19 @@ export default async function StudentTablePage({
                 )}
               </div>
             ))}
+            <div className="pt-1 border-t mt-1">
+              {hasAddress ? (
+                <div className="flex items-start gap-2 text-muted-foreground">
+                  <MapPinIcon className="size-4 mt-0.5 shrink-0" aria-hidden />
+                  <div>
+                    {streetLine && <div>{streetLine}</div>}
+                    {cityStateZip && <div>{cityStateZip}</div>}
+                  </div>
+                </div>
+              ) : (
+                <div className="text-[var(--anomaly-warn)]">No address on file</div>
+              )}
+            </div>
             {family.emergency_contact_name && (
               <div className="pt-1 border-t mt-1 text-muted-foreground">
                 <span className="text-xs uppercase tracking-wide">Emergency:</span>{" "}
