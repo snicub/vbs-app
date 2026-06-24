@@ -17,7 +17,7 @@ import { buttonVariants } from "@/components/ui/button";
 import { AlertTriangleIcon, MapPinOffIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
 import { DashboardCards } from "./dashboard-cards";
-import { computeMetrics, computeTownBreakdown } from "@/lib/coordinator/dashboard";
+import { computeMetrics, computeVanBreakdown } from "@/lib/coordinator/dashboard";
 import { needsRouting } from "@/lib/routing";
 import { RouteBuildButton } from "./route-build-button";
 
@@ -72,7 +72,7 @@ export default async function CoordinatorTodayPage({
   const [
     { data: statuses },
     { data: dayRecords },
-    { data: stops },
+    { data: vans },
     { data: closeout },
   ] = await Promise.all([
     supabase
@@ -88,16 +88,16 @@ export default async function CoordinatorTodayPage({
       .eq("event_date", today)
       .returns<{ student_id: string; mode: string | null; morning_stop_id: string | null; afternoon_stop_id: string | null; attending: boolean }[]>(),
     supabase
-      .from("stops")
-      .select("id, town, color_code, color_name")
-      .returns<{ id: string; town: string; color_code: string; color_name: string }[]>(),
+      .from("vans")
+      .select("id, name")
+      .returns<{ id: string; name: string }[]>(),
     supabase
       .from("daily_closeouts")
       .select("closed_at, notes")
       .eq("event_date", today)
       .maybeSingle<{ closed_at: string; notes: string | null }>(),
   ]);
-  const stopMap = new Map((stops ?? []).map((s) => [s.id, s]));
+  const vanNameMap = new Map((vans ?? []).map((v) => [v.id, v.name]));
   const dayRecMap = new Map((dayRecords ?? []).map((d) => [d.student_id, d]));
 
   const studentIds = (statuses ?? []).map((s) => s.student_id);
@@ -169,20 +169,19 @@ export default async function CoordinatorTodayPage({
 
   const dashRows = enriched.map((s) => {
     const dr = dayRecMap.get(s.student_id);
-    const stop =
-      (dr?.morning_stop_id ? stopMap.get(dr.morning_stop_id) : undefined) ??
-      (dr?.afternoon_stop_id ? stopMap.get(dr.afternoon_stop_id) : undefined);
+    const vanId = s.morning_van_id ?? s.afternoon_van_id;
     return {
       state: s.state,
       hasAnomaly: s.anomalies.length > 0,
       attending: dr?.attending ?? true,
-      town: stop?.town ?? null,
-      colorCode: stop?.color_code ?? null,
-      colorName: stop?.color_name ?? null,
+      vanId,
+      vanName: vanId ? vanNameMap.get(vanId) ?? null : null,
+      colorCode: s.wristband_color_for_day,
+      colorName: s.wristband_color_name,
     };
   });
   const metrics = computeMetrics(dashRows);
-  const towns = computeTownBreakdown(dashRows);
+  const vanRollup = computeVanBreakdown(dashRows);
 
   const needsRoutingList = enriched.filter((s) => {
     const dr = dayRecMap.get(s.student_id);
@@ -270,9 +269,8 @@ export default async function CoordinatorTodayPage({
             </div>
           </div>
           <p className="text-sm text-muted-foreground mb-3">
-            These kids ride a van but aren&apos;t on one yet — no stop assigned, or their stop
-            isn&apos;t on a route. Assign a routed stop so they show up on a van and get the
-            late-arrival alert.
+            These kids ride a van but aren&apos;t on one yet. Assign a van so they show up on
+            its rider list and get the late-arrival alert.
           </p>
           <ul className="space-y-2">
             {needsRoutingList.map((s) => (
@@ -290,7 +288,7 @@ export default async function CoordinatorTodayPage({
                   {s.wristbandCode}
                 </code>
                 <span className="ml-auto text-xs font-medium text-[var(--anomaly-warn)]">
-                  Assign stop →
+                  Assign van →
                 </span>
               </li>
             ))}
@@ -298,8 +296,8 @@ export default async function CoordinatorTodayPage({
         </section>
       )}
 
-      {/* Dashboard — big at-a-glance numbers + per-town rollup */}
-      <DashboardCards metrics={metrics} towns={towns} />
+      {/* Dashboard — big at-a-glance numbers + per-van rollup */}
+      <DashboardCards metrics={metrics} vans={vanRollup} />
 
       {/* Roster */}
       <RosterList students={sorted} />

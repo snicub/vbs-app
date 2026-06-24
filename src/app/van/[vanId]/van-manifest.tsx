@@ -30,23 +30,9 @@ type RosterItem = {
   direction: "am" | "pm" | "both";
   stopName: string | null;
   stopOrder: number;
+  homeAddress: string | null;
   photoUrl: string | null;
 };
-
-function groupByStop(
-  roster: RosterItem[],
-): { stopName: string | null; items: RosterItem[] }[] {
-  const groups: { stopName: string | null; items: RosterItem[] }[] = [];
-  for (const item of roster) {
-    const last = groups[groups.length - 1];
-    if (last && last.stopName === item.stopName) {
-      last.items.push(item);
-    } else {
-      groups.push({ stopName: item.stopName, items: [item] });
-    }
-  }
-  return groups;
-}
 
 export function VanManifest({
   vanId,
@@ -323,22 +309,8 @@ export function VanManifest({
         </Button>
       </div>
 
-      <div className="space-y-8 mt-5">
-        {groupByStop(roster).map(({ stopName, items }) => (
-          <section key={stopName ?? "__none"}>
-            <div className="flex items-center gap-2.5 mb-4">
-              <MapPinIcon className="size-5 text-muted-foreground shrink-0" />
-              <span className="text-lg font-bold text-foreground">
-                {stopName ?? "Unknown stop"}
-              </span>
-              <span className="text-base text-muted-foreground">
-                · {items.length} kid{items.length === 1 ? "" : "s"}
-              </span>
-              <div className="flex-1 h-px bg-border" />
-            </div>
-
-            <ul className="space-y-4">
-              {items.map((r) => {
+      <ul className="space-y-4 mt-5">
+        {roster.map((r) => {
                 const state = safeDayState(r.state);
                 const presentation = STATE_PRESENTATION[state];
                 const isPending = pendingStudents.has(r.studentId);
@@ -428,6 +400,18 @@ export function VanManifest({
                         <StateBadge state={state} size="md" />
                       </div>
 
+                      {r.homeAddress ? (
+                        <div className="flex items-start gap-2 text-base font-medium">
+                          <MapPinIcon className="size-5 shrink-0 mt-0.5 text-muted-foreground" />
+                          <span>{r.homeAddress}</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-start gap-2 text-base font-semibold text-[var(--anomaly-warn)]">
+                          <MapPinIcon className="size-5 shrink-0 mt-0.5" />
+                          <span>No home address on file — confirm pickup with the coordinator</span>
+                        </div>
+                      )}
+
                       <SafetyCallout
                         allergies={r.allergies}
                         medicalNotes={r.medicalNotes}
@@ -461,11 +445,8 @@ export function VanManifest({
                     </div>
                   </li>
                 );
-              })}
-            </ul>
-          </section>
-        ))}
-      </div>
+        })}
+      </ul>
 
       {verifyTarget && verifyAction && verifyArmedAt !== null && (
         <PhotoVerifyModal
@@ -553,10 +534,10 @@ function PhotoVerifyModal({
           )}
         </div>
 
-        {target.stopName && (
+        {target.homeAddress && (
           <div className="text-center text-base">
-            <span className="text-muted-foreground">Stop:</span>{" "}
-            <strong>{target.stopName}</strong>
+            <span className="text-muted-foreground">Home:</span>{" "}
+            <strong>{target.homeAddress}</strong>
           </div>
         )}
 

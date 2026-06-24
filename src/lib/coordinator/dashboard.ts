@@ -8,8 +8,9 @@ export type DashStatus = {
   state: string;
   hasAnomaly: boolean;
   attending: boolean;
-  /** Town the child rides from; null = parent drop-off / no assigned stop. */
-  town: string | null;
+  /** Van the child rides; null = parent drop-off / not on a van yet. */
+  vanId: string | null;
+  vanName: string | null;
   colorCode: string | null;
   colorName: string | null;
 };
@@ -50,8 +51,8 @@ export function computeMetrics(rows: DashStatus[]): DashboardMetrics {
   };
 }
 
-export type TownRow = {
-  town: string;
+export type VanRow = {
+  vanName: string;
   colorCode: string | null;
   colorName: string | null;
   expected: number;
@@ -60,34 +61,39 @@ export type TownRow = {
 };
 
 const PARENT_KEY = "￿__parent__";
+const PARENT_LABEL = "Parent drop-off";
 
 /**
- * Per-town rollup of attending kids: how many are coming, how many made it in,
- * how many are home. Kids with no assigned stop group under "Parent drop-off",
- * always sorted last.
+ * Per-van rollup of attending kids: how many ride each van, how many made it
+ * in, how many are home. Kids not on a van (parent drop-off, or a van kid not
+ * yet assigned) group under "Parent drop-off", always sorted last.
  */
-export function computeTownBreakdown(rows: DashStatus[]): TownRow[] {
-  const byTown = new Map<string, TownRow>();
+export function computeVanBreakdown(rows: DashStatus[]): VanRow[] {
+  const byVan = new Map<string, VanRow>();
   for (const r of rows) {
     if (!r.attending) continue;
-    const key = r.town ?? PARENT_KEY;
-    let t = byTown.get(key);
-    if (!t) {
-      t = {
-        town: r.town ?? "Parent drop-off",
-        colorCode: r.town ? r.colorCode : null,
-        colorName: r.town ? r.colorName : null,
+    const onVan = r.vanId != null;
+    const key = onVan ? r.vanId! : PARENT_KEY;
+    let v = byVan.get(key);
+    if (!v) {
+      v = {
+        vanName: onVan ? r.vanName ?? "Van" : PARENT_LABEL,
+        colorCode: onVan ? r.colorCode : null,
+        colorName: onVan ? r.colorName : null,
         expected: 0,
         checkedIn: 0,
         home: 0,
       };
-      byTown.set(key, t);
+      byVan.set(key, v);
     }
-    t.expected++;
-    if (REACHED_CHECK_IN.has(r.state)) t.checkedIn++;
-    if (r.state === "home") t.home++;
+    v.expected++;
+    if (REACHED_CHECK_IN.has(r.state)) v.checkedIn++;
+    if (r.state === "home") v.home++;
   }
-  return Array.from(byTown.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([, v]) => v);
+  return Array.from(byVan.values()).sort((a, b) => {
+    const aParent = a.vanName === PARENT_LABEL;
+    const bParent = b.vanName === PARENT_LABEL;
+    if (aParent !== bParent) return aParent ? 1 : -1;
+    return a.vanName.localeCompare(b.vanName);
+  });
 }

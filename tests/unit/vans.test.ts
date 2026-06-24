@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { orderStopIds, sameDriverAndAide, routeStopConflicts } from "@/lib/vans";
+import {
+  orderStopIds,
+  sameDriverAndAide,
+  routeStopConflicts,
+  isValidTimeOfDay,
+  zoneStopIdForVan,
+  findVansMissingZone,
+} from "@/lib/vans";
 
 describe("orderStopIds", () => {
   const stops = [{ id: "a" }, { id: "b" }, { id: "c" }, { id: "d" }];
@@ -69,5 +76,84 @@ describe("routeStopConflicts", () => {
         { van_id: "vanC", direction: "pm", stop_ids: ["s5", "s6"] },
       ]),
     ).toEqual([{ stopId: "s5", vanId: "vanC", direction: "pm" }]);
+  });
+
+  it("does not flag a van's own zone on its am+pm against other vans", () => {
+    // A van's zone stop sits on its OWN am and pm routes — only OTHER vans'
+    // routes are passed in, so the same stop on both directions never collides.
+    expect(routeStopConflicts({ am: ["zone1"], pm: ["zone1"] }, [])).toEqual([]);
+  });
+});
+
+describe("isValidTimeOfDay", () => {
+  it("accepts 24-hour HH:MM", () => {
+    expect(isValidTimeOfDay("08:00")).toBe(true);
+    expect(isValidTimeOfDay("23:59")).toBe(true);
+    expect(isValidTimeOfDay("00:00")).toBe(true);
+  });
+
+  it("accepts HH:MM:SS (what Postgres time returns)", () => {
+    expect(isValidTimeOfDay("15:30:00")).toBe(true);
+  });
+
+  it("trims surrounding whitespace", () => {
+    expect(isValidTimeOfDay("  09:15  ")).toBe(true);
+  });
+
+  it("rejects out-of-range or malformed times", () => {
+    expect(isValidTimeOfDay("24:00")).toBe(false);
+    expect(isValidTimeOfDay("9:15")).toBe(false);
+    expect(isValidTimeOfDay("08:60")).toBe(false);
+    expect(isValidTimeOfDay("")).toBe(false);
+    expect(isValidTimeOfDay("morning")).toBe(false);
+  });
+});
+
+describe("zoneStopIdForVan", () => {
+  const routes = [
+    { van_id: "v1", direction: "am" as const, stop_ids: ["zone1"] },
+    { van_id: "v1", direction: "pm" as const, stop_ids: ["zone1"] },
+    { van_id: "v2", direction: "pm" as const, stop_ids: ["zone2"] },
+  ];
+
+  it("resolves the zone stop from the am route", () => {
+    expect(zoneStopIdForVan("v1", routes)).toBe("zone1");
+  });
+
+  it("falls back to the pm route when there is no am route", () => {
+    expect(zoneStopIdForVan("v2", routes)).toBe("zone2");
+  });
+
+  it("returns null when the van has no route stop", () => {
+    expect(zoneStopIdForVan("v3", routes)).toBeNull();
+  });
+
+  it("returns null when the route exists but its stop list is empty", () => {
+    expect(
+      zoneStopIdForVan("v4", [{ van_id: "v4", direction: "am", stop_ids: [] }]),
+    ).toBeNull();
+  });
+});
+
+describe("findVansMissingZone", () => {
+  const routes = [
+    { van_id: "v1", direction: "am" as const, stop_ids: ["zone1"] },
+    { van_id: "v1", direction: "pm" as const, stop_ids: ["zone1"] },
+  ];
+
+  it("returns vans with no zone stop", () => {
+    expect(
+      findVansMissingZone([{ id: "v1" }, { id: "v2" }, { id: "v3" }], routes),
+    ).toEqual([{ id: "v2" }, { id: "v3" }]);
+  });
+
+  it("returns nothing when every van has a zone", () => {
+    expect(findVansMissingZone([{ id: "v1" }], routes)).toEqual([]);
+  });
+
+  it("treats an empty-array route as missing", () => {
+    expect(
+      findVansMissingZone([{ id: "v5" }], [{ van_id: "v5", direction: "am", stop_ids: [] }]),
+    ).toEqual([{ id: "v5" }]);
   });
 });

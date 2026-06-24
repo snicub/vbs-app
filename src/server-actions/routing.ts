@@ -42,12 +42,16 @@ export type RouteBuildResult =
   | { ok: false; error: string };
 
 /**
- * Coordinator action: turn collected home addresses into van assignments.
- * Geocodes families that don't have coordinates yet, then assigns each
- * un-routed van kid to the stop nearest their home (only filling empty legs
- * their mode needs — never overriding a coordinator's manual choice). Kids with
- * no address (or a failed geocode) are counted as "flagged" so the coordinator
- * knows to handle them by hand — they're never silently put on a van.
+ * Coordinator action: turn collected home addresses into VAN assignments under
+ * the door-to-door model. Each van has one pickup "zone" stop on its route that
+ * carries the van's area coordinates; assigning a kid to the nearest zone == the
+ * nearest van. Geocodes families that don't have coordinates yet, then points
+ * each un-routed van kid's empty legs at their nearest van's zone (a full-van
+ * kid lands on ONE van — both legs the same zone — and a coordinator's manual
+ * choice is never overridden). Candidate zones are ONLY stops on a van route
+ * with coordinates, so a kid is never pointed at a stop that derives no van.
+ * Kids with no address (or a failed geocode) are counted as "flagged" so the
+ * coordinator handles them by hand — they're never silently put on a van.
  */
 export async function autoAssignStopsFromAddresses(
   input: unknown,
@@ -61,15 +65,36 @@ export async function autoAssignStopsFromAddresses(
 
   const admin = createAdminClient();
 
+  // Candidate zones = stops that sit on a van route. A stop not on any route
+  // derives no van, so pointing a kid at it would silently un-route them.
+  const { data: routesData } = await admin
+    .from("routes")
+    .select("stop_ids")
+    .returns<{ stop_ids: string[] }[]>();
+  const routedStopIds = new Set<string>();
+  for (const r of routesData ?? []) for (const id of r.stop_ids) routedStopIds.add(id);
+  if (routedStopIds.size === 0) {
+    return {
+      ok: false,
+      error: "No vans have routes yet — set up vans and their pickup zones first, or assign vans manually.",
+    };
+  }
+
   const { data: stopsData } = await admin
     .from("stops")
     .select("id, lat, lng")
     .returns<{ id: string; lat: number | null; lng: number | null }[]>();
   const stops: StopPoint[] = (stopsData ?? [])
-    .filter((s): s is { id: string; lat: number; lng: number } => s.lat != null && s.lng != null)
+    .filter(
+      (s): s is { id: string; lat: number; lng: number } =>
+        s.lat != null && s.lng != null && routedStopIds.has(s.id),
+    )
     .map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }));
   if (stops.length === 0) {
-    return { ok: false, error: "No stops have coordinates yet — add stops first." };
+    return {
+      ok: false,
+      error: "No van has an area location yet — set each van's pickup-zone location first, or assign vans manually.",
+    };
   }
 
   // Route the WHOLE event in one pass: addresses (hence stops) are the same

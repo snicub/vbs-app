@@ -10,7 +10,12 @@ const stops = new Map([
 ]);
 const vans = new Map([["v1", "Red Van"]]);
 
-describe("buildTagData two-color (AM stop ≠ PM stop)", () => {
+// Door-to-door: each van is one pickup zone, so a normal van kid's AM and PM
+// resolve to the SAME van-zone color and the tag is single-band. The two-color
+// split below is the rare mixed-mode exception (resolved AM zone color ≠ PM zone
+// color — e.g. parent drop-off at one place, vanned home from a different zone).
+// Keep this path as the guard for that case; it is no longer the headline.
+describe("buildTagData two-color — rare mixed-mode (resolved AM color ≠ PM color)", () => {
   it("exposes both stop colors when AM and PM differ", () => {
     const [tag] = buildTagData(
       [{

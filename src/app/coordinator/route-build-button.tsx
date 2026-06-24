@@ -18,7 +18,7 @@ export function RouteBuildButton({ date }: { date: string }) {
         toast.error(r.error);
         return;
       }
-      const parts = [`${r.assigned} assigned to a stop`];
+      const parts = [`${r.assigned} assigned to a van`];
       if (r.geocoded) parts.push(`${r.geocoded} addresses located`);
       if (r.flagged) parts.push(`${r.flagged} still need an address`);
       if (r.pending) parts.push(`${r.pending} not located yet — run again`);
@@ -31,7 +31,7 @@ export function RouteBuildButton({ date }: { date: string }) {
 
   return (
     <Button type="button" size="sm" variant="outline" disabled={pending} onClick={run}>
-      {pending ? "Building…" : "Build from addresses"}
+      {pending ? "Suggesting…" : "Suggest vans from addresses"}
     </Button>
   );
 }

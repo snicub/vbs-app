@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { getLocalDate } from "@/lib/date";
 import { signedUrlFor } from "@/lib/storage/signed-url";
-import { ArrowLeftIcon } from "lucide-react";
+import { ArrowLeftIcon, MapPinIcon } from "lucide-react";
 import { StudentEditForm } from "./student-edit-form";
 import { FamilyContactsForm } from "./family-contacts-form";
 
@@ -58,11 +58,26 @@ type StopDb = {
   color_name: string;
 };
 
+type VanDb = {
+  id: string;
+  name: string;
+  active: boolean;
+};
+
+type RouteDb = {
+  van_id: string;
+  stop_ids: string[];
+};
+
 type FamilyDb = {
   id: string;
   primary_guardian_name: string;
   primary_email: string;
   primary_phone: string;
+  street_address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relationship: string | null;
@@ -100,42 +115,86 @@ export default async function StudentEditPage({
 
   const today = getLocalDate();
 
-  const [dayRecordRes, stopsRes, familyRes, guardiansRes] = await Promise.all([
-    supabase
-      .from("student_day_records")
-      .select("id, event_date, mode, morning_stop_id, afternoon_stop_id, attending")
-      .eq("student_id", studentId)
-      .eq("event_date", today)
-      .maybeSingle<DayRecordDb>(),
-    supabase
-      .from("stops")
-      .select("id, name, town, color_name")
-      .order("sort_order")
-      .returns<StopDb[]>(),
-    supabase
-      .from("families")
-      .select("id, primary_guardian_name, primary_email, primary_phone, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
-      .eq("id", student.family_id)
-      .maybeSingle<FamilyDb>(),
-    createAdminClient()
-      .from("guardians")
-      .select("id, full_name, email, phone, relationship")
-      .eq("family_id", student.family_id)
-      .returns<GuardianDb[]>(),
-  ]);
+  const [dayRecordRes, stopsRes, vansRes, routesRes, familyRes, guardiansRes] =
+    await Promise.all([
+      supabase
+        .from("student_day_records")
+        .select("id, event_date, mode, morning_stop_id, afternoon_stop_id, attending")
+        .eq("student_id", studentId)
+        .eq("event_date", today)
+        .maybeSingle<DayRecordDb>(),
+      supabase
+        .from("stops")
+        .select("id, name, town, color_name")
+        .order("sort_order")
+        .returns<StopDb[]>(),
+      supabase
+        .from("vans")
+        .select("id, name, active")
+        .order("name")
+        .returns<VanDb[]>(),
+      supabase
+        .from("routes")
+        .select("van_id, stop_ids")
+        .returns<RouteDb[]>(),
+      supabase
+        .from("families")
+        .select("id, primary_guardian_name, primary_email, primary_phone, street_address, city, state, postal_code, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
+        .eq("id", student.family_id)
+        .maybeSingle<FamilyDb>(),
+      createAdminClient()
+        .from("guardians")
+        .select("id, full_name, email, phone, relationship")
+        .eq("family_id", student.family_id)
+        .returns<GuardianDb[]>(),
+    ]);
 
   const dayRecord = dayRecordRes.data;
-  const stops = (stopsRes.data ?? []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    town: s.town,
-    colorName: s.color_name,
-  }));
+  const stopsById = new Map(
+    (stopsRes.data ?? []).map((s) => [s.id, { town: s.town, colorName: s.color_name }]),
+  );
   const family = familyRes.data;
   const guardians = guardiansRes.data ?? [];
 
+  // Resolve each van's single pickup zone (door-to-door: one stop per van) and
+  // a stop→van index so we can show which van this kid is currently on.
+  const zoneByVan = new Map<string, string | null>();
+  const vanByStop = new Map<string, string>();
+  for (const r of routesRes.data ?? []) {
+    const zones = Array.from(new Set(r.stop_ids));
+    const zone = zones.length === 1 ? zones[0]! : null;
+    if (!zoneByVan.has(r.van_id)) zoneByVan.set(r.van_id, zone);
+    for (const stopId of zones) vanByStop.set(stopId, r.van_id);
+  }
+
+  // Vans a coordinator can assign to: active, with exactly one resolved zone.
+  const vanOptions = (vansRes.data ?? [])
+    .filter((v) => v.active && zoneByVan.get(v.id))
+    .map((v) => {
+      const zoneStopId = zoneByVan.get(v.id)!;
+      const zone = stopsById.get(zoneStopId);
+      return {
+        id: v.id,
+        name: v.name,
+        zoneTown: zone?.town ?? null,
+        zoneColorName: zone?.colorName ?? null,
+      };
+    });
+
+  // The van this kid currently rides, derived from their stop legs (PM then AM,
+  // matching the view's color precedence). Null when unrouted / parent-both.
+  const currentStopId = dayRecord?.afternoon_stop_id ?? dayRecord?.morning_stop_id ?? null;
+  const currentVanId = currentStopId ? vanByStop.get(currentStopId) ?? null : null;
+
   const photoUrl = await signedUrlFor("student-photos", student.photo_path);
   const fullName = [student.legal_first_name, student.legal_last_name].filter(Boolean).join(" ");
+
+  const streetLine = family?.street_address?.trim() || "";
+  const cityStateZip = [family?.city, family?.state, family?.postal_code]
+    .map((p) => p?.trim())
+    .filter(Boolean)
+    .join(", ");
+  const hasAddress = !!(streetLine || cityStateZip);
 
   return (
     <main className="mx-auto max-w-2xl px-3 sm:px-4 py-4 sm:py-6 space-y-6">
@@ -172,12 +231,30 @@ export default async function StudentEditPage({
         initialAllergies={student.allergies ?? ""}
         initialMedicalNotes={student.medical_notes ?? ""}
         initialMode={dayRecord?.mode ?? null}
-        initialMorningStopId={dayRecord?.morning_stop_id ?? null}
-        initialAfternoonStopId={dayRecord?.afternoon_stop_id ?? null}
         initialAttending={dayRecord?.attending ?? true}
         hasDayRecord={!!dayRecord}
-        stops={stops}
+        vanOptions={vanOptions}
+        currentVanId={currentVanId}
       />
+
+      <section className="rounded-lg border bg-card p-4 space-y-2">
+        <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+          Home address
+        </h2>
+        {hasAddress ? (
+          <div className="flex items-start gap-2 text-sm">
+            <MapPinIcon className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
+            <div className="space-y-0.5">
+              {streetLine && <div>{streetLine}</div>}
+              {cityStateZip && <div>{cityStateZip}</div>}
+            </div>
+          </div>
+        ) : (
+          <p className="text-sm text-[var(--anomaly-warn)]">
+            No address on file — can&apos;t route this kid to a van until one is added.
+          </p>
+        )}
+      </section>
 
       {family && (
         <FamilyContactsForm

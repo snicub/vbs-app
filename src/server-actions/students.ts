@@ -7,6 +7,8 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
 import { resolveDayRecordUpdate } from "@/lib/day-record-plan";
+import { assignLegsForVan } from "@/lib/van-assign";
+import { boardedStopConflict } from "@/lib/routing";
 
 // -- Update student profile (name, allergies, medical notes) --
 
@@ -85,13 +87,17 @@ const UpdateDayRecordSchema = z.object({
   afternoonStopId: z.string().uuid().nullable().optional(),
   attending: z.boolean().optional(),
 }).superRefine((data, ctx) => {
+  // Door-to-door: the van assignment (assignStudentToVan) sets stop legs, not
+  // this action. A mode-only update is allowed — a van-mode kid with no van yet
+  // is intentionally "needs routing", not an error. We only reject an EXPLICIT
+  // null on a leg the mode needs (a caller actively clearing a required leg).
   if (!data.mode) return;
   const needsAm = data.mode === "van" || data.mode === "parent_pickup_only";
   const needsPm = data.mode === "van" || data.mode === "parent_dropoff_only";
-  if (needsAm && !data.morningStopId) {
+  if (needsAm && data.morningStopId === null) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "This mode requires a morning stop", path: ["morningStopId"] });
   }
-  if (needsPm && !data.afternoonStopId) {
+  if (needsPm && data.afternoonStopId === null) {
     ctx.addIssue({ code: z.ZodIssueCode.custom, message: "This mode requires an afternoon stop", path: ["afternoonStopId"] });
   }
 });
@@ -169,6 +175,130 @@ export async function updateStudentDayRecord(
   }
 
   if (Object.keys(updates).length === 0) return { ok: true };
+
+  const { error } = await supabase
+    .from("student_day_records")
+    .update(updates as never)
+    .eq("student_id", studentId)
+    .eq("event_date", eventDate);
+
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true };
+}
+
+// -- Assign a student to a van (door-to-door) --
+
+const AssignVanSchema = z.object({
+  studentId: z.string().uuid(),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  vanId: z.string().uuid(),
+});
+
+export type AssignVanResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Coordinator-only: assign a student to a VAN for a single day (door-to-door).
+ *
+ * Each van is one pickup zone — a `stops` row on its AM/PM routes. Assigning a
+ * kid to a van sets both of their stop legs to that van's zone stop, for the
+ * legs their current MODE uses (van→both, parent_dropoff_only→PM only,
+ * parent_pickup_only→AM only, parent_both→neither). The derived van + wristband
+ * color follow automatically via the student_day_status view — we never write
+ * them directly.
+ *
+ * Mode is read from the current plan, not changed here (mode is edited via
+ * updateStudentDayRecord). Respects the boarded-stop guard: a kid currently
+ * riding a van can't be moved off that leg (it would strip the aide's offload
+ * authorization) — undo their boarding first.
+ */
+export async function assignStudentToVan(
+  input: unknown,
+): Promise<AssignVanResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+
+  const parsed = AssignVanSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const { studentId, eventDate, vanId } = parsed.data;
+  const supabase = await createClient();
+
+  // Resolve the van's pickup zone: the single stop on its routes. We read both
+  // directions so a van set up with only one direction's route still resolves.
+  const { data: routes } = await supabase
+    .from("routes")
+    .select("stop_ids")
+    .eq("van_id", vanId)
+    .returns<{ stop_ids: string[] }[]>();
+  const zoneStopIds = Array.from(
+    new Set((routes ?? []).flatMap((r) => r.stop_ids)),
+  );
+  if (zoneStopIds.length === 0) {
+    return {
+      ok: false,
+      error: "This van has no pickup zone yet — set its route on the Vans screen first.",
+    };
+  }
+  if (zoneStopIds.length > 1) {
+    return {
+      ok: false,
+      error: "This van's routes cover more than one stop — door-to-door expects one zone per van. Fix its route first.",
+    };
+  }
+  const zoneStopId = zoneStopIds[0]!;
+
+  const { data: rec } = await supabase
+    .from("student_day_status")
+    .select("state, mode, morning_stop_id, afternoon_stop_id")
+    .eq("student_id", studentId)
+    .eq("event_date", eventDate)
+    .maybeSingle<{
+      state: string;
+      mode: string | null;
+      morning_stop_id: string | null;
+      afternoon_stop_id: string | null;
+    }>();
+  if (!rec) return { ok: false, error: "No plan found for this student on this day." };
+
+  if (!rec.mode) {
+    return { ok: false, error: "This student has no transport mode set for today." };
+  }
+
+  const updates = assignLegsForVan(rec.mode, zoneStopId, {
+    morningStopId: rec.morning_stop_id,
+    afternoonStopId: rec.afternoon_stop_id,
+  });
+
+  if (Object.keys(updates).length === 0) return { ok: true };
+
+  // Don't move a kid off the van they're currently riding: re-pointing the
+  // boarded leg's stop strips the aide's offload authorization. Check the
+  // FINAL legs (after the mode-correct assignment) against the current ones.
+  const finalMorning =
+    updates.morning_stop_id !== undefined ? updates.morning_stop_id : rec.morning_stop_id;
+  const finalAfternoon =
+    updates.afternoon_stop_id !== undefined ? updates.afternoon_stop_id : rec.afternoon_stop_id;
+  const conflict = boardedStopConflict(
+    rec.state,
+    { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
+    { morningStopId: finalMorning, afternoonStopId: finalAfternoon },
+  );
+  if (conflict) {
+    return {
+      ok: false,
+      error: `This child is on the ${conflict} van right now — re-assigning them would strip the aide's check-out authority. Undo their boarding first.`,
+    };
+  }
 
   const { error } = await supabase
     .from("student_day_records")

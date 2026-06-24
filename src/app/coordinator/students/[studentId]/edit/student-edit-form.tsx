@@ -8,15 +8,21 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Select } from "@/components/ui/select";
 import { toast } from "sonner";
-import { updateStudent, updateStudentDayRecord } from "@/server-actions/students";
-import { SaveIcon } from "lucide-react";
+import {
+  updateStudent,
+  updateStudentDayRecord,
+  assignStudentToVan,
+} from "@/server-actions/students";
+import { SaveIcon, BusIcon } from "lucide-react";
 
-type StopOption = {
+type VanOption = {
   id: string;
   name: string;
-  town: string;
-  colorName: string;
+  zoneTown: string | null;
+  zoneColorName: string | null;
 };
+
+const RIDES_VAN = new Set(["van", "parent_dropoff_only", "parent_pickup_only"]);
 
 export function StudentEditForm({
   studentId,
@@ -25,11 +31,10 @@ export function StudentEditForm({
   initialAllergies,
   initialMedicalNotes,
   initialMode,
-  initialMorningStopId,
-  initialAfternoonStopId,
   initialAttending,
   hasDayRecord,
-  stops,
+  vanOptions,
+  currentVanId,
 }: {
   studentId: string;
   eventDate: string;
@@ -37,11 +42,10 @@ export function StudentEditForm({
   initialAllergies: string;
   initialMedicalNotes: string;
   initialMode: string | null;
-  initialMorningStopId: string | null;
-  initialAfternoonStopId: string | null;
   initialAttending: boolean;
   hasDayRecord: boolean;
-  stops: StopOption[];
+  vanOptions: VanOption[];
+  currentVanId: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -51,18 +55,12 @@ export function StudentEditForm({
   const [medicalNotes, setMedicalNotes] = useState(initialMedicalNotes);
 
   const [mode, setMode] = useState(initialMode ?? "van");
-  const [morningStopId, setMorningStopId] = useState(initialMorningStopId ?? "");
-  const [afternoonStopId, setAfternoonStopId] = useState(initialAfternoonStopId ?? "");
   const [attending, setAttending] = useState(initialAttending);
+  const [selectedVanId, setSelectedVanId] = useState(currentVanId ?? "");
 
   function saveProfile() {
     startTransition(async () => {
-      const result = await updateStudent({
-        studentId,
-        name,
-        allergies,
-        medicalNotes,
-      });
+      const result = await updateStudent({ studentId, name, allergies, medicalNotes });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -72,16 +70,9 @@ export function StudentEditForm({
     });
   }
 
-  function saveDayRecord() {
+  function savePlan() {
     startTransition(async () => {
-      const result = await updateStudentDayRecord({
-        studentId,
-        eventDate,
-        mode,
-        morningStopId: morningStopId || null,
-        afternoonStopId: afternoonStopId || null,
-        attending,
-      });
+      const result = await updateStudentDayRecord({ studentId, eventDate, mode, attending });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -91,8 +82,24 @@ export function StudentEditForm({
     });
   }
 
-  const needsAmStop = mode === "van" || mode === "parent_pickup_only";
-  const needsPmStop = mode === "van" || mode === "parent_dropoff_only";
+  function assignVan() {
+    if (!selectedVanId) {
+      toast.error("Pick a van first");
+      return;
+    }
+    startTransition(async () => {
+      const result = await assignStudentToVan({ studentId, eventDate, vanId: selectedVanId });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Assigned to van");
+      router.refresh();
+    });
+  }
+
+  const ridesVan = RIDES_VAN.has(mode);
+  const currentVan = vanOptions.find((v) => v.id === currentVanId) ?? null;
 
   return (
     <div className="space-y-6">
@@ -163,16 +170,7 @@ export function StudentEditForm({
 
           <div className="space-y-1.5">
             <Label htmlFor="mode">Transport mode</Label>
-            <Select
-              id="mode"
-              value={mode}
-              onChange={(e) => {
-                const m = e.target.value;
-                setMode(m);
-                if (m === "parent_both" || m === "parent_dropoff_only") setMorningStopId("");
-                if (m === "parent_both" || m === "parent_pickup_only") setAfternoonStopId("");
-              }}
-            >
+            <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
               <option value="van">Van (both ways)</option>
               <option value="parent_dropoff_only">Parent dropoff, van home</option>
               <option value="parent_pickup_only">Van to site, parent pickup</option>
@@ -180,45 +178,62 @@ export function StudentEditForm({
             </Select>
           </div>
 
-          {needsAmStop && (
-            <div className="space-y-1.5">
-              <Label htmlFor="morningStop">Morning pickup stop</Label>
-              <Select
-                id="morningStop"
-                value={morningStopId}
-                onChange={(e) => setMorningStopId(e.target.value)}
-              >
-                <option value="">-- none --</option>
-                {stops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.town}, {s.colorName})
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
-          {needsPmStop && (
-            <div className="space-y-1.5">
-              <Label htmlFor="afternoonStop">Afternoon drop-off stop</Label>
-              <Select
-                id="afternoonStop"
-                value={afternoonStopId}
-                onChange={(e) => setAfternoonStopId(e.target.value)}
-              >
-                <option value="">-- none --</option>
-                {stops.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} ({s.town}, {s.colorName})
-                  </option>
-                ))}
-              </Select>
-            </div>
-          )}
-
-          <Button onClick={saveDayRecord} disabled={pending}>
+          <Button onClick={savePlan} disabled={pending}>
             <SaveIcon /> Save today&apos;s plan
           </Button>
+        </section>
+      )}
+
+      {/* Van assignment section (door-to-door) */}
+      {hasDayRecord && ridesVan && (
+        <section className="rounded-lg border bg-card p-4 space-y-4">
+          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+            Assign to a van
+          </h2>
+
+          <p className="text-sm text-muted-foreground">
+            {currentVan ? (
+              <>
+                Currently on{" "}
+                <span className="font-medium text-foreground">{currentVan.name}</span>
+                {currentVan.zoneTown ? ` (${currentVan.zoneTown})` : ""}.
+              </>
+            ) : (
+              <span className="text-[var(--anomaly-warn)]">
+                Not on a van yet — pick one below.
+              </span>
+            )}
+          </p>
+
+          {vanOptions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No vans with a pickup zone are set up yet. Configure vans on the Vans screen.
+            </p>
+          ) : (
+            <>
+              <div className="space-y-1.5">
+                <Label htmlFor="van">Van</Label>
+                <Select
+                  id="van"
+                  value={selectedVanId}
+                  onChange={(e) => setSelectedVanId(e.target.value)}
+                >
+                  <option value="">-- choose a van --</option>
+                  {vanOptions.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.name}
+                      {v.zoneTown ? ` — ${v.zoneTown}` : ""}
+                      {v.zoneColorName ? ` (${v.zoneColorName})` : ""}
+                    </option>
+                  ))}
+                </Select>
+              </div>
+
+              <Button onClick={assignVan} disabled={pending}>
+                <BusIcon /> Assign to van
+              </Button>
+            </>
+          )}
         </section>
       )}
 

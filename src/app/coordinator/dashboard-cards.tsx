@@ -8,7 +8,7 @@ import {
   AlertTriangleIcon,
   type LucideIcon,
 } from "lucide-react";
-import type { DashboardMetrics, TownRow } from "@/lib/coordinator/dashboard";
+import type { DashboardMetrics, VanRow } from "@/lib/coordinator/dashboard";
 
 type CardDef = {
   key: keyof DashboardMetrics;
@@ -29,10 +29,10 @@ const CARDS: CardDef[] = [
 
 export function DashboardCards({
   metrics,
-  towns,
+  vans,
 }: {
   metrics: DashboardMetrics;
-  towns: TownRow[];
+  vans: VanRow[];
 }) {
   return (
     <div className="space-y-4">
@@ -65,27 +65,27 @@ export function DashboardCards({
         })}
       </section>
 
-      {towns.length > 0 && (
+      {vans.length > 0 && (
         <section className="space-y-2">
           <h2 className="text-sm font-semibold uppercase tracking-wide text-muted-foreground">
-            Kids coming by town
+            Kids coming by van
           </h2>
           <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
-            {towns.map((t) => (
-              <div key={t.town} className="rounded-xl border bg-card p-4">
+            {vans.map((v) => (
+              <div key={v.vanName} className="rounded-xl border bg-card p-4">
                 <div className="flex items-center gap-2">
                   <span
                     className="size-4 rounded-full border shrink-0"
-                    style={{ backgroundColor: t.colorCode ?? "var(--muted)" }}
+                    style={{ backgroundColor: v.colorCode ?? "var(--muted)" }}
                     aria-hidden
                   />
-                  <span className="font-medium text-sm truncate">{t.town}</span>
+                  <span className="font-medium text-sm truncate">{v.vanName}</span>
                 </div>
                 <div className="mt-2 text-4xl font-bold leading-none tabular-nums">
-                  {t.expected}
+                  {v.expected}
                 </div>
                 <div className="mt-1.5 text-xs text-muted-foreground">
-                  coming · {t.checkedIn} in · {t.home} home
+                  coming · {v.checkedIn} in · {v.home} home
                 </div>
               </div>
             ))}

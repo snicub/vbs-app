@@ -6,13 +6,34 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { createVan, updateVan } from "@/server-actions/vans";
+import { createVan, updateVan, ensureVanZones } from "@/server-actions/vans";
 
-type VanVM = { id: string; name: string; capacity: number; plate: string | null; active: boolean };
+type VanVM = {
+  id: string;
+  name: string;
+  capacity: number;
+  plate: string | null;
+  active: boolean;
+  hasZone: boolean;
+  colorCode: string | null;
+  scheduledAm: string | null;
+  scheduledPm: string | null;
+  areaLocation: string | null;
+  hasCoords: boolean;
+};
 
-export function VanListEditor({ vans }: { vans: VanVM[] }) {
+const DEFAULT_COLOR = "#0F766E";
+
+export function VanListEditor({
+  vans,
+  missingZoneCount,
+}: {
+  vans: VanVM[];
+  missingZoneCount: number;
+}) {
   return (
     <div className="space-y-3">
+      {missingZoneCount > 0 && <MissingZoneBanner count={missingZoneCount} />}
       <ul className="space-y-2">
         {vans.map((v) => (
           <VanRow key={v.id} van={v} />
@@ -26,19 +47,62 @@ export function VanListEditor({ vans }: { vans: VanVM[] }) {
   );
 }
 
+function MissingZoneBanner({ count }: { count: number }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function provision() {
+    startTransition(async () => {
+      const result = await ensureVanZones();
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success(
+        result.provisioned === 1
+          ? "Set up 1 van — confirm its color & times below"
+          : `Set up ${result.provisioned} vans — confirm their colors & times below`,
+      );
+      router.refresh();
+    });
+  }
+
+  return (
+    <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--anomaly-warn)]/40 bg-[var(--anomaly-warn)]/10 px-3 py-3 text-sm">
+      <span>
+        {count === 1 ? "1 van can't carry kids yet" : `${count} vans can't carry kids yet`} — they have no
+        pickup zone. Set one up, then confirm placeholder times.
+      </span>
+      <Button onClick={provision} disabled={pending} size="sm" variant="outline">
+        {pending ? "Setting up…" : "Set up pickup zones"}
+      </Button>
+    </div>
+  );
+}
+
 function VanRow({ van }: { van: VanVM }) {
   const router = useRouter();
   const [name, setName] = useState(van.name);
   const [capacity, setCapacity] = useState(String(van.capacity));
   const [plate, setPlate] = useState(van.plate ?? "");
   const [active, setActive] = useState(van.active);
+  const [color, setColor] = useState(van.colorCode ?? DEFAULT_COLOR);
+  const [am, setAm] = useState(van.scheduledAm ?? "");
+  const [pm, setPm] = useState(van.scheduledPm ?? "");
+  const [area, setArea] = useState(van.areaLocation ?? "");
   const [pending, startTransition] = useTransition();
+
+  const missingTimes = van.hasZone && (!am || !pm);
 
   const dirty =
     name !== van.name ||
     capacity !== String(van.capacity) ||
     plate !== (van.plate ?? "") ||
-    active !== van.active;
+    active !== van.active ||
+    color !== (van.colorCode ?? DEFAULT_COLOR) ||
+    am !== (van.scheduledAm ?? "") ||
+    pm !== (van.scheduledPm ?? "") ||
+    area !== (van.areaLocation ?? "");
 
   function save() {
     const cap = Number(capacity);
@@ -46,8 +110,28 @@ function VanRow({ van }: { van: VanVM }) {
       toast.error("Capacity must be a whole number ≥ 1");
       return;
     }
+    if (van.hasZone && (!am || !pm)) {
+      toast.error("Set both a morning and afternoon time — late alerts need them");
+      return;
+    }
     startTransition(async () => {
-      const result = await updateVan({ vanId: van.id, name, capacity: cap, plate: plate || null, active });
+      const result = await updateVan({
+        vanId: van.id,
+        name,
+        capacity: cap,
+        plate: plate || null,
+        active,
+        ...(van.hasZone
+          ? {
+              colorCode: color,
+              scheduledAm: am,
+              scheduledPm: pm,
+              // Only send (and re-geocode) the area when it actually changed, so an
+              // unrelated save (color/time/name) can't fail on a transient geocode hiccup.
+              ...(area !== (van.areaLocation ?? "") ? { areaAddress: area } : {}),
+            }
+          : {}),
+      });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -58,33 +142,80 @@ function VanRow({ van }: { van: VanVM }) {
   }
 
   return (
-    <li className="flex flex-wrap items-end gap-2 rounded-lg border bg-card px-3 py-3">
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Name</span>
-        <Input value={name} onChange={(e) => setName(e.target.value)} className="w-32" />
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Capacity</span>
-        <Input
-          type="number"
-          min={1}
-          max={99}
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-          className="w-20"
-        />
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Plate</span>
-        <Input value={plate} onChange={(e) => setPlate(e.target.value)} className="w-28" placeholder="—" />
-      </label>
-      <label className="flex min-h-11 items-center gap-2 text-sm">
-        <Checkbox checked={active} onCheckedChange={(c: boolean) => setActive(c)} />
-        <span>Active</span>
-      </label>
-      <Button onClick={save} disabled={pending || !dirty} size="sm" className="ml-auto">
-        {pending ? "Saving…" : "Save"}
-      </Button>
+    <li className="space-y-2 rounded-lg border bg-card px-3 py-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Name</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="w-32" />
+        </label>
+        {van.hasZone && (
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted-foreground">Color</span>
+            <Input
+              type="color"
+              value={color}
+              onChange={(e) => setColor(e.target.value)}
+              className="h-11 w-14 p-1"
+            />
+          </label>
+        )}
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Capacity</span>
+          <Input
+            type="number"
+            min={1}
+            max={99}
+            value={capacity}
+            onChange={(e) => setCapacity(e.target.value)}
+            className="w-20"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Plate</span>
+          <Input value={plate} onChange={(e) => setPlate(e.target.value)} className="w-28" placeholder="—" />
+        </label>
+        <label className="flex min-h-11 items-center gap-2 text-sm">
+          <Checkbox checked={active} onCheckedChange={(c: boolean) => setActive(c)} />
+          <span>Active</span>
+        </label>
+        <Button onClick={save} disabled={pending || !dirty} size="sm" className="ml-auto">
+          {pending ? "Saving…" : "Save"}
+        </Button>
+      </div>
+      {van.hasZone && (
+        <div className="flex flex-wrap items-end gap-2">
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted-foreground">Morning pickup time</span>
+            <Input type="time" value={am} onChange={(e) => setAm(e.target.value)} className="w-32" required />
+          </label>
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted-foreground">Afternoon drop-off time</span>
+            <Input type="time" value={pm} onChange={(e) => setPm(e.target.value)} className="w-32" required />
+          </label>
+          {missingTimes && (
+            <span className="text-xs text-[var(--anomaly-warn)]">
+              Set both times — late / never-out alerts can&apos;t fire without them.
+            </span>
+          )}
+          <label className="space-y-1 text-sm">
+            <span className="block text-muted-foreground">
+              Area location{" "}
+              {van.hasCoords && area === (van.areaLocation ?? "") && (
+                <span className="text-[var(--state-safe)]">· located ✓</span>
+              )}
+            </span>
+            <Input
+              value={area}
+              onChange={(e) => setArea(e.target.value)}
+              className="w-56"
+              placeholder="e.g. North Sisseton, SD"
+            />
+          </label>
+          <span className="text-xs text-muted-foreground">
+            Optional — lets &ldquo;Suggest vans from addresses&rdquo; pick the nearest van for each home.
+          </span>
+        </div>
+      )}
     </li>
   );
 }
@@ -94,6 +225,9 @@ function AddVan() {
   const [name, setName] = useState("");
   const [capacity, setCapacity] = useState("14");
   const [plate, setPlate] = useState("");
+  const [color, setColor] = useState(DEFAULT_COLOR);
+  const [am, setAm] = useState("");
+  const [pm, setPm] = useState("");
   const [pending, startTransition] = useTransition();
 
   function add() {
@@ -106,8 +240,19 @@ function AddVan() {
       toast.error("Capacity must be a whole number ≥ 1");
       return;
     }
+    if (!am || !pm) {
+      toast.error("Set both a morning and afternoon time — late alerts need them");
+      return;
+    }
     startTransition(async () => {
-      const result = await createVan({ name, capacity: cap, plate: plate || undefined });
+      const result = await createVan({
+        name,
+        capacity: cap,
+        plate: plate || undefined,
+        colorCode: color,
+        scheduledAm: am,
+        scheduledPm: pm,
+      });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -116,34 +261,58 @@ function AddVan() {
       setName("");
       setCapacity("14");
       setPlate("");
+      setColor(DEFAULT_COLOR);
+      setAm("");
+      setPm("");
       router.refresh();
     });
   }
 
   return (
-    <div className="flex flex-wrap items-end gap-2 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">New van name</span>
-        <Input value={name} onChange={(e) => setName(e.target.value)} className="w-32" placeholder="Van 6" />
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Capacity</span>
-        <Input
-          type="number"
-          min={1}
-          max={99}
-          value={capacity}
-          onChange={(e) => setCapacity(e.target.value)}
-          className="w-20"
-        />
-      </label>
-      <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Plate</span>
-        <Input value={plate} onChange={(e) => setPlate(e.target.value)} className="w-28" placeholder="optional" />
-      </label>
-      <Button onClick={add} disabled={pending} size="sm" className="ml-auto">
-        {pending ? "Adding…" : "Add van"}
-      </Button>
+    <div className="space-y-2 rounded-lg border border-dashed bg-muted/20 px-3 py-3">
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">New van name</span>
+          <Input value={name} onChange={(e) => setName(e.target.value)} className="w-32" placeholder="Van 6" />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Color</span>
+          <Input
+            type="color"
+            value={color}
+            onChange={(e) => setColor(e.target.value)}
+            className="h-11 w-14 p-1"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Capacity</span>
+          <Input
+            type="number"
+            min={1}
+            max={99}
+            value={capacity}
+            onChange={(e) => setCapacity(e.target.value)}
+            className="w-20"
+          />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Plate</span>
+          <Input value={plate} onChange={(e) => setPlate(e.target.value)} className="w-28" placeholder="optional" />
+        </label>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Morning pickup time</span>
+          <Input type="time" value={am} onChange={(e) => setAm(e.target.value)} className="w-32" required />
+        </label>
+        <label className="space-y-1 text-sm">
+          <span className="block text-muted-foreground">Afternoon drop-off time</span>
+          <Input type="time" value={pm} onChange={(e) => setPm(e.target.value)} className="w-32" required />
+        </label>
+        <Button onClick={add} disabled={pending} size="sm" className="ml-auto">
+          {pending ? "Adding…" : "Add van"}
+        </Button>
+      </div>
     </div>
   );
 }

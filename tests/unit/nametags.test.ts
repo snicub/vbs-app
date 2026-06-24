@@ -192,6 +192,31 @@ describe("buildTagData", () => {
     );
     expect(tags[0]?.needsRouting).toBe(false);
   });
+
+  // Door-to-door: a normal van kid rides one van zone for both legs, so the
+  // resolved AM and PM colors agree → the band renders single (showing the van),
+  // never the rare mixed-mode AM|PM split. The van name is the tag's headline.
+  it("a normal van kid resolves to one van zone color (single-band) with a van label", () => {
+    const tags = buildTagData(
+      [{
+        studentId: "s1",
+        mode: "van",
+        morningStopId: "st1",
+        afternoonStopId: "st1",
+        morningVanId: "v1",
+        afternoonVanId: "v1",
+        wristbandColorForDay: "#3b82f6",
+        wristbandColorName: "Blue",
+      }],
+      // st1 carries the van's zone color so both legs resolve to the same band.
+      students,
+      new Map([["st1", { name: "Van 2 Zone", town: "Maple Falls", colorCode: "#3b82f6", colorName: "Blue" }]]),
+      vans,
+    );
+    expect(tags[0]?.morningColorCode).toBe(tags[0]?.afternoonColorCode);
+    expect(tags[0]?.vanName).toBe("Van 2");
+    expect(tags[0]?.colorName).toBe("Blue");
+  });
 });
 
 describe("sortTags", () => {

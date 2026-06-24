@@ -64,9 +64,13 @@ export function displayName(s: {
 
 /**
  * Join today's attending-student statuses with their student/stop/van rows
- * into print-ready tags. The color comes from the day's wristband color
- * (afternoon stop → morning stop, already coalesced by the status view); the
- * town/stop label prefers the morning stop, falling back to the afternoon one.
+ * into print-ready tags. Under door-to-door each van is one pickup zone, so the
+ * color comes from that zone (the day's wristband color, afternoon stop →
+ * morning stop, already coalesced by the status view) and the tag's headline
+ * label is the VAN. `town` is still derived (morning stop → afternoon stop) for
+ * the rare stop-less fallback context; per-leg colors are kept so the band can
+ * split AM|PM in the rare mixed-mode case where the resolved AM zone color
+ * differs from the PM zone color.
  */
 export function buildTagData(
   statuses: StatusInput[],

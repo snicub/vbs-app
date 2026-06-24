@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeMetrics,
-  computeTownBreakdown,
+  computeVanBreakdown,
   type DashStatus,
 } from "@/lib/coordinator/dashboard";
 
@@ -10,7 +10,8 @@ function row(p: Partial<DashStatus>): DashStatus {
     state: "not_started",
     hasAnomaly: false,
     attending: true,
-    town: "Springfield",
+    vanId: "v1",
+    vanName: "Red Van",
     colorCode: "#ef4444",
     colorName: "Red",
     ...p,
@@ -77,36 +78,56 @@ describe("dashboard: computeMetrics", () => {
   });
 });
 
-describe("dashboard: computeTownBreakdown", () => {
-  it("rolls up coming / checked-in / home per town", () => {
-    const towns = computeTownBreakdown([
-      row({ town: "Springfield", state: "site_checked_in" }),
-      row({ town: "Springfield", state: "home" }),
-      row({ town: "Maple Falls", state: "not_started" }),
+describe("dashboard: computeVanBreakdown", () => {
+  it("rolls up coming / checked-in / home per van", () => {
+    const vans = computeVanBreakdown([
+      row({ vanId: "v1", vanName: "Red Van", state: "site_checked_in" }),
+      row({ vanId: "v1", vanName: "Red Van", state: "home" }),
+      row({ vanId: "v2", vanName: "Blue Van", state: "not_started" }),
     ]);
-    const spr = towns.find((t) => t.town === "Springfield")!;
-    expect(spr.expected).toBe(2);
-    expect(spr.checkedIn).toBe(2);
-    expect(spr.home).toBe(1);
-    const maple = towns.find((t) => t.town === "Maple Falls")!;
-    expect(maple.expected).toBe(1);
-    expect(maple.checkedIn).toBe(0);
+    const red = vans.find((v) => v.vanName === "Red Van")!;
+    expect(red.expected).toBe(2);
+    expect(red.checkedIn).toBe(2);
+    expect(red.home).toBe(1);
+    const blue = vans.find((v) => v.vanName === "Blue Van")!;
+    expect(blue.expected).toBe(1);
+    expect(blue.checkedIn).toBe(0);
   });
 
-  it("groups stop-less kids under Parent drop-off, sorted last", () => {
-    const towns = computeTownBreakdown([
-      row({ town: null, state: "site_checked_in" }),
-      row({ town: "Springfield" }),
+  it("groups van kids by van id even if names collide, carrying van color", () => {
+    const vans = computeVanBreakdown([
+      row({ vanId: "v2", vanName: "Blue Van", colorCode: "#3b82f6", colorName: "Blue" }),
     ]);
-    expect(towns[towns.length - 1]!.town).toBe("Parent drop-off");
-    expect(towns.find((t) => t.town === "Parent drop-off")!.colorCode).toBeNull();
+    const blue = vans.find((v) => v.vanName === "Blue Van")!;
+    expect(blue.colorCode).toBe("#3b82f6");
+    expect(blue.colorName).toBe("Blue");
+  });
+
+  it("groups van-less kids under Parent drop-off, sorted last with no color", () => {
+    const vans = computeVanBreakdown([
+      row({ vanId: null, vanName: null, colorCode: null, colorName: null, state: "site_checked_in" }),
+      row({ vanId: "v1", vanName: "Red Van" }),
+    ]);
+    expect(vans[vans.length - 1]!.vanName).toBe("Parent drop-off");
+    const parent = vans.find((v) => v.vanName === "Parent drop-off")!;
+    expect(parent.colorCode).toBeNull();
+    expect(parent.expected).toBe(1);
+  });
+
+  it("sorts van rows by name, parent bucket always last", () => {
+    const vans = computeVanBreakdown([
+      row({ vanId: null, vanName: null }),
+      row({ vanId: "v2", vanName: "Blue Van" }),
+      row({ vanId: "v1", vanName: "Red Van" }),
+    ]);
+    expect(vans.map((v) => v.vanName)).toEqual(["Blue Van", "Red Van", "Parent drop-off"]);
   });
 
   it("excludes non-attending kids", () => {
-    const towns = computeTownBreakdown([
-      row({ town: "Springfield", attending: false }),
-      row({ town: "Springfield" }),
+    const vans = computeVanBreakdown([
+      row({ vanId: "v1", vanName: "Red Van", attending: false }),
+      row({ vanId: "v1", vanName: "Red Van" }),
     ]);
-    expect(towns.find((t) => t.town === "Springfield")!.expected).toBe(1);
+    expect(vans.find((v) => v.vanName === "Red Van")!.expected).toBe(1);
   });
 });

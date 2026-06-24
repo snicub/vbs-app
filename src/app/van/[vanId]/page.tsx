@@ -22,6 +22,7 @@ type StatusRow = {
 
 type StudentRow = {
   id: string;
+  family_id: string;
   legal_first_name: string;
   legal_last_name: string;
   preferred_first_name: string | null;
@@ -70,7 +71,7 @@ export default async function VanPage({
     const { data: studentRows } = await supabase
       .from("students")
       .select(
-        "id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path",
+        "id, family_id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, photo_path",
       )
       .in("id", studentIds)
       .returns<StudentRow[]>();
@@ -84,6 +85,22 @@ export default async function VanPage({
     "student-photos",
     students.map((s) => s.photo_path),
   );
+
+  // Home addresses — door-to-door: the van drives to each rider's home, so the
+  // driver needs to see where, and a kid with no address on file is flagged.
+  const familyIds = Array.from(new Set(students.map((s) => s.family_id)));
+  const familyAddr = new Map<string, string | null>();
+  if (familyIds.length > 0) {
+    const { data: fams } = await supabase
+      .from("families")
+      .select("id, street_address, city")
+      .in("id", familyIds)
+      .returns<{ id: string; street_address: string | null; city: string | null }[]>();
+    for (const f of fams ?? []) {
+      const addr = [f.street_address, f.city].map((p) => p?.trim()).filter(Boolean).join(", ");
+      familyAddr.set(f.id, addr || null);
+    }
+  }
 
   const { data: stops } = await supabase
     .from("stops")
@@ -132,6 +149,7 @@ export default async function VanPage({
       direction,
       stopName: stopMap.get(stopId)?.name ?? null,
       stopOrder: stopOrderMap.get(stopId) ?? Infinity,
+      homeAddress: student ? (familyAddr.get(student.family_id) ?? null) : null,
       photoUrl: student?.photo_path ? (photoUrls.get(student.photo_path) ?? null) : null,
     };
   });

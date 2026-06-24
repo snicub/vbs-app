@@ -27,7 +27,7 @@ export function PrintFailsafe({
             Print / Failsafe — {formatDate(date)}
           </h1>
           <p className="text-sm text-muted-foreground">
-            Sunday-night paper backup. Prints the per-van manifests (one van per
+            Sunday-night paper backup. Prints each van&apos;s rider list (one van per
             page) followed by the master roster. Staff-only — includes contacts
             and medical notes. Print it the night before and keep it in the van.
           </p>
@@ -62,9 +62,9 @@ export function PrintFailsafe({
           {needsRouting.length > 0 && (
             <p className="text-[var(--anomaly-critical)] font-medium">
               {needsRouting.length} kid{needsRouting.length === 1 ? "" : "s"}{" "}
-              expected on a van but their stop isn&apos;t routed yet — they appear
-              under &ldquo;No van / needs routing&rdquo; on the roster. Assign
-              their stop to a van before printing.
+              expected on a van but not assigned to one yet — they appear under
+              &ldquo;No van / needs routing&rdquo; on the roster. Assign them to a
+              van before printing.
             </p>
           )}
         </div>
@@ -76,7 +76,7 @@ export function PrintFailsafe({
           <section key={van.vanId} className="failsafe-page mt-8 first:mt-4 print:mt-0">
             <header className="mb-2 flex flex-wrap items-baseline justify-between gap-2 border-b-2 border-gray-800 pb-1">
               <h2 className="text-lg font-bold text-gray-900">
-                {van.vanName} — manifest
+                {van.vanName} — rider list
               </h2>
               <span className="text-sm text-gray-700">
                 {formatDate(date)} · {van.riders.length} rider

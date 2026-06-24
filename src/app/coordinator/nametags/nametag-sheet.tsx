@@ -106,9 +106,10 @@ export function NameTagSheet({
                   {t.lastName}
                 </span>
               </div>
-              <div className="flex items-center justify-between border-t border-gray-200 px-3 py-1 text-sm text-gray-700">
-                <span>{t.vanName ?? "No van"}</span>
-                <code className="font-mono tracking-widest">{t.wristbandCode}</code>
+              <div className="flex items-center justify-end border-t border-gray-200 px-3 py-1">
+                <code className="font-mono text-xs tracking-widest text-gray-400">
+                  {t.wristbandCode}
+                </code>
               </div>
             </article>
           ))}
@@ -141,8 +142,10 @@ function NameTagBand({ tag: t }: { tag: NameTag }) {
 
   const am = t.morningColorCode;
   const pm = t.afternoonColorCode;
-  // Show both colors only when the morning and afternoon stops differ — a kid
-  // dropped off at one stop but riding the van home from another.
+  // Door-to-door rarity: show both colors only when the resolved AM zone color
+  // differs from the PM zone color — e.g. dropped off by a parent at one place
+  // but vanned home from a different van's zone. Normal van kids have AM == PM
+  // (one van zone) and fall through to the single band below.
   if (am && pm && am !== pm) {
     return (
       <div className="nametag-band flex text-sm font-semibold uppercase tracking-wide">
@@ -175,16 +178,22 @@ function NameTagBand({ tag: t }: { tag: NameTag }) {
       </div>
     );
   }
+  // Door-to-door: the band IS the van's pickup zone. Lead with the van name
+  // (what a kid is routed to in the morning), with the color NAME alongside it
+  // as the only failsafe if the band prints white (grayscale / ink-saving
+  // drivers). Stop-less "parent-both" kids have no van/color → "P · Parent".
   return (
     <div
-      className="nametag-band px-3 py-1.5 text-sm font-semibold uppercase tracking-wide"
+      className="nametag-band flex items-baseline justify-between gap-2 px-3 py-1.5 uppercase tracking-wide"
       style={{
         backgroundColor: t.colorCode ?? "#e5e7eb",
         color: contrastText(t.colorCode),
       }}
     >
-      {t.colorName ?? "P"}
-      {t.town ? ` · ${t.town}` : " · Parent drop-off"}
+      <span className="text-base font-bold [overflow-wrap:anywhere]">
+        {t.vanName ?? "Parent drop-off"}
+      </span>
+      <span className="shrink-0 text-sm font-semibold">{t.colorName ?? "P"}</span>
     </div>
   );
 }

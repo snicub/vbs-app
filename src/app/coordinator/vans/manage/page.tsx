@@ -5,15 +5,26 @@ import { getLocalDate } from "@/lib/date";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { buttonVariants } from "@/components/ui/button";
+import { zoneStopIdForVan } from "@/lib/vans";
 import { VanListEditor } from "./van-list-editor";
-import { RouteEditor } from "./route-editor";
 import { AssignmentEditor } from "./assignment-editor";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Manage Vans — Coordinator" };
 
 type VanRow = { id: string; name: string; capacity: number; plate: string | null; active: boolean };
-type StopRow = { id: string; name: string; town: string; color_code: string; color_name: string };
+type StopRow = {
+  id: string;
+  name: string;
+  town: string;
+  color_code: string;
+  color_name: string;
+  scheduled_am_time: string | null;
+  scheduled_pm_time: string | null;
+  street_address: string | null;
+  lat: number | null;
+  lng: number | null;
+};
 type RouteRow = { van_id: string; direction: "am" | "pm"; stop_ids: string[] };
 type AssignmentRow = { van_id: string; driver_user_id: string | null; aide_user_id: string | null };
 type UserRow = { id: string; full_name: string; role: string };
@@ -41,7 +52,11 @@ export default async function ManageVansPage({
     { data: staff },
   ] = await Promise.all([
     supabase.from("vans").select("id, name, capacity, plate, active").order("name").returns<VanRow[]>(),
-    supabase.from("stops").select("id, name, town, color_code, color_name").order("sort_order").returns<StopRow[]>(),
+    supabase
+      .from("stops")
+      .select("id, name, town, color_code, color_name, scheduled_am_time, scheduled_pm_time, street_address, lat, lng")
+      .order("sort_order")
+      .returns<StopRow[]>(),
     supabase.from("routes").select("van_id, direction, stop_ids").returns<RouteRow[]>(),
     supabase
       .from("van_assignments")
@@ -56,22 +71,32 @@ export default async function ManageVansPage({
       .returns<UserRow[]>(),
   ]);
 
-  const vanList = (vans ?? []).map((v) => ({
-    id: v.id,
-    name: v.name,
-    capacity: v.capacity,
-    plate: v.plate,
-    active: v.active,
+  const routeList = (routes ?? []).map((r) => ({
+    van_id: r.van_id,
+    direction: r.direction,
+    stop_ids: r.stop_ids,
   }));
+  const stopById = new Map((stops ?? []).map((s) => [s.id, s]));
+
+  const vanList = (vans ?? []).map((v) => {
+    const zoneStopId = zoneStopIdForVan(v.id, routeList);
+    const zone = zoneStopId ? stopById.get(zoneStopId) : undefined;
+    return {
+      id: v.id,
+      name: v.name,
+      capacity: v.capacity,
+      plate: v.plate,
+      active: v.active,
+      hasZone: !!zone,
+      colorCode: zone?.color_code ?? null,
+      scheduledAm: toHm(zone?.scheduled_am_time ?? null),
+      scheduledPm: toHm(zone?.scheduled_pm_time ?? null),
+      areaLocation: zone?.street_address ?? null,
+      hasCoords: zone?.lat != null && zone?.lng != null,
+    };
+  });
   const activeVans = vanList.filter((v) => v.active).map((v) => ({ id: v.id, name: v.name }));
-  const stopList = (stops ?? []).map((s) => ({
-    id: s.id,
-    name: s.name,
-    town: s.town,
-    colorCode: s.color_code,
-    colorName: s.color_name,
-  }));
-  const routeList = (routes ?? []).map((r) => ({ vanId: r.van_id, direction: r.direction, stopIds: r.stop_ids }));
+  const vansMissingZone = vanList.filter((v) => !v.hasZone).length;
   const assignmentList = (assignments ?? []).map((a) => ({
     vanId: a.van_id,
     driverUserId: a.driver_user_id,
@@ -89,23 +114,14 @@ export default async function ManageVansPage({
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          Create vans, set which stops each van serves (this is what puts kids on a van), and assign the
-          day&apos;s driver &amp; aide.
+          Each van is a pickup zone with its own color and morning/afternoon times. A child rides the van
+          their home is assigned to. Set the color &amp; times here, then assign the day&apos;s driver &amp; aide.
         </p>
       </header>
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Vans</h2>
-        <VanListEditor vans={vanList} />
-      </section>
-
-      <section className="space-y-3">
-        <h2 className="text-lg font-semibold">Routes — which stops each van serves</h2>
-        <p className="text-sm text-muted-foreground">
-          A child rides the van whose route includes their stop. Keep each stop on just one morning route
-          and one afternoon route.
-        </p>
-        <RouteEditor vans={activeVans} stops={stopList} routes={routeList} />
+        <VanListEditor vans={vanList} missingZoneCount={vansMissingZone} />
       </section>
 
       <section className="space-y-3">
@@ -114,4 +130,11 @@ export default async function ManageVansPage({
       </section>
     </div>
   );
+}
+
+/** Postgres `time` comes back as `HH:MM:SS`; `<input type="time">` wants `HH:MM`. */
+function toHm(time: string | null): string | null {
+  if (!time) return null;
+  const m = /^(\d{2}:\d{2})/.exec(time);
+  return m?.[1] ?? null;
 }
