@@ -19,8 +19,6 @@ type StopRow = {
   town: string;
   color_code: string;
   color_name: string;
-  scheduled_am_time: string | null;
-  scheduled_pm_time: string | null;
   street_address: string | null;
   lat: number | null;
   lng: number | null;
@@ -54,7 +52,7 @@ export default async function ManageVansPage({
     supabase.from("vans").select("id, name, capacity, plate, active").order("name").returns<VanRow[]>(),
     supabase
       .from("stops")
-      .select("id, name, town, color_code, color_name, scheduled_am_time, scheduled_pm_time, street_address, lat, lng")
+      .select("id, name, town, color_code, color_name, street_address, lat, lng")
       .order("sort_order")
       .returns<StopRow[]>(),
     supabase.from("routes").select("van_id, direction, stop_ids").returns<RouteRow[]>(),
@@ -89,8 +87,6 @@ export default async function ManageVansPage({
       active: v.active,
       hasZone: !!zone,
       colorCode: zone?.color_code ?? null,
-      scheduledAm: toHm(zone?.scheduled_am_time ?? null),
-      scheduledPm: toHm(zone?.scheduled_pm_time ?? null),
       areaLocation: zone?.street_address ?? null,
       hasCoords: zone?.lat != null && zone?.lng != null,
     };
@@ -130,11 +126,4 @@ export default async function ManageVansPage({
       </section>
     </div>
   );
-}
-
-/** Postgres `time` comes back as `HH:MM:SS`; `<input type="time">` wants `HH:MM`. */
-function toHm(time: string | null): string | null {
-  if (!time) return null;
-  const m = /^(\d{2}:\d{2})/.exec(time);
-  return m?.[1] ?? null;
 }

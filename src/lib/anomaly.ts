@@ -34,9 +34,11 @@ export function anomaliesFor(
   >,
 ): AnomalyKind[] {
   const out: AnomalyKind[] = [];
-  if (status.isLateAm) out.push("late_am");
+  // late_am and in_but_not_out are retired: they relied on per-van scheduled
+  // times, which are no longer collected. The two van-transit alerts below
+  // don't depend on scheduled times and stay (a kid on a van must be accounted
+  // for). The flags + labels are kept in the type for historical records.
   if (status.isBoardedButNotArrived) out.push("boarded_but_not_arrived");
-  if (status.isInButNotOut) out.push("in_but_not_out");
   if (status.isPmVanStuck) out.push("pm_van_stuck");
   return out;
 }

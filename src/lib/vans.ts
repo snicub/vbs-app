@@ -26,15 +26,6 @@ export type DirectionRoute = { van_id: string; direction: "am" | "pm"; stop_ids:
 export type StopConflict = { stopId: string; vanId: string; direction: "am" | "pm" };
 
 /**
- * True for a `HH:MM` clock time as emitted by `<input type="time">` (24-hour,
- * optionally `HH:MM:SS`). The van's pickup zone needs a non-null AM + PM time or
- * the `is_late_am` / `is_in_but_not_out` alerts can never fire for its kids.
- */
-export function isValidTimeOfDay(value: string): boolean {
-  return /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(value.trim());
-}
-
-/**
  * A van's pickup zone is the single stop on its route. Resolve that stop id from
  * the van's routes (prefer the AM route, fall back to PM). Returns null when the
  * van has no route stop yet — i.e. it still needs a zone.

@@ -7,7 +7,6 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import {
   sameDriverAndAide,
-  isValidTimeOfDay,
   zoneStopIdForVan,
   findVansMissingZone,
   type DirectionRoute,
@@ -19,9 +18,6 @@ type Result = { ok: true } | { ok: false; error: string };
 
 /** Default band color for a new van's pickup zone (a calm teal). */
 const DEFAULT_ZONE_COLOR = "#0F766E";
-/** Placeholder times for a backfilled zone — the coordinator must confirm them. */
-const BACKFILL_AM_TIME = "08:00";
-const BACKFILL_PM_TIME = "15:00";
 
 async function requireCoordinator(): Promise<boolean> {
   const user = await getSessionUser();
@@ -44,18 +40,11 @@ function revalidateVanTrees(): void {
 
 // -- Create a van (+ its pickup zone) --
 
-const TimeSchema = z
-  .string()
-  .trim()
-  .refine(isValidTimeOfDay, "Time must be a 24-hour HH:MM");
-
 const CreateVanSchema = z.object({
   name: z.string().trim().min(1, "Name is required").max(40),
   capacity: z.number().int("Capacity must be a whole number").min(1, "Capacity must be at least 1").max(99),
   plate: z.string().trim().max(20).optional(),
   colorCode: z.string().trim().refine(isValidHexColor, "Pick a color"),
-  scheduledAm: TimeSchema,
-  scheduledPm: TimeSchema,
 });
 
 export async function createVan(input: unknown): Promise<Result> {
@@ -63,7 +52,7 @@ export async function createVan(input: unknown): Promise<Result> {
 
   const parsed = CreateVanSchema.safeParse(input);
   if (!parsed.success) return fail(issues(parsed.error));
-  const { name, capacity, plate, colorCode, scheduledAm, scheduledPm } = parsed.data;
+  const { name, capacity, plate, colorCode } = parsed.data;
 
   const supabase = await createClient();
 
@@ -74,16 +63,11 @@ export async function createVan(input: unknown): Promise<Result> {
     .single<{ id: string }>();
   if (vanErr || !van) return fail(vanErr?.message ?? "Could not create the van");
 
-  // Each van owns one pickup zone: a stop carrying the van's color + the AM/PM
-  // scheduled times, sitting on both of the van's routes. The status view
-  // derives a kid's van + color from this. If any step fails, roll the van back
-  // so we never leave a van with no zone (kids could never ride it).
-  const zone = await provisionVanZone(supabase, {
-    vanName: name,
-    colorCode,
-    scheduledAm,
-    scheduledPm,
-  });
+  // Each van owns one pickup zone: a stop carrying the van's color, sitting on
+  // both of the van's routes. The status view derives a kid's van + color from
+  // this. If any step fails, roll the van back so we never leave a van with no
+  // zone (kids could never ride it).
+  const zone = await provisionVanZone(supabase, { vanName: name, colorCode });
   if (!zone.ok) {
     await supabase.from("vans").delete().eq("id", van.id);
     return fail(zone.error);
@@ -105,7 +89,7 @@ type SupabaseClient = Awaited<ReturnType<typeof createClient>>;
 /** Insert the van's pickup-zone stop. Returns the new stop id on success. */
 async function provisionVanZone(
   supabase: SupabaseClient,
-  z: { vanName: string; colorCode: string; scheduledAm: string; scheduledPm: string },
+  z: { vanName: string; colorCode: string },
 ): Promise<{ ok: true; stopId: string } | { ok: false; error: string }> {
   const { data, error } = await supabase
     .from("stops")
@@ -114,8 +98,6 @@ async function provisionVanZone(
       town: z.vanName,
       color_code: z.colorCode,
       color_name: z.vanName,
-      scheduled_am_time: z.scheduledAm,
-      scheduled_pm_time: z.scheduledPm,
     } as never)
     .select("id")
     .single<{ id: string }>();
@@ -149,8 +131,6 @@ const UpdateVanSchema = z.object({
   plate: z.string().trim().max(20).nullable().optional(),
   active: z.boolean().optional(),
   colorCode: z.string().trim().refine(isValidHexColor, "Pick a color").optional(),
-  scheduledAm: TimeSchema.optional(),
-  scheduledPm: TimeSchema.optional(),
   // A rough area address for this van (e.g. "North Sisseton, SD"). Geocoded to
   // coordinates on the zone stop so the address→van suggestion can match each
   // home to its nearest van. Empty string clears it.
@@ -170,8 +150,8 @@ export async function updateVan(input: unknown): Promise<Result> {
   if (fields.plate !== undefined) vanUpdates.plate = fields.plate || null;
   if (fields.active !== undefined) vanUpdates.active = fields.active;
 
-  // The van's name, color, and scheduled times live on its pickup-zone stop —
-  // keep them in sync so the kids' band color + late/never-out alerts track edits.
+  // The van's name and color live on its pickup-zone stop — keep them in sync so
+  // the kids' band color tracks edits.
   const zoneUpdates: Record<string, unknown> = {};
   if (fields.name !== undefined) {
     zoneUpdates.name = fields.name;
@@ -179,8 +159,6 @@ export async function updateVan(input: unknown): Promise<Result> {
     zoneUpdates.color_name = fields.name;
   }
   if (fields.colorCode !== undefined) zoneUpdates.color_code = fields.colorCode;
-  if (fields.scheduledAm !== undefined) zoneUpdates.scheduled_am_time = fields.scheduledAm;
-  if (fields.scheduledPm !== undefined) zoneUpdates.scheduled_pm_time = fields.scheduledPm;
 
   // Area location → coordinates on the zone stop (powers the address→van
   // suggestion). Empty clears it (the van drops out of suggestion, manual still
@@ -250,8 +228,7 @@ type EnsureResult = { ok: true; provisioned: number } | { ok: false; error: stri
  * Give every van that has no pickup zone one (a stop on both its routes), so
  * existing test vans can carry kids under the door-to-door model. Idempotent:
  * vans that already have a zone are left untouched. Backfilled zones get a
- * default color and placeholder AM/PM times the coordinator must then confirm
- * (null times would silence the late/never-out alerts).
+ * default color the coordinator can then change.
  */
 export async function ensureVanZones(): Promise<EnsureResult> {
   if (!(await requireCoordinator())) return fail("Coordinator access required");
@@ -273,8 +250,6 @@ export async function ensureVanZones(): Promise<EnsureResult> {
     const zone = await provisionVanZone(supabase, {
       vanName,
       colorCode: DEFAULT_ZONE_COLOR,
-      scheduledAm: BACKFILL_AM_TIME,
-      scheduledPm: BACKFILL_PM_TIME,
     });
     if (!zone.ok) return fail(zone.error);
     const routed = await setVanRouteStops(supabase, v.id, zone.stopId);

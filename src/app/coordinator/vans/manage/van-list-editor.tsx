@@ -16,8 +16,6 @@ type VanVM = {
   active: boolean;
   hasZone: boolean;
   colorCode: string | null;
-  scheduledAm: string | null;
-  scheduledPm: string | null;
   areaLocation: string | null;
   hasCoords: boolean;
 };
@@ -87,12 +85,8 @@ function VanRow({ van }: { van: VanVM }) {
   const [plate, setPlate] = useState(van.plate ?? "");
   const [active, setActive] = useState(van.active);
   const [color, setColor] = useState(van.colorCode ?? DEFAULT_COLOR);
-  const [am, setAm] = useState(van.scheduledAm ?? "");
-  const [pm, setPm] = useState(van.scheduledPm ?? "");
   const [area, setArea] = useState(van.areaLocation ?? "");
   const [pending, startTransition] = useTransition();
-
-  const missingTimes = van.hasZone && (!am || !pm);
 
   const dirty =
     name !== van.name ||
@@ -100,18 +94,12 @@ function VanRow({ van }: { van: VanVM }) {
     plate !== (van.plate ?? "") ||
     active !== van.active ||
     color !== (van.colorCode ?? DEFAULT_COLOR) ||
-    am !== (van.scheduledAm ?? "") ||
-    pm !== (van.scheduledPm ?? "") ||
     area !== (van.areaLocation ?? "");
 
   function save() {
     const cap = Number(capacity);
     if (!Number.isInteger(cap) || cap < 1) {
       toast.error("Capacity must be a whole number ≥ 1");
-      return;
-    }
-    if (van.hasZone && (!am || !pm)) {
-      toast.error("Set both a morning and afternoon time — late alerts need them");
       return;
     }
     startTransition(async () => {
@@ -124,10 +112,8 @@ function VanRow({ van }: { van: VanVM }) {
         ...(van.hasZone
           ? {
               colorCode: color,
-              scheduledAm: am,
-              scheduledPm: pm,
               // Only send (and re-geocode) the area when it actually changed, so an
-              // unrelated save (color/time/name) can't fail on a transient geocode hiccup.
+              // unrelated save (color/name) can't fail on a transient geocode hiccup.
               ...(area !== (van.areaLocation ?? "") ? { areaAddress: area } : {}),
             }
           : {}),
@@ -185,19 +171,6 @@ function VanRow({ van }: { van: VanVM }) {
       {van.hasZone && (
         <div className="flex flex-wrap items-end gap-2">
           <label className="space-y-1 text-sm">
-            <span className="block text-muted-foreground">Morning pickup time</span>
-            <Input type="time" value={am} onChange={(e) => setAm(e.target.value)} className="w-32" required />
-          </label>
-          <label className="space-y-1 text-sm">
-            <span className="block text-muted-foreground">Afternoon drop-off time</span>
-            <Input type="time" value={pm} onChange={(e) => setPm(e.target.value)} className="w-32" required />
-          </label>
-          {missingTimes && (
-            <span className="text-xs text-[var(--anomaly-warn)]">
-              Set both times — late / never-out alerts can&apos;t fire without them.
-            </span>
-          )}
-          <label className="space-y-1 text-sm">
             <span className="block text-muted-foreground">
               Area location{" "}
               {van.hasCoords && area === (van.areaLocation ?? "") && (
@@ -226,8 +199,6 @@ function AddVan() {
   const [capacity, setCapacity] = useState("14");
   const [plate, setPlate] = useState("");
   const [color, setColor] = useState(DEFAULT_COLOR);
-  const [am, setAm] = useState("");
-  const [pm, setPm] = useState("");
   const [pending, startTransition] = useTransition();
 
   function add() {
@@ -240,18 +211,12 @@ function AddVan() {
       toast.error("Capacity must be a whole number ≥ 1");
       return;
     }
-    if (!am || !pm) {
-      toast.error("Set both a morning and afternoon time — late alerts need them");
-      return;
-    }
     startTransition(async () => {
       const result = await createVan({
         name,
         capacity: cap,
         plate: plate || undefined,
         colorCode: color,
-        scheduledAm: am,
-        scheduledPm: pm,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -262,8 +227,6 @@ function AddVan() {
       setCapacity("14");
       setPlate("");
       setColor(DEFAULT_COLOR);
-      setAm("");
-      setPm("");
       router.refresh();
     });
   }
@@ -301,14 +264,6 @@ function AddVan() {
         </label>
       </div>
       <div className="flex flex-wrap items-end gap-2">
-        <label className="space-y-1 text-sm">
-          <span className="block text-muted-foreground">Morning pickup time</span>
-          <Input type="time" value={am} onChange={(e) => setAm(e.target.value)} className="w-32" required />
-        </label>
-        <label className="space-y-1 text-sm">
-          <span className="block text-muted-foreground">Afternoon drop-off time</span>
-          <Input type="time" value={pm} onChange={(e) => setPm(e.target.value)} className="w-32" required />
-        </label>
         <Button onClick={add} disabled={pending} size="sm" className="ml-auto">
           {pending ? "Adding…" : "Add van"}
         </Button>

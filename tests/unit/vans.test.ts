@@ -3,7 +3,6 @@ import {
   orderStopIds,
   sameDriverAndAide,
   routeStopConflicts,
-  isValidTimeOfDay,
   zoneStopIdForVan,
   findVansMissingZone,
 } from "@/lib/vans";
@@ -82,30 +81,6 @@ describe("routeStopConflicts", () => {
     // A van's zone stop sits on its OWN am and pm routes — only OTHER vans'
     // routes are passed in, so the same stop on both directions never collides.
     expect(routeStopConflicts({ am: ["zone1"], pm: ["zone1"] }, [])).toEqual([]);
-  });
-});
-
-describe("isValidTimeOfDay", () => {
-  it("accepts 24-hour HH:MM", () => {
-    expect(isValidTimeOfDay("08:00")).toBe(true);
-    expect(isValidTimeOfDay("23:59")).toBe(true);
-    expect(isValidTimeOfDay("00:00")).toBe(true);
-  });
-
-  it("accepts HH:MM:SS (what Postgres time returns)", () => {
-    expect(isValidTimeOfDay("15:30:00")).toBe(true);
-  });
-
-  it("trims surrounding whitespace", () => {
-    expect(isValidTimeOfDay("  09:15  ")).toBe(true);
-  });
-
-  it("rejects out-of-range or malformed times", () => {
-    expect(isValidTimeOfDay("24:00")).toBe(false);
-    expect(isValidTimeOfDay("9:15")).toBe(false);
-    expect(isValidTimeOfDay("08:60")).toBe(false);
-    expect(isValidTimeOfDay("")).toBe(false);
-    expect(isValidTimeOfDay("morning")).toBe(false);
   });
 });
 

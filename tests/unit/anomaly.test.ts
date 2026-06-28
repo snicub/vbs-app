@@ -19,7 +19,7 @@ describe("anomaliesFor", () => {
     ).toEqual([]);
   });
 
-  it("collects all flags in deterministic order", () => {
+  it("surfaces only the two van-transit alerts (late_am / in_but_not_out retired)", () => {
     expect(
       anomaliesFor({
         isLateAm: true,
@@ -27,23 +27,29 @@ describe("anomaliesFor", () => {
         isInButNotOut: true,
         isPmVanStuck: true,
       }),
-    ).toEqual<AnomalyKind[]>([
-      "late_am",
-      "boarded_but_not_arrived",
-      "in_but_not_out",
-      "pm_van_stuck",
-    ]);
+    ).toEqual<AnomalyKind[]>(["boarded_but_not_arrived", "pm_van_stuck"]);
   });
 
-  it("returns a single flag when only one is set", () => {
+  it("ignores the retired time-based flags", () => {
     expect(
       anomaliesFor({
-        isLateAm: false,
+        isLateAm: true,
         isBoardedButNotArrived: false,
         isInButNotOut: true,
         isPmVanStuck: false,
       }),
-    ).toEqual<AnomalyKind[]>(["in_but_not_out"]);
+    ).toEqual<AnomalyKind[]>([]);
+  });
+
+  it("returns a single flag when only one transit alert is set", () => {
+    expect(
+      anomaliesFor({
+        isLateAm: false,
+        isBoardedButNotArrived: false,
+        isInButNotOut: false,
+        isPmVanStuck: true,
+      }),
+    ).toEqual<AnomalyKind[]>(["pm_van_stuck"]);
   });
 });
 

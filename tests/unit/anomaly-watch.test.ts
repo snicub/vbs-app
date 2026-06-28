@@ -20,17 +20,25 @@ const row = (over: Partial<AnomalyStatusRow> & { student_id: string }): AnomalyS
 });
 
 describe("anomalyPairs", () => {
-  it("explodes one student with two anomalies into two pairs", () => {
-    const pairs = anomalyPairs([row({ student_id: "s1", is_late_am: true, is_in_but_not_out: true })]);
+  it("explodes one student with two live anomalies into two pairs", () => {
+    const pairs = anomalyPairs([
+      row({ student_id: "s1", is_boarded_but_not_arrived: true, is_pm_van_stuck: true }),
+    ]);
     expect(pairs).toHaveLength(2);
-    expect(pairs.map((p) => p.kind).sort()).toEqual(["in_but_not_out", "late_am"]);
+    expect(pairs.map((p) => p.kind).sort()).toEqual(["boarded_but_not_arrived", "pm_van_stuck"]);
   });
 
   it("returns no pairs when no flags are set", () => {
     expect(anomalyPairs([row({ student_id: "s1" })])).toEqual([]);
   });
 
-  it("handles all four flags on one student", () => {
+  it("ignores the retired time-based flags (late_am / in_but_not_out)", () => {
+    expect(
+      anomalyPairs([row({ student_id: "s1", is_late_am: true, is_in_but_not_out: true })]),
+    ).toEqual([]);
+  });
+
+  it("emits only the two van-transit alerts when all four flags are set", () => {
     const pairs = anomalyPairs([
       row({
         student_id: "s1",
@@ -40,16 +48,16 @@ describe("anomalyPairs", () => {
         is_pm_van_stuck: true,
       }),
     ]);
-    expect(pairs).toHaveLength(4);
+    expect(pairs.map((p) => p.kind).sort()).toEqual(["boarded_but_not_arrived", "pm_van_stuck"]);
   });
 
   it("keeps pairs from multiple students", () => {
     const pairs = anomalyPairs([
-      row({ student_id: "s1", is_late_am: true }),
+      row({ student_id: "s1", is_boarded_but_not_arrived: true }),
       row({ student_id: "s2", is_pm_van_stuck: true }),
     ]);
     expect(pairs).toEqual([
-      { studentId: "s1", kind: "late_am" },
+      { studentId: "s1", kind: "boarded_but_not_arrived" },
       { studentId: "s2", kind: "pm_van_stuck" },
     ]);
   });
