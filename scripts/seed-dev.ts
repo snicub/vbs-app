@@ -52,11 +52,9 @@ const SAMPLE_FAMILIES = [
 // VBS event week + today for live demoing
 const EVENT_DATES = [
   new Date().toISOString().slice(0, 10),
-  "2026-06-22",
-  "2026-06-23",
-  "2026-06-24",
-  "2026-06-25",
-  "2026-06-26",
+  "2026-06-30",
+  "2026-07-01",
+  "2026-07-02",
 ];
 
 function uniqueDates(): string[] {
