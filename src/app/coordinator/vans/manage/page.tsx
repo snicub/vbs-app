@@ -63,8 +63,36 @@ export default async function ManageVansPage({
   }));
   const stopById = new Map((stops ?? []).map((s) => [s.id, s]));
 
+  // Each van's pickup-zone stop, and how many distinct kids are planned onto it
+  // (their day-record legs point at that zone, on any day). Drives the delete
+  // confirmation — deleting a van unassigns these riders.
+  const zoneByVan = new Map((vans ?? []).map((v) => [v.id, zoneStopIdForVan(v.id, routeList)]));
+  const zoneStopIds = Array.from(
+    new Set(Array.from(zoneByVan.values()).filter((id): id is string => !!id)),
+  );
+  const riderCountByZone = new Map<string, number>();
+  if (zoneStopIds.length > 0) {
+    const orFilter = zoneStopIds
+      .flatMap((id) => [`morning_stop_id.eq.${id}`, `afternoon_stop_id.eq.${id}`])
+      .join(",");
+    const { data: planned } = await supabase
+      .from("student_day_records")
+      .select("student_id, morning_stop_id, afternoon_stop_id")
+      .or(orFilter)
+      .returns<{ student_id: string; morning_stop_id: string | null; afternoon_stop_id: string | null }[]>();
+    const studentsByZone = new Map<string, Set<string>>();
+    for (const rec of planned ?? []) {
+      for (const sid of [rec.morning_stop_id, rec.afternoon_stop_id]) {
+        if (sid && zoneStopIds.includes(sid)) {
+          (studentsByZone.get(sid) ?? studentsByZone.set(sid, new Set()).get(sid)!).add(rec.student_id);
+        }
+      }
+    }
+    for (const [zone, set] of Array.from(studentsByZone)) riderCountByZone.set(zone, set.size);
+  }
+
   const vanList = (vans ?? []).map((v) => {
-    const zoneStopId = zoneStopIdForVan(v.id, routeList);
+    const zoneStopId = zoneByVan.get(v.id) ?? null;
     const zone = zoneStopId ? stopById.get(zoneStopId) : undefined;
     return {
       id: v.id,
@@ -76,6 +104,7 @@ export default async function ManageVansPage({
       colorCode: zone?.color_code ?? null,
       areaLocation: zone?.street_address ?? null,
       hasCoords: zone?.lat != null && zone?.lng != null,
+      riderCount: zoneStopId ? riderCountByZone.get(zoneStopId) ?? 0 : 0,
     };
   });
   const activeVans = vanList.filter((v) => v.active).map((v) => ({ id: v.id, name: v.name }));

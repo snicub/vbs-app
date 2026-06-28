@@ -20,6 +20,7 @@ type VanVM = {
   colorCode: string | null;
   areaLocation: string | null;
   hasCoords: boolean;
+  riderCount: number;
 };
 
 const DEFAULT_COLOR = "#0F766E";
@@ -133,7 +134,12 @@ function VanRow({ van }: { van: VanVM }) {
 
   function remove() {
     startDelete(async () => {
-      const result = await deleteVan({ vanId: van.id });
+      // riderCount > 0 means kids are planned onto this van; the confirm dialog
+      // already warned they'll be unassigned, so authorize it.
+      const result = await deleteVan({
+        vanId: van.id,
+        unassignRiders: van.riderCount > 0,
+      });
       if (!result.ok) {
         toast.error(result.error);
         setConfirmOpen(false);
@@ -225,9 +231,15 @@ function VanRow({ van }: { van: VanVM }) {
           <>
             This removes <strong>{van.name}</strong>, its pickup zone/color, route, and
             driver/aide assignments. This cannot be undone.
+            {van.riderCount > 0 && (
+              <span className="mt-2 block text-[var(--anomaly-warn)]">
+                {van.riderCount} student{van.riderCount === 1 ? "" : "s"} assigned to this van
+                will be unassigned and need re-routing to another van.
+              </span>
+            )}
           </>
         }
-        confirmLabel="Delete van"
+        confirmLabel={van.riderCount > 0 ? "Unassign & delete" : "Delete van"}
         pending={deleting}
         onConfirm={remove}
         onCancel={() => setConfirmOpen(false)}

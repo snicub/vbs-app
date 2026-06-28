@@ -223,39 +223,46 @@ export async function updateVan(input: unknown): Promise<Result> {
 
 // -- Delete a van (+ its pickup zone) --
 
-const DeleteVanSchema = z.object({ vanId: z.string().uuid() });
+const DeleteVanSchema = z.object({
+  vanId: z.string().uuid(),
+  // Set when the coordinator has confirmed (in the dialog showing the count) that
+  // deleting this van should also unassign the kids planned onto it.
+  unassignRiders: z.boolean().optional(),
+});
 
 /**
  * Coordinator-only: permanently remove a van, its routes, last-known location,
  * and its pickup-zone stop. Used to clean up a test van.
  *
- * Refuses if any kid is still assigned to this van's zone (their stop legs point
- * at it) so we never silently strip a child's routing by deleting their van.
- *
- * Also refuses if the van appears on ANY append-only event row: deleting the van
- * would force `student_day_events.van_id` → NULL (FK ON DELETE SET NULL), which
- * the append-only trigger rejects — aborting AFTER van_assignments were already
+ * Refuses if the van appears on ANY append-only event row: deleting the van would
+ * force `student_day_events.van_id` → NULL (FK ON DELETE SET NULL), which the
+ * append-only trigger rejects — aborting AFTER van_assignments were already
  * deleted (partial loss). A van that's ever carried a kid keeps its history; only
  * an unused (test) van is deletable.
+ *
+ * If kids are merely PLANNED onto it (stop legs point at its zone, but it has no
+ * event history so none were ever boarded), the caller must pass
+ * `unassignRiders: true` — we then clear those legs (the kids become "needs
+ * routing" until put on another van) and delete. Without the flag we refuse, so
+ * a stray call can't silently strip a child's routing.
  *
  * Runs via the admin client (RLS-free) after the coordinator check, and respects
  * the FK rules: `van_assignments` is ON DELETE RESTRICT so it's cleared first;
  * deleting the van then cascades its `routes` and `van_locations`; finally the
- * now-orphaned zone stop is removed (no kid references it — guarded above).
+ * now-orphaned zone stop is removed.
  */
 export async function deleteVan(input: unknown): Promise<Result> {
   if (!(await requireCoordinator())) return fail("Coordinator access required");
 
   const parsed = DeleteVanSchema.safeParse(input);
   if (!parsed.success) return fail(issues(parsed.error));
-  const { vanId } = parsed.data;
+  const { vanId, unassignRiders } = parsed.data;
 
   const admin = createAdminClient();
 
   // Fail CLOSED: if we can't read the van's routes (hence resolve its pickup
-  // zone), we cannot prove no kid is assigned — so we must NOT delete. A
-  // transient error must never let the delete proceed, or every kid on the van
-  // gets their stop legs SET NULL and drops off every manifest + name tag.
+  // zone), we cannot prove its rider state — so we must NOT delete. A transient
+  // error must never let the delete proceed.
   const { data: routes, error: routesErr } = await admin
     .from("routes")
     .select("van_id, direction, stop_ids")
@@ -264,23 +271,11 @@ export async function deleteVan(input: unknown): Promise<Result> {
   if (routesErr) return fail(`Couldn't check this van's riders — try again. (${routesErr.message})`);
   const zoneStopId = zoneStopIdForVan(vanId, routes ?? []);
 
-  if (zoneStopId) {
-    const { count, error: countErr } = await admin
-      .from("student_day_records")
-      .select("id", { count: "exact", head: true })
-      .or(`morning_stop_id.eq.${zoneStopId},afternoon_stop_id.eq.${zoneStopId}`);
-    if (countErr) return fail(`Couldn't check this van's riders — try again. (${countErr.message})`);
-    if ((count ?? 0) > 0) {
-      return fail(
-        `${count} kid${count === 1 ? " is" : "s are"} still assigned to this van — reassign them first, then delete it.`,
-      );
-    }
-  }
-
-  // Fail CLOSED again: a van that appears on ANY event row can't be deleted —
-  // the delete would SET NULL on student_day_events.van_id, which the append-only
-  // trigger rejects, aborting AFTER van_assignments were already removed. Only an
-  // unused (never-boarded) van is deletable; a used one keeps its history.
+  // Fail CLOSED first: a van on ANY event row can't be deleted — the delete would
+  // SET NULL on student_day_events.van_id, which the append-only trigger rejects.
+  // Only an unused (never-boarded) van is deletable; a used one keeps its history.
+  // Checking this BEFORE touching day-records also means a refused delete never
+  // unassigns anyone.
   const { count: eventCount, error: eventErr } = await admin
     .from("student_day_events")
     .select("id", { count: "exact", head: true })
@@ -290,6 +285,36 @@ export async function deleteVan(input: unknown): Promise<Result> {
     return fail(
       "This van has check-in history and can't be deleted. Mark it inactive instead (uncheck Active).",
     );
+  }
+
+  if (zoneStopId) {
+    const { count, error: countErr } = await admin
+      .from("student_day_records")
+      .select("id", { count: "exact", head: true })
+      .or(`morning_stop_id.eq.${zoneStopId},afternoon_stop_id.eq.${zoneStopId}`);
+    if (countErr) return fail(`Couldn't check this van's riders — try again. (${countErr.message})`);
+
+    if ((count ?? 0) > 0) {
+      if (!unassignRiders) {
+        return fail(
+          `${count} kid${count === 1 ? " is" : "s are"} assigned to this van — confirm to unassign them and delete it.`,
+        );
+      }
+      // Unassign: clear every stop leg pointing at this zone (across all days).
+      // Safe because the event-history guard above proved no kid was ever boarded
+      // on this van — these are plan-only assignments; the kids become "needs
+      // routing" until a coordinator puts them on another van.
+      const { error: amErr } = await admin
+        .from("student_day_records")
+        .update({ morning_stop_id: null } as never)
+        .eq("morning_stop_id", zoneStopId);
+      if (amErr) return fail(amErr.message);
+      const { error: pmErr } = await admin
+        .from("student_day_records")
+        .update({ afternoon_stop_id: null } as never)
+        .eq("afternoon_stop_id", zoneStopId);
+      if (pmErr) return fail(pmErr.message);
+    }
   }
 
   const { error: assignErr } = await admin
