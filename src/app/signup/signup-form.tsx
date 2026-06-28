@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
 import type { ConsentKind } from "@/types/domain";
 import Link from "next/link";
+import { Trash2Icon } from "lucide-react";
 
 type ConsentItem = {
   kind: ConsentKind;
@@ -95,6 +96,10 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
     const derived = ageFromDob(dob, new Date().toISOString().slice(0, 10));
     if (derived != null) patch.age = String(derived);
     updateStudent(i, patch);
+  }
+
+  function removeStudent(i: number) {
+    setStudents((prev) => prev.filter((_, idx) => idx !== i));
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -249,7 +254,21 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
         </div>
         {students.map((s, i) => (
           <fieldset key={s.id} className="rounded-xl border bg-muted/30 p-4 space-y-4">
-            <legend className="px-1 text-base font-medium">Child #{i + 1}</legend>
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-base font-medium">Child #{i + 1}</span>
+              {students.length > 1 && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1.5 text-destructive border-destructive/40 hover:bg-destructive/10 hover:text-destructive"
+                  onClick={() => removeStudent(i)}
+                >
+                  <Trash2Icon className="size-4" />
+                  Remove
+                </Button>
+              )}
+            </div>
 
             <Field label="Photo">
               <PhotoInput value={s.photo} onChange={(p) => updateStudent(i, { photo: p })} />
@@ -311,15 +330,6 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
               />
             </Field>
 
-            {students.length > 1 && (
-              <Button
-                type="button"
-                variant="ghost"
-                onClick={() => setStudents((prev) => prev.filter((_, idx) => idx !== i))}
-              >
-                Remove this child
-              </Button>
-            )}
           </fieldset>
         ))}
       </section>
