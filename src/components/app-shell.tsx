@@ -24,7 +24,6 @@ function linksFor(role: UserRole): NavLink[] {
       { href: "/table", label: "Check-In" },
       { href: "/coordinator/vans", label: "Vans" },
       { href: "/coordinator/vans/map", label: "Live Map" },
-      { href: "/coordinator/closeout", label: "Closeout" },
       { href: "/photos", label: "Photos" },
     ];
   }

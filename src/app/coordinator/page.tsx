@@ -9,11 +9,9 @@ import { type DayState } from "@/lib/events/state-machine";
 import { anomaliesFor } from "@/lib/anomaly";
 import { ANOMALY_PRESENTATION } from "@/lib/state-presentation";
 import { signedUrlsFor } from "@/lib/storage/signed-url";
-import { Badge } from "@/components/ui/badge";
 import {
   AnomalyBadge,
 } from "@/components/state-badge";
-import { buttonVariants } from "@/components/ui/button";
 import { AlertTriangleIcon, MapPinOffIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
 import { DashboardCards } from "./dashboard-cards";
@@ -73,7 +71,6 @@ export default async function CoordinatorTodayPage({
     { data: statuses },
     { data: dayRecords },
     { data: vans },
-    { data: closeout },
   ] = await Promise.all([
     supabase
       .from("student_day_status")
@@ -91,11 +88,6 @@ export default async function CoordinatorTodayPage({
       .from("vans")
       .select("id, name")
       .returns<{ id: string; name: string }[]>(),
-    supabase
-      .from("daily_closeouts")
-      .select("closed_at, notes")
-      .eq("event_date", today)
-      .maybeSingle<{ closed_at: string; notes: string | null }>(),
   ]);
   const vanNameMap = new Map((vans ?? []).map((v) => [v.id, v.name]));
   const dayRecMap = new Map((dayRecords ?? []).map((d) => [d.student_id, d]));
@@ -210,12 +202,6 @@ export default async function CoordinatorTodayPage({
               {watchList.length} need{watchList.length === 1 ? "s" : ""} attention
             </span>
           )}
-          {closeout && (
-            <>
-              {" · "}
-              <Badge variant="secondary">closed at {fmtTime(closeout.closed_at)}</Badge>
-            </>
-          )}
         </p>
       </header>
 
@@ -301,15 +287,6 @@ export default async function CoordinatorTodayPage({
 
       {/* Roster */}
       <RosterList students={sorted} />
-
-      <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
-        <Link
-          href="/coordinator/closeout"
-          className={buttonVariants({ variant: closeout ? "outline" : "default" })}
-        >
-          {closeout ? "Reopen day…" : "End-of-day closeout"}
-        </Link>
-      </div>
     </div>
   );
 }
@@ -341,9 +318,3 @@ function formatDate(iso: string): string {
   });
 }
 
-function fmtTime(iso: string): string {
-  return new Date(iso).toLocaleTimeString(undefined, {
-    hour: "numeric",
-    minute: "2-digit",
-  });
-}
