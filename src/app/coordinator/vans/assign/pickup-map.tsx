@@ -336,32 +336,58 @@ function SideList({
 }
 
 function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
+  const notLocated = kids.filter((k) => k.hasAddress);
+  const missing = kids.filter((k) => !k.hasAddress);
   return (
-    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
-      <div className="px-3 py-2 border-b border-amber-300 dark:border-amber-800 text-sm font-semibold text-amber-900 dark:text-amber-200">
-        ⚠ Needs an address ({kids.length})
-      </div>
-      <p className="px-3 pt-2 text-xs text-amber-800 dark:text-amber-300">
-        These kids ride a van but can&apos;t be pinned — add a home address so they aren&apos;t left off a van.
-      </p>
-      <ul className="px-1 py-2 divide-y divide-amber-200 dark:divide-amber-900">
-        {kids.map((k) => (
-          <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
-            <span className="truncate">
-              {k.name}
-              {k.hasAddress && (
-                <span className="ml-1 text-xs text-amber-700 dark:text-amber-400">(address not located)</span>
-              )}
-            </span>
-            <Link
-              href={`/coordinator/students/${k.studentId}/edit`}
-              className="shrink-0 text-xs font-medium underline text-amber-900 dark:text-amber-200"
-            >
-              Edit
-            </Link>
-          </li>
-        ))}
-      </ul>
+    <div className="space-y-2">
+      {notLocated.length > 0 && (
+        <div className="rounded-lg border border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40">
+          <div className="px-3 py-2 border-b border-sky-300 dark:border-sky-800 text-sm font-semibold text-sky-900 dark:text-sky-200">
+            📍 Not on the map yet ({notLocated.length})
+          </div>
+          <p className="px-3 pt-2 text-xs text-sky-800 dark:text-sky-300">
+            These kids have a home address — tap{" "}
+            <strong>“Locate {notLocated.length} home{notLocated.length === 1 ? "" : "s"}”</strong> above to place
+            them on the map.
+          </p>
+          <ul className="px-1 py-2 divide-y divide-sky-200 dark:divide-sky-900">
+            {notLocated.map((k) => (
+              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="truncate">{k.name}</span>
+                <Link
+                  href={`/coordinator/students/${k.studentId}/edit`}
+                  className="shrink-0 text-xs font-medium underline text-sky-900 dark:text-sky-200"
+                >
+                  Edit
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {missing.length > 0 && (
+        <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
+          <div className="px-3 py-2 border-b border-amber-300 dark:border-amber-800 text-sm font-semibold text-amber-900 dark:text-amber-200">
+            ⚠ Needs an address ({missing.length})
+          </div>
+          <p className="px-3 pt-2 text-xs text-amber-800 dark:text-amber-300">
+            These kids ride a van but have no home address on file — add one so they aren&apos;t left off a van.
+          </p>
+          <ul className="px-1 py-2 divide-y divide-amber-200 dark:divide-amber-900">
+            {missing.map((k) => (
+              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="truncate">{k.name}</span>
+                <Link
+                  href={`/coordinator/students/${k.studentId}/edit`}
+                  className="shrink-0 text-xs font-medium underline text-amber-900 dark:text-amber-200"
+                >
+                  Edit
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
     </div>
   );
 }
