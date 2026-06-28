@@ -22,9 +22,9 @@ const stops = new Map<string, StopInfo>([
 ]);
 
 const families = new Map<string, FamilyInfo>([
-  ["f1", { guardianName: "Lord Byron", guardianPhone: "555-0001", emergencyName: "Nanny", emergencyPhone: "555-9001" }],
-  ["f2", { guardianName: "Mr Hopper", guardianPhone: "555-0002", emergencyName: null, emergencyPhone: null }],
-  ["f3", { guardianName: "Mrs Turing", guardianPhone: "555-0003", emergencyName: "Uncle", emergencyPhone: "555-9003" }],
+  ["f1", { guardianName: "Lord Byron", guardianPhone: "555-0001", address: "1 Poet Ln, Maple, CA, 90001", emergencyName: "Nanny", emergencyPhone: "555-9001" }],
+  ["f2", { guardianName: "Mr Hopper", guardianPhone: "555-0002", address: "2 Compiler Rd, Oak, CA, 90002", emergencyName: null, emergencyPhone: null }],
+  ["f3", { guardianName: "Mrs Turing", guardianPhone: "555-0003", address: "", emergencyName: "Uncle", emergencyPhone: "555-9003" }],
 ]);
 
 const vans = new Map<string, VanInfo>([
@@ -89,7 +89,20 @@ describe("buildVanManifests", () => {
     expect(red.riders[0]!.direction).toBe("both");
     expect(red.riders[0]!.stopName).toBe("Maple Hall");
     expect(red.riders[0]!.guardianPhone).toBe("555-0001");
+    expect(red.riders[0]!.address).toBe("1 Poet Ln, Maple, CA, 90001");
     expect(red.riders[0]!.allergies).toBe("Peanuts");
+  });
+
+  it("carries an empty address when the family has none on file", () => {
+    const m = buildVanManifests(
+      [status({ studentId: "s3", morningStopId: "stA", afternoonStopId: "stA", morningVanId: "v1", afternoonVanId: "v1" })],
+      students,
+      stops,
+      families,
+      vanList,
+    );
+    const red = m.find((v) => v.vanId === "v1")!;
+    expect(red.riders[0]!.address).toBe("");
   });
 
   it("places a kid riding different vans AM and PM on each van", () => {

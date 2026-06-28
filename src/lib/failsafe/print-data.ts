@@ -54,6 +54,7 @@ export type VanInfo = { name: string; sortOrder: number };
 export type FamilyInfo = {
   guardianName: string;
   guardianPhone: string;
+  address: string;
   emergencyName: string | null;
   emergencyPhone: string | null;
 };
@@ -66,6 +67,7 @@ export type ManifestRider = {
   stopName: string | null;
   colorCode: string | null;
   colorName: string | null;
+  address: string;
   guardianPhone: string;
   allergies: string | null;
   medicalNotes: string | null;
@@ -132,6 +134,7 @@ export function buildVanManifests(
     const { first, last } = displayName(stu);
     const fam = families.get(stu.familyId);
     const guardianPhone = fam?.guardianPhone ?? "";
+    const address = fam?.address ?? "";
 
     const onAm = st.morningVanId != null;
     const onPm = st.afternoonVanId != null;
@@ -155,6 +158,7 @@ export function buildVanManifests(
         stopName: stop?.name ?? null,
         colorCode: st.wristbandColorForDay,
         colorName: st.wristbandColorName,
+        address,
         guardianPhone,
         allergies: stu.allergies,
         medicalNotes: stu.medicalNotes,

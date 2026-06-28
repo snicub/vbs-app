@@ -53,6 +53,10 @@ type FamilyRow = {
   id: string;
   primary_guardian_name: string;
   primary_phone: string;
+  street_address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
 };
@@ -97,7 +101,7 @@ export default async function PrintFailsafePage({
     ? await supabase
         .from("families")
         .select(
-          "id, primary_guardian_name, primary_phone, emergency_contact_name, emergency_contact_phone",
+          "id, primary_guardian_name, primary_phone, street_address, city, state, postal_code, emergency_contact_name, emergency_contact_phone",
         )
         .in("id", familyIds)
         .returns<FamilyRow[]>()
@@ -157,15 +161,24 @@ export default async function PrintFailsafePage({
     ]),
   );
   const familyMap = new Map<string, FamilyInfo>(
-    (families ?? []).map((f) => [
-      f.id,
-      {
-        guardianName: f.primary_guardian_name,
-        guardianPhone: f.primary_phone,
-        emergencyName: f.emergency_contact_name,
-        emergencyPhone: f.emergency_contact_phone,
-      },
-    ]),
+    (families ?? []).map((f) => {
+      const streetLine = f.street_address?.trim() || "";
+      const cityStateZip = [f.city, f.state, f.postal_code]
+        .map((p) => p?.trim())
+        .filter(Boolean)
+        .join(", ");
+      const address = [streetLine, cityStateZip].filter(Boolean).join(", ");
+      return [
+        f.id,
+        {
+          guardianName: f.primary_guardian_name,
+          guardianPhone: f.primary_phone,
+          address,
+          emergencyName: f.emergency_contact_name,
+          emergencyPhone: f.emergency_contact_phone,
+        },
+      ];
+    }),
   );
   // Vans have no stored order; the query is already name-sorted, so use the
   // row index as the manifest order.

@@ -90,6 +90,7 @@ export function PrintFailsafe({
                 <thead>
                   <tr className="border-b border-gray-400 text-left align-bottom">
                     <th className="py-1 pr-2 font-semibold">Name</th>
+                    <th className="py-1 pr-2 font-semibold">Pickup address</th>
                     <th className="py-1 pr-2 font-semibold">Code</th>
                     <th className="py-1 pr-2 font-semibold">When</th>
                     <th className="py-1 pr-2 font-semibold">Stop</th>
@@ -104,6 +105,15 @@ export function PrintFailsafe({
                       className="border-b border-gray-200 align-top [break-inside:avoid]"
                     >
                       <td className="py-1 pr-2 font-medium">{r.name}</td>
+                      <td className="py-1 pr-2">
+                        {r.address ? (
+                          r.address
+                        ) : (
+                          <span className="text-[var(--anomaly-warn)] font-medium">
+                            — no address —
+                          </span>
+                        )}
+                      </td>
                       <td className="py-1 pr-2 font-mono tracking-wide">
                         {r.wristbandCode}
                       </td>
