@@ -192,3 +192,73 @@ function toAddr(f: Family) {
     postalCode: f.postal_code,
   };
 }
+
+export type LocateHomesResult =
+  | { ok: true; located: number; stillMissing: number }
+  | { ok: false; error: string };
+
+/**
+ * Coordinator action: geocode home addresses ONLY (no van/stop assignment) so a
+ * kid's home pin appears on the Pickup Map before any manual assignment. For the
+ * given day's van-needing attending kids, geocode each family that has a street
+ * address but no coordinates yet (capped per run like autoAssign), write lat/lng
+ * back to `families`, and report how many landed vs. still missing (failed
+ * geocode or no address at all — those stay flagged, never silently dropped).
+ *
+ * Coordinates are family-wide, so locating one sibling locates the whole family;
+ * the count is by family, deduped.
+ */
+export async function locateStudentHomes(
+  input: unknown,
+): Promise<LocateHomesResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = Schema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+
+  const admin = createAdminClient();
+
+  const { data: recs } = await admin
+    .from("student_day_records")
+    .select(
+      "student_id, event_date, mode, morning_stop_id, afternoon_stop_id, attending, students(family_id, families(id, lat, lng, street_address, city, state, postal_code))",
+    )
+    .eq("event_date", parsed.data.eventDate)
+    .eq("attending", true)
+    .returns<Rec[]>();
+
+  // Families of van-needing kids that have an address but no coords yet.
+  const needGeocode = new Map<string, Family>();
+  for (const r of recs ?? []) {
+    if (!r.mode || r.mode === "parent_both") continue;
+    const fam = r.students?.families;
+    if (!fam || (fam.lat != null && fam.lng != null)) continue;
+    if (!familyAddressQuery(toAddr(fam))) continue;
+    if (!needGeocode.has(fam.id)) needGeocode.set(fam.id, fam);
+  }
+
+  const families = Array.from(needGeocode.values()).slice(0, GEOCODE_CAP);
+  let located = 0;
+  for (let i = 0; i < families.length; i += GEOCODE_BATCH) {
+    const batch = families.slice(i, i + GEOCODE_BATCH);
+    const points = await Promise.all(
+      batch.map(async (fam) => ({ id: fam.id, pt: await geocodeAddress(familyAddressQuery(toAddr(fam))) })),
+    );
+    for (const { id, pt } of points) {
+      if (!pt) continue;
+      await admin.from("families").update({ lat: pt.lat, lng: pt.lng } as never).eq("id", id);
+      located++;
+    }
+  }
+
+  revalidatePath("/coordinator", "layout");
+
+  // stillMissing = families that wanted geocoding but didn't get coords (failed
+  // or beyond the per-run cap). No-address kids are surfaced on the map's
+  // "needs an address" list separately.
+  const stillMissing = needGeocode.size - located;
+
+  return { ok: true, located, stillMissing };
+}

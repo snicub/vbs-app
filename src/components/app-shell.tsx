@@ -23,6 +23,7 @@ function linksFor(role: UserRole): NavLink[] {
       { href: "/coordinator/stops", label: "Colors" },
       { href: "/table", label: "Check-In" },
       { href: "/coordinator/vans", label: "Vans" },
+      { href: "/coordinator/vans/assign", label: "Pickup Map" },
       { href: "/coordinator/vans/map", label: "Live Map" },
       { href: "/photos", label: "Photos" },
     ];
