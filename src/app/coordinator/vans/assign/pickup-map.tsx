@@ -70,10 +70,20 @@ export function PickupMap({
         maxZoom: 19,
       }).addTo(map);
 
+      const stackIndex = buildStackIndex(pinnable);
       const markers = new Map<string, import("leaflet").Marker>();
       for (const k of pinnable) {
         const m = L.marker([k.lat, k.lng], {
-          icon: pinIcon(L, k.name, k.currentVanColor, selectedRef.current.has(k.studentId)),
+          icon: pinIcon(
+            L,
+            k.name,
+            k.currentVanColor,
+            selectedRef.current.has(k.studentId),
+            stackIndex.get(k.studentId) ?? 0,
+          ),
+          // A taller stack should sit above its neighbors so its chips aren't
+          // clipped by a single-chip marker drawn later.
+          riseOnHover: true,
         }).addTo(map);
         m.on("click", () => toggle(k.studentId));
         markers.set(k.studentId, m);
@@ -101,9 +111,18 @@ export function PickupMap({
   useEffect(() => {
     const ctx = leafletRef.current;
     if (!ctx) return;
+    const stackIndex = buildStackIndex(pinnable);
     for (const k of pinnable) {
       const m = ctx.markers.get(k.studentId);
-      m?.setIcon(pinIcon(ctx.L, k.name, k.currentVanColor, selected.has(k.studentId)));
+      m?.setIcon(
+        pinIcon(
+          ctx.L,
+          k.name,
+          k.currentVanColor,
+          selected.has(k.studentId),
+          stackIndex.get(k.studentId) ?? 0,
+        ),
+      );
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selected, pinnable]);
@@ -403,11 +422,29 @@ function centerOf(kids: PinnableKid[]): [number, number] {
   return [lat / kids.length, lng / kids.length];
 }
 
+// Kids who share a home (siblings) geocode to the SAME point, so their name
+// chips would render exactly on top of each other. Give each kid at a coordinate
+// a 0-based slot so the chips can fan upward and every name stays readable.
+const STACK_ROW_PX = 26;
+
+function buildStackIndex(kids: PinnableKid[]): Map<string, number> {
+  const seenAtCoord = new Map<string, number>();
+  const index = new Map<string, number>();
+  for (const k of kids) {
+    const key = `${k.lat.toFixed(5)},${k.lng.toFixed(5)}`;
+    const slot = seenAtCoord.get(key) ?? 0;
+    index.set(k.studentId, slot);
+    seenAtCoord.set(key, slot + 1);
+  }
+  return index;
+}
+
 function pinIcon(
   L: typeof import("leaflet"),
   name: string,
   color: string,
   isSelected: boolean,
+  stackIndex: number,
 ): import("leaflet").DivIcon {
   const text = contrastText(color);
   const ring = isSelected ? "box-shadow:0 0 0 3px #0f172a;" : "";
@@ -420,7 +457,9 @@ function pinIcon(
       `border-radius:8px;border:2px solid #fff;${ring}">` +
       `<span style="font-size:13px;line-height:1">${check}</span>${escapeHtml(name)}</div>`,
     iconSize: [0, 0],
-    iconAnchor: [0, 0],
+    // Offset each chip at a shared coordinate up by one row so stacked siblings
+    // fan out into a readable list instead of hiding under one another.
+    iconAnchor: [0, stackIndex * STACK_ROW_PX],
   });
 }
 
