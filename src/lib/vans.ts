@@ -13,12 +13,18 @@ export function orderStopIds(
   return orderedStops.filter((s) => set.has(s.id)).map((s) => s.id);
 }
 
-/** True when the same person is set as both driver and aide on one van. */
+/**
+ * True when the same person is named as both driver and aide on one van.
+ * Compares trimmed + case-insensitive, and only counts as "same" when both
+ * names are non-empty (two blank/None slots never collide).
+ */
 export function sameDriverAndAide(
-  driverId: string | null,
-  aideId: string | null,
+  driver: string | null,
+  aide: string | null,
 ): boolean {
-  return driverId !== null && aideId !== null && driverId === aideId;
+  const d = driver?.trim().toLowerCase() ?? "";
+  const a = aide?.trim().toLowerCase() ?? "";
+  return d !== "" && a !== "" && d === a;
 }
 
 export type RouteSelection = { am: string[]; pm: string[] };

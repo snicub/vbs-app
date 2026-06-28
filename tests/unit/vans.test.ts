@@ -28,18 +28,29 @@ describe("orderStopIds", () => {
 });
 
 describe("sameDriverAndAide", () => {
-  it("is true only when both are set and equal", () => {
-    expect(sameDriverAndAide("u1", "u1")).toBe(true);
+  it("is true when both names are set and equal", () => {
+    expect(sameDriverAndAide("John", "John")).toBe(true);
   });
 
-  it("is false when they differ", () => {
-    expect(sameDriverAndAide("u1", "u2")).toBe(false);
+  it("matches case-insensitively and ignores surrounding whitespace", () => {
+    expect(sameDriverAndAide("John", " john ")).toBe(true);
+    expect(sameDriverAndAide("  Mary Smith ", "mary smith")).toBe(true);
   });
 
-  it("is false when either is null", () => {
-    expect(sameDriverAndAide(null, "u1")).toBe(false);
-    expect(sameDriverAndAide("u1", null)).toBe(false);
+  it("is false when the names differ", () => {
+    expect(sameDriverAndAide("John", "Jane")).toBe(false);
+  });
+
+  it("is false when either name is null", () => {
+    expect(sameDriverAndAide(null, "John")).toBe(false);
+    expect(sameDriverAndAide("John", null)).toBe(false);
     expect(sameDriverAndAide(null, null)).toBe(false);
+  });
+
+  it("is false when either name is blank or whitespace-only", () => {
+    expect(sameDriverAndAide("", "")).toBe(false);
+    expect(sameDriverAndAide("   ", "   ")).toBe(false);
+    expect(sameDriverAndAide("John", "")).toBe(false);
   });
 });
 

@@ -24,8 +24,7 @@ type StopRow = {
   lng: number | null;
 };
 type RouteRow = { van_id: string; direction: "am" | "pm"; stop_ids: string[] };
-type AssignmentRow = { van_id: string; driver_user_id: string | null; aide_user_id: string | null };
-type UserRow = { id: string; full_name: string; role: string };
+type AssignmentRow = { van_id: string; driver_name: string | null; aide_name: string | null };
 
 export default async function ManageVansPage({
   searchParams,
@@ -42,13 +41,7 @@ export default async function ManageVansPage({
   const day = date ?? getLocalDate();
   const supabase = await createClient();
 
-  const [
-    { data: vans },
-    { data: stops },
-    { data: routes },
-    { data: assignments },
-    { data: staff },
-  ] = await Promise.all([
+  const [{ data: vans }, { data: stops }, { data: routes }, { data: assignments }] = await Promise.all([
     supabase.from("vans").select("id, name, capacity, plate, active").order("name").returns<VanRow[]>(),
     supabase
       .from("stops")
@@ -58,15 +51,9 @@ export default async function ManageVansPage({
     supabase.from("routes").select("van_id, direction, stop_ids").returns<RouteRow[]>(),
     supabase
       .from("van_assignments")
-      .select("van_id, driver_user_id, aide_user_id")
+      .select("van_id, driver_name, aide_name")
       .eq("assignment_date", day)
       .returns<AssignmentRow[]>(),
-    supabase
-      .from("users")
-      .select("id, full_name, role")
-      .in("role", ["driver", "aide", "coordinator", "admin"])
-      .order("full_name")
-      .returns<UserRow[]>(),
   ]);
 
   const routeList = (routes ?? []).map((r) => ({
@@ -95,10 +82,9 @@ export default async function ManageVansPage({
   const vansMissingZone = vanList.filter((v) => !v.hasZone).length;
   const assignmentList = (assignments ?? []).map((a) => ({
     vanId: a.van_id,
-    driverUserId: a.driver_user_id,
-    aideUserId: a.aide_user_id,
+    driverName: a.driver_name,
+    aideName: a.aide_name,
   }));
-  const staffList = (staff ?? []).map((u) => ({ id: u.id, fullName: u.full_name, role: u.role }));
 
   return (
     <div className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-8">
@@ -110,8 +96,8 @@ export default async function ManageVansPage({
           </Link>
         </div>
         <p className="text-sm text-muted-foreground">
-          Each van is a pickup zone with its own color and morning/afternoon times. A child rides the van
-          their home is assigned to. Set the color &amp; times here, then assign the day&apos;s driver &amp; aide.
+          Each van is a pickup zone with its own color. A child rides the van their home is assigned to.
+          Set the color here, then assign the day&apos;s driver &amp; aide.
         </p>
       </header>
 
@@ -122,7 +108,7 @@ export default async function ManageVansPage({
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Driver &amp; aide</h2>
-        <AssignmentEditor date={day} vans={activeVans} assignments={assignmentList} staff={staffList} />
+        <AssignmentEditor date={day} vans={activeVans} assignments={assignmentList} />
       </section>
     </div>
   );

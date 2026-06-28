@@ -265,16 +265,25 @@ export async function ensureVanZones(): Promise<EnsureResult> {
 
 // -- Set a van's driver + aide for a given day --
 
+const NameField = z
+  .string()
+  .max(60, "Name is too long")
+  .nullable()
+  .transform((v) => {
+    const trimmed = v?.trim() ?? "";
+    return trimmed === "" ? null : trimmed;
+  });
+
 const SetAssignmentSchema = z
   .object({
     vanId: z.string().uuid(),
     assignmentDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date"),
-    driverUserId: z.string().uuid().nullable(),
-    aideUserId: z.string().uuid().nullable(),
+    driverName: NameField,
+    aideName: NameField,
   })
-  .refine((d) => !sameDriverAndAide(d.driverUserId, d.aideUserId), {
+  .refine((d) => !sameDriverAndAide(d.driverName, d.aideName), {
     message: "Driver and aide must be different people",
-    path: ["aideUserId"],
+    path: ["aideName"],
   });
 
 export async function setVanAssignment(input: unknown): Promise<Result> {
@@ -288,8 +297,8 @@ export async function setVanAssignment(input: unknown): Promise<Result> {
     {
       assignment_date: parsed.data.assignmentDate,
       van_id: parsed.data.vanId,
-      driver_user_id: parsed.data.driverUserId,
-      aide_user_id: parsed.data.aideUserId,
+      driver_name: parsed.data.driverName,
+      aide_name: parsed.data.aideName,
     } as never,
     { onConflict: "assignment_date,van_id" },
   );

@@ -5,23 +5,19 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { setVanAssignment } from "@/server-actions/vans";
 import { sameDriverAndAide } from "@/lib/vans";
 
-type StaffVM = { id: string; fullName: string; role: string };
-type AssignVM = { vanId: string; driverUserId: string | null; aideUserId: string | null };
+type AssignVM = { vanId: string; driverName: string | null; aideName: string | null };
 
 export function AssignmentEditor({
   date,
   vans,
   assignments,
-  staff,
 }: {
   date: string;
   vans: { id: string; name: string }[];
   assignments: AssignVM[];
-  staff: StaffVM[];
 }) {
   const router = useRouter();
 
@@ -49,19 +45,12 @@ export function AssignmentEditor({
                 key={`${date}:${v.id}`}
                 van={v}
                 date={date}
-                staff={staff}
-                driverUserId={a?.driverUserId ?? null}
-                aideUserId={a?.aideUserId ?? null}
+                driverName={a?.driverName ?? null}
+                aideName={a?.aideName ?? null}
               />
             );
           })}
         </ul>
-      )}
-
-      {staff.length === 0 && (
-        <p className="text-xs text-muted-foreground">
-          No driver/aide accounts yet — volunteers appear here after they sign in once.
-        </p>
       )}
     </div>
   );
@@ -70,25 +59,23 @@ export function AssignmentEditor({
 function AssignRow({
   van,
   date,
-  staff,
-  driverUserId,
-  aideUserId,
+  driverName,
+  aideName,
 }: {
   van: { id: string; name: string };
   date: string;
-  staff: StaffVM[];
-  driverUserId: string | null;
-  aideUserId: string | null;
+  driverName: string | null;
+  aideName: string | null;
 }) {
   const router = useRouter();
-  const [driver, setDriver] = useState(driverUserId ?? "");
-  const [aide, setAide] = useState(aideUserId ?? "");
+  const [driver, setDriver] = useState(driverName ?? "");
+  const [aide, setAide] = useState(aideName ?? "");
   const [pending, startTransition] = useTransition();
 
-  const dirty = driver !== (driverUserId ?? "") || aide !== (aideUserId ?? "");
+  const dirty = driver !== (driverName ?? "") || aide !== (aideName ?? "");
 
   function save() {
-    if (sameDriverAndAide(driver || null, aide || null)) {
+    if (sameDriverAndAide(driver, aide)) {
       toast.error("Driver and aide must be different people");
       return;
     }
@@ -96,8 +83,8 @@ function AssignRow({
       const result = await setVanAssignment({
         vanId: van.id,
         assignmentDate: date,
-        driverUserId: driver || null,
-        aideUserId: aide || null,
+        driverName: driver,
+        aideName: aide,
       });
       if (!result.ok) {
         toast.error(result.error);
@@ -113,25 +100,23 @@ function AssignRow({
       <span className="w-full font-medium sm:w-20">{van.name}</span>
       <label className="space-y-1 text-sm">
         <span className="block text-muted-foreground">Driver</span>
-        <Select value={driver} onChange={(e) => setDriver(e.target.value)}>
-          <option value="">— none —</option>
-          {staff.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.fullName} ({u.role})
-            </option>
-          ))}
-        </Select>
+        <Input
+          value={driver}
+          onChange={(e) => setDriver(e.target.value)}
+          placeholder="Driver name"
+          maxLength={60}
+          autoComplete="off"
+        />
       </label>
       <label className="space-y-1 text-sm">
         <span className="block text-muted-foreground">Aide</span>
-        <Select value={aide} onChange={(e) => setAide(e.target.value)}>
-          <option value="">— none —</option>
-          {staff.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.fullName} ({u.role})
-            </option>
-          ))}
-        </Select>
+        <Input
+          value={aide}
+          onChange={(e) => setAide(e.target.value)}
+          placeholder="Aide name"
+          maxLength={60}
+          autoComplete="off"
+        />
       </label>
       <Button onClick={save} disabled={pending || !dirty} size="sm" className="ml-auto">
         {pending ? "Saving…" : "Save"}
