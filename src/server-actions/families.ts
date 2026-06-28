@@ -181,6 +181,8 @@ export async function updateFamilyContacts(
     ) {
       updates.lat = null;
       updates.lng = null;
+      // A new address gets a fresh geocode attempt — drop any prior failure flag.
+      updates.geocode_failed_at = null;
     }
   }
 

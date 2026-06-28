@@ -355,10 +355,35 @@ function SideList({
 }
 
 function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
-  const notLocated = kids.filter((k) => k.hasAddress);
+  const failed = kids.filter((k) => k.hasAddress && k.geocodeFailed);
+  const notLocated = kids.filter((k) => k.hasAddress && !k.geocodeFailed);
   const missing = kids.filter((k) => !k.hasAddress);
   return (
     <div className="space-y-2">
+      {failed.length > 0 && (
+        <div className="rounded-lg border border-rose-300 bg-rose-50 dark:border-rose-800 dark:bg-rose-950/40">
+          <div className="px-3 py-2 border-b border-rose-300 dark:border-rose-800 text-sm font-semibold text-rose-900 dark:text-rose-200">
+            ⚠ Address didn&apos;t match ({failed.length})
+          </div>
+          <p className="px-3 pt-2 text-xs text-rose-800 dark:text-rose-300">
+            These kids ride a van and have an address, but it couldn&apos;t be found on the map —
+            check it for typos and fix it, then tap &ldquo;Locate&rdquo; again.
+          </p>
+          <ul className="px-1 py-2 divide-y divide-rose-200 dark:divide-rose-900">
+            {failed.map((k) => (
+              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="truncate">{k.name}</span>
+                <Link
+                  href={`/coordinator/students/${k.studentId}/edit`}
+                  className="shrink-0 text-xs font-medium underline text-rose-900 dark:text-rose-200"
+                >
+                  Fix address
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {notLocated.length > 0 && (
         <div className="rounded-lg border border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40">
           <div className="px-3 py-2 border-b border-sky-300 dark:border-sky-800 text-sm font-semibold text-sky-900 dark:text-sky-200">

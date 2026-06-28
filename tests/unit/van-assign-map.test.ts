@@ -13,6 +13,19 @@ const zones: VanZone[] = [
   { vanId: "van-nozone", colorCode: null },
 ];
 
+/** KidRow with sensible defaults so a test only states what it cares about. */
+function kid(over: Partial<KidRow> & Pick<KidRow, "studentId">): KidRow {
+  return {
+    name: over.studentId,
+    lat: null,
+    lng: null,
+    hasAddress: false,
+    geocodeFailed: false,
+    currentVanId: null,
+    ...over,
+  };
+}
+
 describe("vanColor", () => {
   it("returns the van's zone color", () => {
     expect(vanColor("van-red", zones)).toBe("#ef4444");
@@ -32,9 +45,9 @@ describe("vanColor", () => {
 describe("buildVanAssignMapData", () => {
   it("partitions kids with coords into pinnable and the rest into noAddress", () => {
     const kids: KidRow[] = [
-      { studentId: "a", name: "Ann", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" },
-      { studentId: "b", name: "Bo", lat: null, lng: null, hasAddress: true, currentVanId: null },
-      { studentId: "c", name: "Cy", lat: null, lng: null, hasAddress: false, currentVanId: null },
+      kid({ studentId: "a", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" }),
+      kid({ studentId: "b", hasAddress: true }),
+      kid({ studentId: "c" }),
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.pinnable.map((k) => k.studentId)).toEqual(["a"]);
@@ -43,8 +56,8 @@ describe("buildVanAssignMapData", () => {
 
   it("colors each pinnable kid by their current van's zone color", () => {
     const kids: KidRow[] = [
-      { studentId: "a", name: "Ann", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" },
-      { studentId: "b", name: "Bo", lat: 43.6, lng: -96.6, hasAddress: true, currentVanId: "van-blue" },
+      kid({ studentId: "a", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" }),
+      kid({ studentId: "b", lat: 43.6, lng: -96.6, hasAddress: true, currentVanId: "van-blue" }),
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.pinnable.find((k) => k.studentId === "a")?.currentVanColor).toBe("#ef4444");
@@ -53,7 +66,7 @@ describe("buildVanAssignMapData", () => {
 
   it("colors an unassigned pinnable kid grey", () => {
     const kids: KidRow[] = [
-      { studentId: "a", name: "Ann", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: null },
+      kid({ studentId: "a", lat: 43.5, lng: -96.7, hasAddress: true }),
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.pinnable[0]?.currentVanColor).toBe(UNASSIGNED_PIN_COLOR);
@@ -61,23 +74,36 @@ describe("buildVanAssignMapData", () => {
 
   it("counts only address-having un-geocoded kids as locatable", () => {
     const kids: KidRow[] = [
-      // has address, no coords → locatable
-      { studentId: "b", name: "Bo", lat: null, lng: null, hasAddress: true, currentVanId: null },
-      // no address at all → NOT locatable, but still surfaced in noAddress
-      { studentId: "c", name: "Cy", lat: null, lng: null, hasAddress: false, currentVanId: null },
-      // already geocoded → pinnable, not counted
-      { studentId: "a", name: "Ann", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: null },
+      kid({ studentId: "b", hasAddress: true }), // locatable
+      kid({ studentId: "c", hasAddress: false }), // no address — surfaced, not locatable
+      kid({ studentId: "a", lat: 43.5, lng: -96.7, hasAddress: true }), // pinned
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.locatableCount).toBe(1);
     expect(data.noAddress).toHaveLength(2);
   });
 
+  it("a failed-geocode kid is flagged (in noAddress) but NOT counted as locatable", () => {
+    const kids: KidRow[] = [
+      kid({ studentId: "fail", hasAddress: true, geocodeFailed: true }),
+      kid({ studentId: "fresh", hasAddress: true, geocodeFailed: false }),
+    ];
+    const data = buildVanAssignMapData(kids, zones);
+    // Both are surfaced (never dropped)...
+    expect(data.noAddress.map((k) => k.studentId).sort()).toEqual(["fail", "fresh"]);
+    // ...but only the not-yet-tried one is a Locate target.
+    expect(data.locatableCount).toBe(1);
+    const failed = data.noAddress.find((k) => k.studentId === "fail");
+    expect(failed?.geocodeFailed).toBe(true);
+    expect(failed?.hasAddress).toBe(true);
+  });
+
   it("never drops a kid — every input lands in exactly one partition", () => {
     const kids: KidRow[] = [
-      { studentId: "a", name: "Ann", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" },
-      { studentId: "b", name: "Bo", lat: null, lng: null, hasAddress: true, currentVanId: null },
-      { studentId: "c", name: "Cy", lat: null, lng: null, hasAddress: false, currentVanId: null },
+      kid({ studentId: "a", lat: 43.5, lng: -96.7, hasAddress: true, currentVanId: "van-red" }),
+      kid({ studentId: "b", hasAddress: true }),
+      kid({ studentId: "c", hasAddress: false }),
+      kid({ studentId: "d", hasAddress: true, geocodeFailed: true }),
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.pinnable.length + data.noAddress.length).toBe(kids.length);
@@ -85,7 +111,7 @@ describe("buildVanAssignMapData", () => {
 
   it("treats a half-coordinate (lat only) as not pinnable", () => {
     const kids: KidRow[] = [
-      { studentId: "a", name: "Ann", lat: 43.5, lng: null, hasAddress: true, currentVanId: null },
+      kid({ studentId: "a", lat: 43.5, lng: null, hasAddress: true }),
     ];
     const data = buildVanAssignMapData(kids, zones);
     expect(data.pinnable).toHaveLength(0);

@@ -130,9 +130,20 @@ export async function autoAssignStopsFromAddresses(
       batch.map(async (fam) => ({ id: fam.id, pt: await geocodeAddress(familyAddressQuery(toAddr(fam))) })),
     );
     for (const { id, pt } of points) {
-      if (!pt) continue;
+      if (!pt) {
+        // Address was tried and didn't match — flag it so the map can say
+        // "fix this address" instead of "tap Locate" forever.
+        await admin
+          .from("families")
+          .update({ geocode_failed_at: new Date().toISOString() } as never)
+          .eq("id", id);
+        continue;
+      }
       geocoded.set(id, pt);
-      await admin.from("families").update({ lat: pt.lat, lng: pt.lng } as never).eq("id", id);
+      await admin
+        .from("families")
+        .update({ lat: pt.lat, lng: pt.lng, geocode_failed_at: null } as never)
+        .eq("id", id);
     }
   }
 
@@ -247,8 +258,19 @@ export async function locateStudentHomes(
       batch.map(async (fam) => ({ id: fam.id, pt: await geocodeAddress(familyAddressQuery(toAddr(fam))) })),
     );
     for (const { id, pt } of points) {
-      if (!pt) continue;
-      await admin.from("families").update({ lat: pt.lat, lng: pt.lng } as never).eq("id", id);
+      if (!pt) {
+        // Tried and didn't match — flag the address as bad (distinct from "not
+        // located yet") so the coordinator knows to fix it, not re-Locate it.
+        await admin
+          .from("families")
+          .update({ geocode_failed_at: new Date().toISOString() } as never)
+          .eq("id", id);
+        continue;
+      }
+      await admin
+        .from("families")
+        .update({ lat: pt.lat, lng: pt.lng, geocode_failed_at: null } as never)
+        .eq("id", id);
       located++;
     }
   }

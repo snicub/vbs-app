@@ -27,6 +27,8 @@ export type KidRow = {
   lng: number | null;
   /** Family has a street address on file (so it CAN be geocoded). */
   hasAddress: boolean;
+  /** Address was geocoded but didn't match — needs fixing, not just locating. */
+  geocodeFailed: boolean;
   /** Derived current van for the day: morning_van_id ?? afternoon_van_id. */
   currentVanId: string | null;
 };
@@ -46,6 +48,8 @@ export type NoAddressKid = {
   name: string;
   /** True = has a street address but isn't geocoded yet (can be "Locate"d). */
   hasAddress: boolean;
+  /** True = the address was tried and didn't match; needs fixing, not locating. */
+  geocodeFailed: boolean;
 };
 
 export type VanAssignMapData = {
@@ -90,11 +94,15 @@ export function buildVanAssignMapData(
         currentVanColor: vanColor(k.currentVanId, zones),
       });
     } else {
-      if (k.hasAddress) locatableCount++;
+      // Only count addresses worth a fresh Locate — a failed geocode won't move
+      // until the coordinator fixes the address, so it's surfaced separately and
+      // kept out of the "Locate N homes" count.
+      if (k.hasAddress && !k.geocodeFailed) locatableCount++;
       noAddress.push({
         studentId: k.studentId,
         name: k.name,
         hasAddress: k.hasAddress,
+        geocodeFailed: k.geocodeFailed,
       });
     }
   }
