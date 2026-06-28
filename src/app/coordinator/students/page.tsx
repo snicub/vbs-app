@@ -41,6 +41,18 @@ export default async function StudentsDashboardPage() {
        dob, age_at_registration, allergies, medical_notes, photo_path,
        families(primary_guardian_name, primary_phone)`,
     )
+    .is("archived_at", null)
+    .order("legal_last_name")
+    .returns<StudentDbRow[]>();
+
+  const { data: archived } = await supabase
+    .from("students")
+    .select(
+      `id, legal_first_name, legal_last_name, preferred_first_name, wristband_code,
+       dob, age_at_registration, allergies, medical_notes, photo_path,
+       families(primary_guardian_name, primary_phone)`,
+    )
+    .not("archived_at", "is", null)
     .order("legal_last_name")
     .returns<StudentDbRow[]>();
 
@@ -61,10 +73,10 @@ export default async function StudentsDashboardPage() {
   // Batch-sign all photo URLs in a single round-trip, keyed by photo path.
   const photoUrls = await signedUrlsFor(
     "student-photos",
-    (students ?? []).map((s) => s.photo_path),
+    [...(students ?? []), ...(archived ?? [])].map((s) => s.photo_path),
   );
 
-  const rows: StudentRow[] = (students ?? []).map((s) => {
+  function toRow(s: StudentDbRow): StudentRow {
     const status = statusMap.get(s.id);
     const morningStop = status?.morning_stop_id
       ? stopMap.get(status.morning_stop_id)
@@ -89,7 +101,10 @@ export default async function StudentsDashboardPage() {
       morningStop: morningStop ? `${morningStop.name} (${morningStop.town})` : "",
       afternoonStop: afternoonStop ? `${afternoonStop.name} (${afternoonStop.town})` : "",
     };
-  });
+  }
+
+  const rows: StudentRow[] = (students ?? []).map(toRow);
+  const archivedRows: StudentRow[] = (archived ?? []).map(toRow);
 
   return (
     <main className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
@@ -99,7 +114,7 @@ export default async function StudentsDashboardPage() {
           {rows.length} registered · search and sort across all kids
         </p>
       </header>
-      <StudentsTable rows={rows} />
+      <StudentsTable rows={rows} archivedRows={archivedRows} />
     </main>
   );
 }

@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import {
@@ -214,6 +215,94 @@ export async function updateVan(input: unknown): Promise<Result> {
       const { error } = await supabase.from("stops").update(zoneUpdates as never).eq("id", zoneStopId);
       if (error) return fail(error.message);
     }
+  }
+
+  revalidateVanTrees();
+  return { ok: true };
+}
+
+// -- Delete a van (+ its pickup zone) --
+
+const DeleteVanSchema = z.object({ vanId: z.string().uuid() });
+
+/**
+ * Coordinator-only: permanently remove a van, its routes, last-known location,
+ * and its pickup-zone stop. Used to clean up a test van.
+ *
+ * Refuses if any kid is still assigned to this van's zone (their stop legs point
+ * at it) so we never silently strip a child's routing by deleting their van.
+ *
+ * Also refuses if the van appears on ANY append-only event row: deleting the van
+ * would force `student_day_events.van_id` → NULL (FK ON DELETE SET NULL), which
+ * the append-only trigger rejects — aborting AFTER van_assignments were already
+ * deleted (partial loss). A van that's ever carried a kid keeps its history; only
+ * an unused (test) van is deletable.
+ *
+ * Runs via the admin client (RLS-free) after the coordinator check, and respects
+ * the FK rules: `van_assignments` is ON DELETE RESTRICT so it's cleared first;
+ * deleting the van then cascades its `routes` and `van_locations`; finally the
+ * now-orphaned zone stop is removed (no kid references it — guarded above).
+ */
+export async function deleteVan(input: unknown): Promise<Result> {
+  if (!(await requireCoordinator())) return fail("Coordinator access required");
+
+  const parsed = DeleteVanSchema.safeParse(input);
+  if (!parsed.success) return fail(issues(parsed.error));
+  const { vanId } = parsed.data;
+
+  const admin = createAdminClient();
+
+  // Fail CLOSED: if we can't read the van's routes (hence resolve its pickup
+  // zone), we cannot prove no kid is assigned — so we must NOT delete. A
+  // transient error must never let the delete proceed, or every kid on the van
+  // gets their stop legs SET NULL and drops off every manifest + name tag.
+  const { data: routes, error: routesErr } = await admin
+    .from("routes")
+    .select("van_id, direction, stop_ids")
+    .eq("van_id", vanId)
+    .returns<DirectionRoute[]>();
+  if (routesErr) return fail(`Couldn't check this van's riders — try again. (${routesErr.message})`);
+  const zoneStopId = zoneStopIdForVan(vanId, routes ?? []);
+
+  if (zoneStopId) {
+    const { count, error: countErr } = await admin
+      .from("student_day_records")
+      .select("id", { count: "exact", head: true })
+      .or(`morning_stop_id.eq.${zoneStopId},afternoon_stop_id.eq.${zoneStopId}`);
+    if (countErr) return fail(`Couldn't check this van's riders — try again. (${countErr.message})`);
+    if ((count ?? 0) > 0) {
+      return fail(
+        `${count} kid${count === 1 ? " is" : "s are"} still assigned to this van — reassign them first, then delete it.`,
+      );
+    }
+  }
+
+  // Fail CLOSED again: a van that appears on ANY event row can't be deleted —
+  // the delete would SET NULL on student_day_events.van_id, which the append-only
+  // trigger rejects, aborting AFTER van_assignments were already removed. Only an
+  // unused (never-boarded) van is deletable; a used one keeps its history.
+  const { count: eventCount, error: eventErr } = await admin
+    .from("student_day_events")
+    .select("id", { count: "exact", head: true })
+    .eq("van_id", vanId);
+  if (eventErr) return fail(`Couldn't check this van's history — try again. (${eventErr.message})`);
+  if ((eventCount ?? 0) > 0) {
+    return fail(
+      "This van has check-in history and can't be deleted. Mark it inactive instead (uncheck Active).",
+    );
+  }
+
+  const { error: assignErr } = await admin
+    .from("van_assignments")
+    .delete()
+    .eq("van_id", vanId);
+  if (assignErr) return fail(assignErr.message);
+
+  const { error: vanErr } = await admin.from("vans").delete().eq("id", vanId);
+  if (vanErr) return fail(vanErr.message);
+
+  if (zoneStopId) {
+    await admin.from("stops").delete().eq("id", zoneStopId);
   }
 
   revalidateVanTrees();

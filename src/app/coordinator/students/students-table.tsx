@@ -33,13 +33,22 @@ export type StudentRow = {
   afternoonStop: string;
 };
 
-export function StudentsTable({ rows }: { rows: StudentRow[] }) {
+export function StudentsTable({
+  rows,
+  archivedRows = [],
+}: {
+  rows: StudentRow[];
+  archivedRows?: StudentRow[];
+}) {
   const [query, setQuery] = useState("");
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+
+  const baseRows = showArchived ? archivedRows : rows;
 
   // Quick-pick age chips are for the K–12 kids (kindergarten ≈ 4 through 12th
   // grade ≈ 18). Adult leaders/helpers can register at higher ages, but we don't
@@ -48,19 +57,19 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
   const K12_MIN = 4;
   const K12_MAX = 18;
   const ageBounds = useMemo(() => {
-    const ages = rows
+    const ages = baseRows
       .map((r) => r.age)
       .filter((a): a is number => a != null && a >= K12_MIN && a <= K12_MAX);
     if (ages.length === 0) return null;
     return { min: Math.min(...ages), max: Math.max(...ages) };
-  }, [rows]);
+  }, [baseRows]);
 
-  const statuses = useMemo(() => presentStates(rows), [rows]);
+  const statuses = useMemo(() => presentStates(baseRows), [baseRows]);
 
   const filtered = useMemo(
     () =>
-      sortStudents(filterStudents(rows, { query, minAge, maxAge, status }), sortKey, sortDir),
-    [rows, query, sortKey, sortDir, minAge, maxAge, status],
+      sortStudents(filterStudents(baseRows, { query, minAge, maxAge, status }), sortKey, sortDir),
+    [baseRows, query, sortKey, sortDir, minAge, maxAge, status],
   );
 
   const ageFilterActive = minAge != null || maxAge != null;
@@ -76,7 +85,7 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
 
   return (
     <div className="space-y-3">
-      <div className="flex gap-2 items-center">
+      <div className="flex gap-2 items-center flex-wrap">
         <Input
           placeholder="Search name, wristband, family, stop…"
           value={query}
@@ -84,9 +93,30 @@ export function StudentsTable({ rows }: { rows: StudentRow[] }) {
           className="max-w-md"
         />
         <span className="text-xs text-muted-foreground whitespace-nowrap">
-          {filtered.length} of {rows.length}
+          {filtered.length} of {baseRows.length}
         </span>
+        {archivedRows.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowArchived((v) => !v)}
+            className={
+              "ml-auto rounded-full border px-3 min-h-11 md:min-h-9 text-sm md:text-xs " +
+              (showArchived
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-card hover:bg-muted/40")
+            }
+          >
+            {showArchived ? "← Back to roster" : `Archived (${archivedRows.length})`}
+          </button>
+        )}
       </div>
+
+      {showArchived && (
+        <p className="text-sm text-muted-foreground">
+          These children are hidden from rosters. Open one and tap{" "}
+          <strong>Restore to roster</strong> to bring them back. Their records were kept.
+        </p>
+      )}
 
       {statuses.length > 1 && (
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

@@ -22,7 +22,10 @@ type Guardian = {
 
 export function FamilyContactsForm({
   familyId,
+  primaryGuardianId,
   initialPrimaryPhone,
+  initialStreetAddress,
+  initialCity,
   initialEmergencyContactName,
   initialEmergencyContactPhone,
   initialEmergencyContactRelationship,
@@ -31,7 +34,10 @@ export function FamilyContactsForm({
   primaryEmail,
 }: {
   familyId: string;
+  primaryGuardianId: string | null;
   initialPrimaryPhone: string;
+  initialStreetAddress: string;
+  initialCity: string;
   initialEmergencyContactName: string;
   initialEmergencyContactPhone: string;
   initialEmergencyContactRelationship: string;
@@ -42,7 +48,11 @@ export function FamilyContactsForm({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
+  const [guardianName, setGuardianName] = useState(primaryGuardianName);
+  const [email, setEmail] = useState(primaryEmail);
   const [primaryPhone, setPrimaryPhone] = useState(initialPrimaryPhone);
+  const [street, setStreet] = useState(initialStreetAddress);
+  const [city, setCity] = useState(initialCity);
   const [ecName, setEcName] = useState(initialEmergencyContactName);
   const [ecPhone, setEcPhone] = useState(initialEmergencyContactPhone);
   const [ecRelationship, setEcRelationship] = useState(initialEmergencyContactRelationship);
@@ -56,7 +66,12 @@ export function FamilyContactsForm({
     startTransition(async () => {
       const result = await updateFamilyContacts({
         familyId,
+        primaryGuardianId: primaryGuardianId ?? undefined,
+        primaryGuardianName: guardianName,
+        primaryEmail: email,
         primaryPhone,
+        streetAddress: street,
+        city,
         emergencyContactName: ecName,
         emergencyContactPhone: ecPhone,
         emergencyContactRelationship: ecRelationship,
@@ -98,9 +113,25 @@ export function FamilyContactsForm({
           Family contacts
         </h2>
 
-        <div className="text-sm text-muted-foreground">
-          <strong className="text-foreground">{primaryGuardianName}</strong>
-          <span className="ml-2">{primaryEmail}</span>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label htmlFor="guardianName">Caregiver name</Label>
+            <Input
+              id="guardianName"
+              value={guardianName}
+              onChange={(e) => setGuardianName(e.target.value)}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="primaryEmail">Email</Label>
+            <Input
+              id="primaryEmail"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="Optional"
+            />
+          </div>
         </div>
 
         <div className="space-y-1.5">
@@ -111,6 +142,41 @@ export function FamilyContactsForm({
             value={primaryPhone}
             onChange={(e) => setPrimaryPhone(e.target.value)}
           />
+        </div>
+
+        <div className="border-t pt-3 mt-3">
+          <div className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
+            Home address
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-1.5">
+              <Label htmlFor="street">Street address</Label>
+              <Input
+                id="street"
+                autoComplete="street-address"
+                value={street}
+                onChange={(e) => setStreet(e.target.value)}
+              />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="city">City / town</Label>
+              <Input
+                id="city"
+                autoComplete="address-level2"
+                value={city}
+                onChange={(e) => setCity(e.target.value)}
+              />
+            </div>
+          </div>
+          {!street.trim() && !city.trim() ? (
+            <p className="mt-1 text-xs text-[var(--anomaly-warn)]">
+              No address on file — this child can&apos;t be routed to a van until one is added.
+            </p>
+          ) : (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Changing the address re-routes this family on the next &ldquo;Suggest vans from addresses.&rdquo;
+            </p>
+          )}
         </div>
 
         <div className="border-t pt-3 mt-3">

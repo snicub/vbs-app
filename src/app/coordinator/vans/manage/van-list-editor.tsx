@@ -6,7 +6,9 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { createVan, updateVan, ensureVanZones } from "@/server-actions/vans";
+import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { createVan, updateVan, deleteVan, ensureVanZones } from "@/server-actions/vans";
+import { Trash2Icon } from "lucide-react";
 
 type VanVM = {
   id: string;
@@ -87,6 +89,8 @@ function VanRow({ van }: { van: VanVM }) {
   const [color, setColor] = useState(van.colorCode ?? DEFAULT_COLOR);
   const [area, setArea] = useState(van.areaLocation ?? "");
   const [pending, startTransition] = useTransition();
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [deleting, startDelete] = useTransition();
 
   const dirty =
     name !== van.name ||
@@ -123,6 +127,19 @@ function VanRow({ van }: { van: VanVM }) {
         return;
       }
       toast.success(`${name} saved`);
+      router.refresh();
+    });
+  }
+
+  function remove() {
+    startDelete(async () => {
+      const result = await deleteVan({ vanId: van.id });
+      if (!result.ok) {
+        toast.error(result.error);
+        setConfirmOpen(false);
+        return;
+      }
+      toast.success(`${van.name} deleted`);
       router.refresh();
     });
   }
@@ -164,9 +181,20 @@ function VanRow({ van }: { van: VanVM }) {
           <Checkbox checked={active} onCheckedChange={(c: boolean) => setActive(c)} />
           <span>Active</span>
         </label>
-        <Button onClick={save} disabled={pending || !dirty} size="sm" className="ml-auto">
-          {pending ? "Saving…" : "Save"}
-        </Button>
+        <div className="ml-auto flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setConfirmOpen(true)}
+            disabled={deleting}
+            className="text-destructive hover:text-destructive"
+          >
+            <Trash2Icon /> Delete
+          </Button>
+          <Button onClick={save} disabled={pending || !dirty} size="sm">
+            {pending ? "Saving…" : "Save"}
+          </Button>
+        </div>
       </div>
       {van.hasZone && (
         <div className="flex flex-wrap items-end gap-2">
@@ -189,6 +217,21 @@ function VanRow({ van }: { van: VanVM }) {
           </span>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmOpen}
+        title={`Delete ${van.name}?`}
+        description={
+          <>
+            This removes <strong>{van.name}</strong>, its pickup zone/color, route, and
+            driver/aide assignments. This cannot be undone.
+          </>
+        }
+        confirmLabel="Delete van"
+        pending={deleting}
+        onConfirm={remove}
+        onCancel={() => setConfirmOpen(false)}
+      />
     </li>
   );
 }

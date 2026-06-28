@@ -5,6 +5,7 @@ import { lookupByWristband } from "@/server-actions/events";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
+import { ageFor } from "@/lib/failsafe/print-data";
 import { safeDayState } from "@/lib/state-presentation";
 import { StudentActions } from "./student-actions";
 import { ChangeStopsPanel } from "./change-stops";
@@ -39,6 +40,7 @@ export default async function StudentTablePage({
   // every action ("No day record"). We render a hard stop instead of a tappable
   // surface that fails on tap.
   const eventDate = status?.eventDate ?? getLocalDate();
+  const age = ageFor({ ageAtRegistration: student.ageAtRegistration, dob: student.dob }, eventDate);
   const photoUrl = await signedUrlFor("student-photos", student.photoPath);
 
   const supabase = await createClient();
@@ -145,6 +147,12 @@ export default async function StudentTablePage({
           </h1>
           <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
             <code className="font-mono">{student.wristbandCode}</code>
+            {age != null && (
+              <>
+                <span>·</span>
+                <span>Age {age}</span>
+              </>
+            )}
             {status?.wristbandColorName && (
               <>
                 <span>·</span>
@@ -164,6 +172,15 @@ export default async function StudentTablePage({
           </div>
         </div>
       </div>
+
+      {isCoordinator(user.role) && (
+        <Link
+          href={`/coordinator/students/${student.id}/edit`}
+          className={cn(buttonVariants({ variant: "default", size: "lg" }), "w-full")}
+        >
+          <PencilIcon /> Edit student &amp; parent info
+        </Link>
+      )}
 
       {/* Status card — full-bleed accent in the state's tone */}
       <div
@@ -347,17 +364,6 @@ export default async function StudentTablePage({
               </div>
             )}
           </div>
-        </div>
-      )}
-
-      {isCoordinator(user.role) && (
-        <div className="flex flex-wrap gap-2">
-          <Link
-            href={`/coordinator/students/${student.id}/edit`}
-            className={buttonVariants({ variant: "outline", size: "sm" })}
-          >
-            <PencilIcon /> Edit student / family info
-          </Link>
         </div>
       )}
 

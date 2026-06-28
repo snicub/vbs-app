@@ -6,7 +6,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
-import { normalizePhone } from "@/lib/registration/schema";
+import { normalizePhone, OptionalEmailSchema } from "@/lib/registration/schema";
 
 const FamilyIdSchema = z.object({ familyId: z.string().uuid() });
 
@@ -90,7 +90,16 @@ export async function rotateFamilyToken(
 
 const UpdateFamilyContactsSchema = z.object({
   familyId: z.string().uuid(),
+  // The primary caregiver lives in BOTH families.primary_* (denormalized) and a
+  // guardians row (the source the parent-login email match + STOP opt-out key
+  // off). When this id is present we keep that guardian row in sync with the
+  // family copy so the two never drift.
+  primaryGuardianId: z.string().uuid().optional(),
+  primaryGuardianName: z.string().trim().min(1, "Caregiver name is required").optional(),
+  primaryEmail: OptionalEmailSchema,
   primaryPhone: z.string().trim().min(1, "Phone is required").transform(normalizePhone).optional(),
+  streetAddress: z.string().trim().optional(),
+  city: z.string().trim().optional(),
   emergencyContactName: z.string().trim().optional(),
   emergencyContactPhone: z.string().trim().transform(normalizePhone).optional(),
   emergencyContactRelationship: z.string().trim().optional(),
@@ -119,10 +128,23 @@ export async function updateFamilyContacts(
   }
 
   const { familyId, ...fields } = parsed.data;
+  const admin = createAdminClient();
 
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | number | null> = {};
+  if (fields.primaryGuardianName !== undefined) {
+    updates.primary_guardian_name = fields.primaryGuardianName;
+  }
+  if (fields.primaryEmail !== undefined) {
+    updates.primary_email = fields.primaryEmail || "";
+  }
   if (fields.primaryPhone !== undefined) {
     updates.primary_phone = fields.primaryPhone;
+  }
+  if (fields.streetAddress !== undefined) {
+    updates.street_address = fields.streetAddress || null;
+  }
+  if (fields.city !== undefined) {
+    updates.city = fields.city || null;
   }
   if (fields.emergencyContactName !== undefined) {
     updates.emergency_contact_name = fields.emergencyContactName || null;
@@ -138,13 +160,60 @@ export async function updateFamilyContacts(
     return { ok: true };
   }
 
-  const admin = createAdminClient();
+  // If the home address changed, drop the stored coordinates so the next
+  // "Suggest vans from addresses" re-geocodes the new location (geocoding runs
+  // at build time, not here — keeping this save fast and offline-safe).
+  if (updates.street_address !== undefined || updates.city !== undefined) {
+    const { data: current } = await admin
+      .from("families")
+      .select("street_address, city")
+      .eq("id", familyId)
+      .maybeSingle<{ street_address: string | null; city: string | null }>();
+    const newStreet =
+      updates.street_address !== undefined
+        ? (updates.street_address as string | null)
+        : current?.street_address ?? null;
+    const newCity =
+      updates.city !== undefined ? (updates.city as string | null) : current?.city ?? null;
+    if (
+      current &&
+      (newStreet !== (current.street_address ?? null) || newCity !== (current.city ?? null))
+    ) {
+      updates.lat = null;
+      updates.lng = null;
+    }
+  }
+
   const { error } = await admin
     .from("families")
     .update(updates as never)
     .eq("id", familyId);
 
   if (error) return { ok: false, error: error.message };
+
+  // Keep the primary guardian's source row in lockstep with the family copy, so
+  // the stale name doesn't resurface as a second "eligible pickup person" and so
+  // email-match login / STOP opt-out (which key off guardians.*) stay correct.
+  if (fields.primaryGuardianId) {
+    const guardianUpdates: Record<string, string | null> = {};
+    if (fields.primaryGuardianName !== undefined) {
+      guardianUpdates.full_name = fields.primaryGuardianName;
+    }
+    if (fields.primaryEmail !== undefined) {
+      guardianUpdates.email = fields.primaryEmail || null;
+    }
+    if (fields.primaryPhone !== undefined) {
+      guardianUpdates.phone = fields.primaryPhone;
+    }
+    if (Object.keys(guardianUpdates).length > 0) {
+      const { error: gErr } = await admin
+        .from("guardians")
+        .update(guardianUpdates as never)
+        .eq("id", fields.primaryGuardianId)
+        .eq("family_id", familyId);
+      if (gErr) return { ok: false, error: gErr.message };
+    }
+  }
 
   revalidatePath("/coordinator", "layout");
   revalidatePath("/table", "layout");

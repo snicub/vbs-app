@@ -218,6 +218,8 @@ export async function lookupByWristband(input: unknown): Promise<
         medicalNotes: string | null;
         familyId: string;
         photoPath: string | null;
+        dob: string | null;
+        ageAtRegistration: number | null;
       };
       status: {
         state: string;
@@ -255,8 +257,9 @@ export async function lookupByWristband(input: unknown): Promise<
   const supabase = await createClient();
   const { data: student, error: stuErr } = await supabase
     .from("students")
-    .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, family_id, photo_path")
+    .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code, allergies, medical_notes, family_id, photo_path, dob, age_at_registration")
     .eq("wristband_code", code)
+    .is("archived_at", null)
     .maybeSingle<{
       id: string;
       legal_first_name: string;
@@ -267,6 +270,8 @@ export async function lookupByWristband(input: unknown): Promise<
       medical_notes: string | null;
       family_id: string;
       photo_path: string | null;
+      dob: string | null;
+      age_at_registration: number | null;
     }>();
   if (stuErr) return { ok: false, error: stuErr.message };
   if (!student) return { ok: false, error: "No student found for that code." };
@@ -300,6 +305,8 @@ export async function lookupByWristband(input: unknown): Promise<
       medicalNotes: student.medical_notes,
       familyId: student.family_id,
       photoPath: student.photo_path,
+      dob: student.dob,
+      ageAtRegistration: student.age_at_registration,
     },
     status: status
       ? {
@@ -340,6 +347,7 @@ export async function searchStudentsByName(query: string): Promise<
   const { data, error } = await admin
     .from("students")
     .select("id, legal_first_name, legal_last_name, preferred_first_name, wristband_code")
+    .is("archived_at", null)
     .or(
       `legal_first_name.ilike.%${sanitized}%,legal_last_name.ilike.%${sanitized}%,preferred_first_name.ilike.%${sanitized}%`,
     )

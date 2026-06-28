@@ -3,6 +3,7 @@
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
@@ -17,6 +18,20 @@ const UpdateStudentSchema = z.object({
   name: z.string().trim().min(1, "Name is required").optional(),
   allergies: z.string().trim().optional(),
   medicalNotes: z.string().trim().optional(),
+  dob: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Invalid date").nullable().optional(),
+  ageAtRegistration: z.number().int("Age must be a whole number").min(0).max(120).nullable().optional(),
+}).superRefine((data, ctx) => {
+  // The DB requires a child to have a DOB or an age. If the form sends both and
+  // both are empty, reject with a friendly message instead of a raw DB error.
+  if (data.dob !== undefined && data.ageAtRegistration !== undefined) {
+    if (data.dob == null && data.ageAtRegistration == null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "Enter a date of birth or an age.",
+        path: ["dob"],
+      });
+    }
+  }
 });
 
 export type UpdateStudentResult =
@@ -44,7 +59,7 @@ export async function updateStudent(
   const { studentId, ...fields } = parsed.data;
 
   // Build the update payload from only the fields that were provided
-  const updates: Record<string, string | null> = {};
+  const updates: Record<string, string | number | null> = {};
   if (fields.name !== undefined) {
     const { first, last } = splitName(fields.name);
     updates.legal_first_name = first;
@@ -59,6 +74,12 @@ export async function updateStudent(
   if (fields.medicalNotes !== undefined) {
     updates.medical_notes = fields.medicalNotes || null;
   }
+  if (fields.dob !== undefined) {
+    updates.dob = fields.dob;
+  }
+  if (fields.ageAtRegistration !== undefined) {
+    updates.age_at_registration = fields.ageAtRegistration;
+  }
 
   if (Object.keys(updates).length === 0) {
     return { ok: true };
@@ -70,6 +91,128 @@ export async function updateStudent(
     .update(updates as never)
     .eq("id", studentId);
 
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  return { ok: true };
+}
+
+// -- Archive / restore a student --
+
+const ArchiveStudentSchema = z.object({ studentId: z.string().uuid() });
+
+export type ArchiveStudentResult =
+  | { ok: true }
+  | { ok: false; error: string };
+
+/**
+ * Coordinator-only: archive a student. The child is hidden from every roster
+ * and operational screen (the student_day_status view excludes archived
+ * students), but all of their records — events, consents, day-records — are
+ * RETAINED. Use for a test/junk registration or a child who isn't coming.
+ *
+ * This replaces the old hard delete, which tried to delete student_day_events
+ * (rejected by the append-only trigger) and would have erased custody history.
+ * Archive is a single UPDATE; a coordinator can restore via unarchiveStudent.
+ */
+export async function archiveStudent(input: unknown): Promise<ArchiveStudentResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+
+  const parsed = ArchiveStudentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("students")
+    .update({ archived_at: new Date().toISOString() } as never)
+    .eq("id", parsed.data.studentId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true };
+}
+
+/**
+ * Coordinator-only: restore an archived student back onto the rosters by
+ * clearing archived_at. The mirror of archiveStudent.
+ */
+export async function unarchiveStudent(input: unknown): Promise<ArchiveStudentResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+
+  const parsed = ArchiveStudentSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("students")
+    .update({ archived_at: null } as never)
+    .eq("id", parsed.data.studentId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true };
+}
+
+// -- Replace a student's photo --
+
+const UpdateStudentPhotoSchema = z.object({
+  studentId: z.string().uuid(),
+  photoBytes: z.string().min(1, "No photo provided"),
+});
+
+/**
+ * Coordinator-only: replace a student's photo. Mirrors the registration upload
+ * — the client resizes to ≤800px JPEG and sends base64; we write it to the
+ * private `student-photos` bucket and point the student at it. Same path per
+ * student so a replacement overwrites the old image rather than orphaning it.
+ */
+export async function updateStudentPhoto(input: unknown): Promise<UpdateStudentResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+
+  const parsed = UpdateStudentPhotoSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  const { studentId, photoBytes } = parsed.data;
+  const admin = createAdminClient();
+
+  const { data: student } = await admin
+    .from("students")
+    .select("family_id")
+    .eq("id", studentId)
+    .maybeSingle<{ family_id: string }>();
+  if (!student) return { ok: false, error: "Student not found" };
+
+  const path = `${student.family_id}/${studentId}.jpg`;
+  const bytes = Buffer.from(photoBytes, "base64");
+  const { error: uploadErr } = await admin.storage
+    .from("student-photos")
+    .upload(path, bytes, { contentType: "image/jpeg", upsert: true });
+  if (uploadErr) return { ok: false, error: uploadErr.message };
+
+  const { error } = await admin
+    .from("students")
+    .update({ photo_path: path } as never)
+    .eq("id", studentId);
   if (error) return { ok: false, error: error.message };
 
   revalidatePath("/coordinator", "layout");

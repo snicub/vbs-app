@@ -5,10 +5,13 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { getLocalDate } from "@/lib/date";
+import { ageFor } from "@/lib/failsafe/print-data";
 import { signedUrlFor } from "@/lib/storage/signed-url";
-import { ArrowLeftIcon, MapPinIcon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import { StudentEditForm } from "./student-edit-form";
 import { FamilyContactsForm } from "./family-contacts-form";
+import { DeleteStudentSection } from "./delete-student";
+import { ArchivedBanner } from "./archived-banner";
 
 export const dynamic = "force-dynamic";
 
@@ -40,6 +43,9 @@ type StudentDb = {
   wristband_code: string;
   photo_path: string | null;
   family_id: string;
+  dob: string | null;
+  age_at_registration: number | null;
+  archived_at: string | null;
 };
 
 type DayRecordDb = {
@@ -107,7 +113,7 @@ export default async function StudentEditPage({
 
   const { data: student } = await supabase
     .from("students")
-    .select("id, legal_first_name, legal_last_name, preferred_first_name, allergies, medical_notes, wristband_code, photo_path, family_id")
+    .select("id, legal_first_name, legal_last_name, preferred_first_name, allergies, medical_notes, wristband_code, photo_path, family_id, dob, age_at_registration, archived_at")
     .eq("id", studentId)
     .maybeSingle<StudentDb>();
 
@@ -188,13 +194,18 @@ export default async function StudentEditPage({
 
   const photoUrl = await signedUrlFor("student-photos", student.photo_path);
   const fullName = [student.legal_first_name, student.legal_last_name].filter(Boolean).join(" ");
+  const age = ageFor(
+    { ageAtRegistration: student.age_at_registration, dob: student.dob },
+    today,
+  );
 
-  const streetLine = family?.street_address?.trim() || "";
-  const cityStateZip = [family?.city, family?.state, family?.postal_code]
-    .map((p) => p?.trim())
-    .filter(Boolean)
-    .join(", ");
-  const hasAddress = !!(streetLine || cityStateZip);
+  // The guardians row to keep in sync when the family's primary contact is
+  // edited: the one matching the denormalized name, else the one flagged primary,
+  // else the only/first guardian.
+  const primaryGuardianId =
+    (guardians.find((g) => g.full_name === family?.primary_guardian_name) ??
+      guardians.find((g) => (g.relationship ?? "").toLowerCase().includes("primary")) ??
+      guardians[0])?.id ?? null;
 
   return (
     <main className="mx-auto max-w-2xl px-3 sm:px-4 py-4 sm:py-6 space-y-6">
@@ -218,11 +229,27 @@ export default async function StudentEditPage({
           <h1 className="text-xl sm:text-2xl font-semibold truncate">
             Edit: {fullName}
           </h1>
-          <div className="text-sm text-muted-foreground">
+          <div className="text-sm text-muted-foreground flex items-center gap-2 flex-wrap">
             <code className="font-mono">{student.wristband_code}</code>
+            {age != null && (
+              <>
+                <span>·</span>
+                <span>Age {age}</span>
+              </>
+            )}
+            {student.dob && (
+              <>
+                <span>·</span>
+                <span>DOB {student.dob}</span>
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {student.archived_at && (
+        <ArchivedBanner studentId={student.id} name={fullName} />
+      )}
 
       <StudentEditForm
         studentId={student.id}
@@ -230,6 +257,9 @@ export default async function StudentEditPage({
         initialName={fullName}
         initialAllergies={student.allergies ?? ""}
         initialMedicalNotes={student.medical_notes ?? ""}
+        initialDob={student.dob ?? ""}
+        initialAge={student.age_at_registration != null ? String(student.age_at_registration) : ""}
+        currentPhotoUrl={photoUrl}
         initialMode={dayRecord?.mode ?? null}
         initialAttending={dayRecord?.attending ?? true}
         hasDayRecord={!!dayRecord}
@@ -237,29 +267,13 @@ export default async function StudentEditPage({
         currentVanId={currentVanId}
       />
 
-      <section className="rounded-lg border bg-card p-4 space-y-2">
-        <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-          Home address
-        </h2>
-        {hasAddress ? (
-          <div className="flex items-start gap-2 text-sm">
-            <MapPinIcon className="size-4 mt-0.5 shrink-0 text-muted-foreground" />
-            <div className="space-y-0.5">
-              {streetLine && <div>{streetLine}</div>}
-              {cityStateZip && <div>{cityStateZip}</div>}
-            </div>
-          </div>
-        ) : (
-          <p className="text-sm text-[var(--anomaly-warn)]">
-            No address on file — can&apos;t route this kid to a van until one is added.
-          </p>
-        )}
-      </section>
-
       {family && (
         <FamilyContactsForm
           familyId={family.id}
+          primaryGuardianId={primaryGuardianId}
           initialPrimaryPhone={family.primary_phone}
+          initialStreetAddress={family.street_address ?? ""}
+          initialCity={family.city ?? ""}
           initialEmergencyContactName={family.emergency_contact_name ?? ""}
           initialEmergencyContactPhone={family.emergency_contact_phone ?? ""}
           initialEmergencyContactRelationship={family.emergency_contact_relationship ?? ""}
@@ -273,6 +287,10 @@ export default async function StudentEditPage({
           primaryGuardianName={family.primary_guardian_name}
           primaryEmail={family.primary_email}
         />
+      )}
+
+      {!student.archived_at && (
+        <DeleteStudentSection studentId={student.id} name={fullName} />
       )}
     </main>
   );
