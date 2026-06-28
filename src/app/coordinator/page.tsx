@@ -304,12 +304,6 @@ export default async function CoordinatorTodayPage({
 
       <div className="flex flex-col sm:flex-row gap-3 sm:justify-end">
         <Link
-          href="/coordinator/announcements"
-          className={buttonVariants({ variant: "outline" })}
-        >
-          Send announcement
-        </Link>
-        <Link
           href="/coordinator/closeout"
           className={buttonVariants({ variant: closeout ? "outline" : "default" })}
         >
