@@ -8,6 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PhotoInput, type PhotoValue } from "@/components/photo-input";
 import { clientId } from "@/lib/offline/uuid";
+import { ageFromDob } from "@/lib/registration/age";
 import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
 import type { ConsentKind } from "@/types/domain";
@@ -87,6 +88,13 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
 
   function updateStudent(i: number, patch: Partial<StudentDraft>) {
     setStudents((prev) => prev.map((s, idx) => (idx === i ? { ...s, ...patch } : s)));
+  }
+
+  function onDobChange(i: number, dob: string) {
+    const patch: Partial<StudentDraft> = { dob };
+    const derived = ageFromDob(dob, new Date().toISOString().slice(0, 10));
+    if (derived != null) patch.age = String(derived);
+    updateStudent(i, patch);
   }
 
   async function onSubmit(e: React.FormEvent) {
@@ -259,7 +267,7 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
                 <Input
                   type="date"
                   value={s.dob}
-                  onChange={(e) => updateStudent(i, { dob: e.target.value })}
+                  onChange={(e) => onDobChange(i, e.target.value)}
                 />
               </Field>
               <Field label="Age">
