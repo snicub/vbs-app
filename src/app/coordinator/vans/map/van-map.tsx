@@ -38,10 +38,13 @@ export function VanMap({
     map: import("leaflet").Map;
     vanMarkers: Map<string, import("leaflet").Marker>;
     stopMarkers: import("leaflet").CircleMarker[];
+    meMarker: import("leaflet").CircleMarker | null;
     L: typeof import("leaflet");
   } | null>(null);
   const [locations, setLocations] = useState<LocationRow[]>(initialLocations);
   const [now, setNow] = useState(Date.now());
+  const [me, setMe] = useState<{ lat: number; lng: number; acc: number | null } | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   // Re-tick every 15s so "last seen" labels stay fresh.
   useEffect(() => {
@@ -85,8 +88,9 @@ export function VanMap({
         stopMarkers.push(m);
       }
 
-      leafletRef.current = { map, vanMarkers: new Map(), stopMarkers, L };
+      leafletRef.current = { map, vanMarkers: new Map(), stopMarkers, meMarker: null, L };
       renderVanMarkers(locations, now);
+      setMapReady(true);
     }
     init();
     return () => {
@@ -125,6 +129,45 @@ export function VanMap({
       supabase.removeChannel(channel);
     };
   }, []);
+
+  // Track the coordinator's own live location from the browser GPS. Errors
+  // (permission denied / unavailable) are ignored — we just don't show the dot.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) =>
+        setMe({
+          lat: pos.coords.latitude,
+          lng: pos.coords.longitude,
+          acc: pos.coords.accuracy ?? null,
+        }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // Draw / move the "you are here" dot (a blue marker, distinct from the vans).
+  useEffect(() => {
+    const ctx = leafletRef.current;
+    if (!ctx || !me) return;
+    const { L, map } = ctx;
+    const label = `You are here${me.acc != null ? ` · ±${Math.round(me.acc)}m` : ""}`;
+    if (!ctx.meMarker) {
+      ctx.meMarker = L.circleMarker([me.lat, me.lng], {
+        radius: 7,
+        color: "#1d4ed8",
+        fillColor: "#3b82f6",
+        fillOpacity: 0.9,
+        weight: 3,
+      })
+        .addTo(map)
+        .bindPopup(label);
+    } else {
+      ctx.meMarker.setLatLng([me.lat, me.lng]);
+      ctx.meMarker.getPopup()?.setContent(label);
+    }
+  }, [me, mapReady]);
 
   function renderVanMarkers(rows: LocationRow[], nowMs: number) {
     const ctx = leafletRef.current;
@@ -194,6 +237,13 @@ export function VanMap({
     );
   }, [stops]);
 
+  const flyToMe = useCallback(() => {
+    const ctx = leafletRef.current;
+    if (!ctx || !me) return;
+    ctx.map.flyTo([me.lat, me.lng], 15, { duration: 0.8 });
+    ctx.meMarker?.openPopup();
+  }, [me]);
+
   return (
     <div className="relative">
       <div
@@ -212,6 +262,8 @@ export function VanMap({
         onFitAll={fitAll}
         onFitStops={fitStops}
         onLocate={flyToVan}
+        onLocateMe={flyToMe}
+        hasMe={!!me}
         hasStops={stops.length > 0}
       />
     </div>
@@ -225,6 +277,8 @@ function MapControls({
   onFitAll,
   onFitStops,
   onLocate,
+  onLocateMe,
+  hasMe,
   hasStops,
 }: {
   vans: VanRow[];
@@ -233,6 +287,8 @@ function MapControls({
   onFitAll: () => void;
   onFitStops: () => void;
   onLocate: (vanId: string) => void;
+  onLocateMe: () => void;
+  hasMe: boolean;
   hasStops: boolean;
 }) {
   const [open, setOpen] = useState(true);
@@ -286,6 +342,15 @@ function MapControls({
               className="flex-1 rounded-md border px-2 min-h-11 md:min-h-8 text-xs font-medium hover:bg-muted disabled:opacity-50"
             >
               Stops
+            </button>
+            <button
+              type="button"
+              onClick={onLocateMe}
+              disabled={!hasMe}
+              title={hasMe ? "Center on your location" : "Waiting for your location…"}
+              className="flex-1 rounded-md border px-2 min-h-11 md:min-h-8 text-xs font-medium hover:bg-muted disabled:opacity-50"
+            >
+              📍 Me
             </button>
           </div>
 
