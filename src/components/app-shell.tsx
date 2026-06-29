@@ -17,14 +17,12 @@ function linksFor(role: UserRole): NavLink[] {
     return [
       { href: "/coordinator", label: "Today" },
       { href: "/coordinator/students", label: "Students" },
+      { href: "/table", label: "Check-In" },
       { href: "/coordinator/groups", label: "Groups" },
       { href: "/coordinator/nametags", label: "Name Tags" },
-      { href: "/coordinator/print", label: "Print / Failsafe" },
+      { href: "/coordinator/acupuncture", label: "Acupuncture" },
       { href: "/coordinator/stops", label: "Colors" },
-      { href: "/table", label: "Check-In" },
       { href: "/coordinator/vans", label: "Vans" },
-      { href: "/coordinator/vans/assign", label: "Pickup Map" },
-      { href: "/coordinator/vans/map", label: "Live Map" },
       { href: "/photos", label: "Photos" },
     ];
   }

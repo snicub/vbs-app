@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ageFromDob } from "@/lib/registration/age";
+import { ageFromDob, ageFor } from "@/lib/registration/age";
 
 describe("ageFromDob", () => {
   it("computes whole years when the birthday has already passed this year", () => {
@@ -48,5 +48,19 @@ describe("ageFromDob", () => {
 
   it("handles a leap-day birthday before Feb 29 in a non-leap year", () => {
     expect(ageFromDob("2016-02-29", "2026-02-28")).toBe(9);
+  });
+});
+
+describe("ageFor", () => {
+  it("prefers the stored registration age", () => {
+    expect(ageFor({ ageAtRegistration: 7, dob: "2015-01-10" }, "2026-06-28")).toBe(7);
+  });
+
+  it("derives from dob when no stored age", () => {
+    expect(ageFor({ ageAtRegistration: null, dob: "2015-01-10" }, "2026-06-28")).toBe(11);
+  });
+
+  it("returns null when neither age nor dob is known", () => {
+    expect(ageFor({ ageAtRegistration: null, dob: null }, "2026-06-28")).toBeNull();
   });
 });

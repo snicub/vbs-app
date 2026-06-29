@@ -18,3 +18,16 @@ export function ageFromDob(dobIso: string, todayIso: string): number | null {
   if (m < 0 || (m === 0 && ref.getDate() < born.getDate())) age -= 1;
   return age >= 0 ? age : null;
 }
+
+/**
+ * Best-available age for display: the explicit registration age if stored, else
+ * derived from dob as of the reference date. Returns null when neither is known.
+ */
+export function ageFor(
+  student: { ageAtRegistration: number | null; dob: string | null },
+  on: string,
+): number | null {
+  if (student.ageAtRegistration != null) return student.ageAtRegistration;
+  if (!student.dob) return null;
+  return ageFromDob(student.dob, on);
+}

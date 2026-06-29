@@ -83,12 +83,26 @@ export default async function CoordinatorVansPage() {
             Live positions broadcast from each van&apos;s aide phone.
           </p>
         </div>
-        <Link
-          href="/coordinator/vans/manage"
-          className={buttonVariants({ variant: "outline", size: "sm" })}
-        >
-          Manage vans, routes &amp; drivers
-        </Link>
+        <div className="flex flex-wrap gap-2">
+          <Link
+            href="/coordinator/vans/assign"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Pickup Map
+          </Link>
+          <Link
+            href="/coordinator/vans/map"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Live Map
+          </Link>
+          <Link
+            href="/coordinator/vans/manage"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Manage vans, routes &amp; drivers
+          </Link>
+        </div>
       </header>
 
       <ul className="space-y-3">

@@ -5,7 +5,7 @@ import { defaultVbsDate } from "@/lib/registration/dates";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { displayName } from "@/lib/nametags/tag-data";
-import { ageFor } from "@/lib/failsafe/print-data";
+import { ageFor } from "@/lib/registration/age";
 import { GroupsBuilder, type BuilderKid } from "./groups-builder";
 
 export const dynamic = "force-dynamic";

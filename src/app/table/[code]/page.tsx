@@ -5,7 +5,7 @@ import { lookupByWristband } from "@/server-actions/events";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
-import { ageFor } from "@/lib/failsafe/print-data";
+import { ageFor } from "@/lib/registration/age";
 import { safeDayState } from "@/lib/state-presentation";
 import { StudentActions } from "./student-actions";
 import { ChangeStopsPanel } from "./change-stops";

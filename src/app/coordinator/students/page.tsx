@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
 import { signedUrlsFor } from "@/lib/storage/signed-url";
-import { ageFor } from "@/lib/failsafe/print-data";
+import { ageFor } from "@/lib/registration/age";
 import { StudentsTable, type StudentRow } from "./students-table";
 
 export const dynamic = "force-dynamic";

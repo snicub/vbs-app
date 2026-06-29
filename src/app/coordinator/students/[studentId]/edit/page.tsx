@@ -5,7 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { getLocalDate } from "@/lib/date";
-import { ageFor } from "@/lib/failsafe/print-data";
+import { ageFor } from "@/lib/registration/age";
 import { signedUrlFor } from "@/lib/storage/signed-url";
 import { ArrowLeftIcon } from "lucide-react";
 import { StudentEditForm } from "./student-edit-form";
