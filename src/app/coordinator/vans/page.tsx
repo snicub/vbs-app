@@ -97,6 +97,12 @@ export default async function CoordinatorVansPage() {
             Live Map
           </Link>
           <Link
+            href="/coordinator/van-rosters"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            Print rosters
+          </Link>
+          <Link
             href="/coordinator/vans/manage"
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
