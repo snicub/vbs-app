@@ -31,6 +31,8 @@ type RosterItem = {
   stopName: string | null;
   stopOrder: number;
   homeAddress: string | null;
+  homeNotes: string | null;
+  homeMapsUrl: string | null;
   photoUrl: string | null;
 };
 
@@ -401,9 +403,21 @@ export function VanManifest({
                       </div>
 
                       {r.homeAddress ? (
-                        <div className="flex items-start gap-2 text-base font-medium">
-                          <MapPinIcon className="size-5 shrink-0 mt-0.5 text-muted-foreground" />
-                          <span>{r.homeAddress}</span>
+                        <div className="space-y-1">
+                          <a
+                            href={r.homeMapsUrl ?? undefined}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="flex items-start gap-2 text-base font-medium text-primary underline-offset-2 hover:underline"
+                          >
+                            <MapPinIcon className="size-5 shrink-0 mt-0.5" />
+                            <span>{r.homeAddress} <span className="text-sm font-normal">(tap to navigate)</span></span>
+                          </a>
+                          {r.homeNotes && (
+                            <div className="ml-7 text-sm text-muted-foreground">
+                              📝 {r.homeNotes}
+                            </div>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-start gap-2 text-base font-semibold text-[var(--anomaly-warn)]">
@@ -535,9 +549,25 @@ function PhotoVerifyModal({
         </div>
 
         {target.homeAddress && (
-          <div className="text-center text-base">
-            <span className="text-muted-foreground">Home:</span>{" "}
-            <strong>{target.homeAddress}</strong>
+          <div className="text-center text-base space-y-0.5">
+            <div>
+              <span className="text-muted-foreground">Home:</span>{" "}
+              {target.homeMapsUrl ? (
+                <a
+                  href={target.homeMapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="font-semibold text-primary underline"
+                >
+                  {target.homeAddress}
+                </a>
+              ) : (
+                <strong>{target.homeAddress}</strong>
+              )}
+            </div>
+            {target.homeNotes && (
+              <div className="text-sm text-muted-foreground">📝 {target.homeNotes}</div>
+            )}
           </div>
         )}
 

@@ -87,18 +87,37 @@ export default async function VanPage({
   );
 
   // Home addresses — door-to-door: the van drives to each rider's home, so the
-  // driver needs to see where, and a kid with no address on file is flagged.
+  // driver needs the full address (tappable to navigate), the address notes
+  // (landmarks/directions), and a kid with no address on file is flagged.
   const familyIds = Array.from(new Set(students.map((s) => s.family_id)));
-  const familyAddr = new Map<string, string | null>();
+  type HomeInfo = { address: string | null; notes: string | null; mapsUrl: string | null };
+  const familyHome = new Map<string, HomeInfo>();
   if (familyIds.length > 0) {
     const { data: fams } = await supabase
       .from("families")
-      .select("id, street_address, city")
+      .select("id, street_address, city, state, postal_code, notes, lat, lng")
       .in("id", familyIds)
-      .returns<{ id: string; street_address: string | null; city: string | null }[]>();
+      .returns<{
+        id: string;
+        street_address: string | null;
+        city: string | null;
+        state: string | null;
+        postal_code: string | null;
+        notes: string | null;
+        lat: number | null;
+        lng: number | null;
+      }[]>();
     for (const f of fams ?? []) {
-      const addr = [f.street_address, f.city].map((p) => p?.trim()).filter(Boolean).join(", ");
-      familyAddr.set(f.id, addr || null);
+      const address =
+        [f.street_address, f.city, f.state, f.postal_code].map((p) => p?.trim()).filter(Boolean).join(", ") || null;
+      // Prefer the geocoded point for navigation (exact), else the typed address.
+      let mapsUrl: string | null = null;
+      if (f.lat != null && f.lng != null) {
+        mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}`;
+      } else if (address) {
+        mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+      }
+      familyHome.set(f.id, { address, notes: f.notes?.trim() || null, mapsUrl });
     }
   }
 
@@ -149,7 +168,9 @@ export default async function VanPage({
       direction,
       stopName: stopMap.get(stopId)?.name ?? null,
       stopOrder: stopOrderMap.get(stopId) ?? Infinity,
-      homeAddress: student ? (familyAddr.get(student.family_id) ?? null) : null,
+      homeAddress: student ? (familyHome.get(student.family_id)?.address ?? null) : null,
+      homeNotes: student ? (familyHome.get(student.family_id)?.notes ?? null) : null,
+      homeMapsUrl: student ? (familyHome.get(student.family_id)?.mapsUrl ?? null) : null,
       photoUrl: student?.photo_path ? (photoUrls.get(student.photo_path) ?? null) : null,
     };
   });
