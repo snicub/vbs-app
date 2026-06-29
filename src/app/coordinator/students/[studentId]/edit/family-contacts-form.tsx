@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import {
@@ -26,6 +27,7 @@ export function FamilyContactsForm({
   initialPrimaryPhone,
   initialStreetAddress,
   initialCity,
+  initialAddressNotes,
   initialEmergencyContactName,
   initialEmergencyContactPhone,
   initialEmergencyContactRelationship,
@@ -38,6 +40,7 @@ export function FamilyContactsForm({
   initialPrimaryPhone: string;
   initialStreetAddress: string;
   initialCity: string;
+  initialAddressNotes: string;
   initialEmergencyContactName: string;
   initialEmergencyContactPhone: string;
   initialEmergencyContactRelationship: string;
@@ -53,6 +56,7 @@ export function FamilyContactsForm({
   const [primaryPhone, setPrimaryPhone] = useState(initialPrimaryPhone);
   const [street, setStreet] = useState(initialStreetAddress);
   const [city, setCity] = useState(initialCity);
+  const [addressNotes, setAddressNotes] = useState(initialAddressNotes);
   const [ecName, setEcName] = useState(initialEmergencyContactName);
   const [ecPhone, setEcPhone] = useState(initialEmergencyContactPhone);
   const [ecRelationship, setEcRelationship] = useState(initialEmergencyContactRelationship);
@@ -72,6 +76,7 @@ export function FamilyContactsForm({
         primaryPhone,
         streetAddress: street,
         city,
+        notes: addressNotes,
         emergencyContactName: ecName,
         emergencyContactPhone: ecPhone,
         emergencyContactRelationship: ecRelationship,
@@ -167,6 +172,16 @@ export function FamilyContactsForm({
                 onChange={(e) => setCity(e.target.value)}
               />
             </div>
+          </div>
+          <div className="mt-3 space-y-1.5">
+            <Label htmlFor="addressNotes">Address notes</Label>
+            <Textarea
+              id="addressNotes"
+              value={addressNotes}
+              onChange={(e) => setAddressNotes(e.target.value)}
+              rows={2}
+              placeholder="Directions / landmarks for the driver — e.g. white house, side door, dog in yard"
+            />
           </div>
           {!street.trim() && !city.trim() ? (
             <p className="mt-1 text-xs text-[var(--anomaly-warn)]">

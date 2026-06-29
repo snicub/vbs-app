@@ -100,6 +100,7 @@ const UpdateFamilyContactsSchema = z.object({
   primaryPhone: z.string().trim().min(1, "Phone is required").transform(normalizePhone).optional(),
   streetAddress: z.string().trim().optional(),
   city: z.string().trim().optional(),
+  notes: z.string().trim().optional(),
   emergencyContactName: z.string().trim().optional(),
   emergencyContactPhone: z.string().trim().transform(normalizePhone).optional(),
   emergencyContactRelationship: z.string().trim().optional(),
@@ -145,6 +146,9 @@ export async function updateFamilyContacts(
   }
   if (fields.city !== undefined) {
     updates.city = fields.city || null;
+  }
+  if (fields.notes !== undefined) {
+    updates.notes = fields.notes || null;
   }
   if (fields.emergencyContactName !== undefined) {
     updates.emergency_contact_name = fields.emergencyContactName || null;

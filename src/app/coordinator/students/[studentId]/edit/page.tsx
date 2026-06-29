@@ -84,6 +84,7 @@ type FamilyDb = {
   city: string | null;
   state: string | null;
   postal_code: string | null;
+  notes: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
   emergency_contact_relationship: string | null;
@@ -145,7 +146,7 @@ export default async function StudentEditPage({
         .returns<RouteDb[]>(),
       supabase
         .from("families")
-        .select("id, primary_guardian_name, primary_email, primary_phone, street_address, city, state, postal_code, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
+        .select("id, primary_guardian_name, primary_email, primary_phone, street_address, city, state, postal_code, notes, emergency_contact_name, emergency_contact_phone, emergency_contact_relationship")
         .eq("id", student.family_id)
         .maybeSingle<FamilyDb>(),
       createAdminClient()
@@ -274,6 +275,7 @@ export default async function StudentEditPage({
           initialPrimaryPhone={family.primary_phone}
           initialStreetAddress={family.street_address ?? ""}
           initialCity={family.city ?? ""}
+          initialAddressNotes={family.notes ?? ""}
           initialEmergencyContactName={family.emergency_contact_name ?? ""}
           initialEmergencyContactPhone={family.emergency_contact_phone ?? ""}
           initialEmergencyContactRelationship={family.emergency_contact_relationship ?? ""}
