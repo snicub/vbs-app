@@ -46,6 +46,9 @@ export function NameTagSheet({
             {tags.length} tag{tags.length === 1 ? "" : "s"} · prints on plain
             letter paper, cut along the dashed lines.
           </p>
+          <p className="text-sm text-muted-foreground">
+            Tap a name to edit it before printing — changes apply to this printout only.
+          </p>
         </header>
 
         <div className="flex flex-wrap items-end gap-3">
@@ -98,18 +101,23 @@ export function NameTagSheet({
               className="nametag-card flex flex-col overflow-hidden rounded-lg border border-dashed border-gray-400 bg-white"
             >
               <NameTagBand tag={t} />
-              <div className="flex flex-1 flex-col items-center justify-center px-3 py-2 text-center text-gray-900">
-                <span className="nametag-name text-3xl font-bold leading-tight [overflow-wrap:anywhere]">
+              <div className="flex flex-1 flex-col items-center justify-center px-3 py-3 text-center text-gray-900">
+                <span
+                  contentEditable
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  className="nametag-name rounded px-1 text-3xl font-bold leading-tight [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
+                >
                   {t.firstName}
                 </span>
-                <span className="text-lg font-medium [overflow-wrap:anywhere]">
+                <span
+                  contentEditable
+                  suppressContentEditableWarning
+                  spellCheck={false}
+                  className="rounded px-1 text-lg font-medium [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
+                >
                   {t.lastName}
                 </span>
-              </div>
-              <div className="flex items-center justify-end border-t border-gray-200 px-3 py-1">
-                <code className="font-mono text-xs tracking-widest text-gray-400">
-                  {t.wristbandCode}
-                </code>
               </div>
             </article>
           ))}
