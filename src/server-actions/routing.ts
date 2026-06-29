@@ -284,3 +284,63 @@ export async function locateStudentHomes(
 
   return { ok: true, located, stillMissing };
 }
+
+// -- Set / correct a student's home address inline from the Pickup Map --
+
+const SetHomeAddressSchema = z.object({
+  studentId: z.string().uuid(),
+  streetAddress: z.string().trim().min(1, "Street address is required"),
+  city: z.string().trim().min(1, "City / town is required"),
+});
+
+export type SetHomeAddressResult =
+  | { ok: true; located: boolean }
+  | { ok: false; error: string };
+
+/**
+ * Coordinator action: set/correct a student's home street + city inline from the
+ * Pickup Map and geocode it immediately, so a wrong pin moves to the right spot
+ * (or a missing home appears) without leaving the map. The address lives on the
+ * FAMILY, so this updates every kid in that family. State is hard-set to "SD" to
+ * match registration (the event is in Sisseton). On a successful geocode we write
+ * the new coords and clear the failed flag; if it still doesn't match we clear the
+ * coords and flag it so it surfaces under "Address didn't match".
+ */
+export async function setStudentHomeAddress(input: unknown): Promise<SetHomeAddressResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = SetHomeAddressSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+  const { studentId, streetAddress, city } = parsed.data;
+  const admin = createAdminClient();
+
+  const { data: student } = await admin
+    .from("students")
+    .select("family_id")
+    .eq("id", studentId)
+    .maybeSingle<{ family_id: string }>();
+  if (!student) return { ok: false, error: "Student not found" };
+
+  const query = familyAddressQuery({ streetAddress, city, state: "SD", postalCode: null });
+  const pt = query ? await geocodeAddress(query) : null;
+
+  const { error } = await admin
+    .from("families")
+    .update({
+      street_address: streetAddress,
+      city,
+      state: "SD",
+      lat: pt?.lat ?? null,
+      lng: pt?.lng ?? null,
+      geocode_failed_at: pt ? null : new Date().toISOString(),
+    } as never)
+    .eq("id", student.family_id);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  return { ok: true, located: !!pt };
+}

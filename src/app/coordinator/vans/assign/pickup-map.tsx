@@ -1,15 +1,19 @@
 "use client";
 
-import Link from "next/link";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import "leaflet/dist/leaflet.css";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { contrastText } from "@/lib/nametags/tag-data";
 import { UNASSIGNED_PIN_COLOR, type PinnableKid, type NoAddressKid } from "@/lib/van-assign-map";
 import { assignStudentToVan } from "@/server-actions/students";
-import { autoAssignStopsFromAddresses, locateStudentHomes } from "@/server-actions/routing";
+import {
+  autoAssignStopsFromAddresses,
+  locateStudentHomes,
+  setStudentHomeAddress,
+} from "@/server-actions/routing";
 
 type VanOption = { id: string; name: string; colorCode: string | null };
 
@@ -324,7 +328,7 @@ function SideList({
             const color = k.currentVanColor;
             const onVan = !!k.currentVanId;
             return (
-              <li key={k.studentId} className="flex items-center gap-2 px-3 py-2 text-sm">
+              <li key={k.studentId} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
                 <input
                   type="checkbox"
                   className="size-4 shrink-0"
@@ -340,11 +344,17 @@ function SideList({
                 />
                 <button
                   type="button"
-                  className="flex-1 text-left truncate hover:underline"
+                  className="min-w-0 flex-1 truncate text-left hover:underline"
                   onClick={() => onLocate(k)}
                 >
                   {k.name}
                 </button>
+                <AddressEditor
+                  studentId={k.studentId}
+                  initialStreet={k.street}
+                  initialCity={k.city}
+                  cta="Edit address"
+                />
               </li>
             );
           })}
@@ -371,14 +381,14 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
           </p>
           <ul className="px-1 py-2 divide-y divide-rose-200 dark:divide-rose-900">
             {failed.map((k) => (
-              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
-                <span className="truncate">{k.name}</span>
-                <Link
-                  href={`/coordinator/students/${k.studentId}/edit`}
-                  className="shrink-0 text-xs font-medium underline text-rose-900 dark:text-rose-200"
-                >
-                  Fix address
-                </Link>
+              <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <AddressEditor
+                  studentId={k.studentId}
+                  initialStreet={k.street}
+                  initialCity={k.city}
+                  cta="Fix address"
+                />
               </li>
             ))}
           </ul>
@@ -396,14 +406,14 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
           </p>
           <ul className="px-1 py-2 divide-y divide-sky-200 dark:divide-sky-900">
             {notLocated.map((k) => (
-              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
-                <span className="truncate">{k.name}</span>
-                <Link
-                  href={`/coordinator/students/${k.studentId}/edit`}
-                  className="shrink-0 text-xs font-medium underline text-sky-900 dark:text-sky-200"
-                >
-                  Edit
-                </Link>
+              <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <AddressEditor
+                  studentId={k.studentId}
+                  initialStreet={k.street}
+                  initialCity={k.city}
+                  cta="Edit address"
+                />
               </li>
             ))}
           </ul>
@@ -419,19 +429,100 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
           </p>
           <ul className="px-1 py-2 divide-y divide-amber-200 dark:divide-amber-900">
             {missing.map((k) => (
-              <li key={k.studentId} className="flex items-center justify-between gap-2 px-2 py-1.5 text-sm">
-                <span className="truncate">{k.name}</span>
-                <Link
-                  href={`/coordinator/students/${k.studentId}/edit`}
-                  className="shrink-0 text-xs font-medium underline text-amber-900 dark:text-amber-200"
-                >
-                  Edit
-                </Link>
+              <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
+                <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <AddressEditor
+                  studentId={k.studentId}
+                  initialStreet={k.street}
+                  initialCity={k.city}
+                  cta="Add address"
+                />
               </li>
             ))}
           </ul>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Inline home-address editor used wherever a kid appears in the side panel. Saves
+ * the family's street + city and geocodes on the spot, so a wrong pin jumps to the
+ * corrected location (or a missing home appears) without leaving the map.
+ */
+function AddressEditor({
+  studentId,
+  initialStreet,
+  initialCity,
+  cta,
+}: {
+  studentId: string;
+  initialStreet: string | null;
+  initialCity: string | null;
+  cta: string;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [street, setStreet] = useState(initialStreet ?? "");
+  const [city, setCity] = useState(initialCity ?? "");
+  const [pending, startTransition] = useTransition();
+
+  function save() {
+    if (!street.trim() || !city.trim()) {
+      toast.error("Enter both a street address and a city/town.");
+      return;
+    }
+    startTransition(async () => {
+      const r = await setStudentHomeAddress({ studentId, streetAddress: street, city });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(
+        r.located
+          ? "Saved & placed on the map ✓"
+          : "Saved — but it still didn't match. Check the spelling.",
+      );
+      setOpen(false);
+      router.refresh();
+    });
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="shrink-0 text-xs font-medium underline"
+      >
+        {cta}
+      </button>
+    );
+  }
+
+  return (
+    <div className="mt-1 w-full space-y-1.5">
+      <Input
+        value={street}
+        onChange={(e) => setStreet(e.target.value)}
+        placeholder="Street address"
+        className="h-9 text-sm"
+      />
+      <Input
+        value={city}
+        onChange={(e) => setCity(e.target.value)}
+        placeholder="City / town (e.g. Sisseton)"
+        className="h-9 text-sm"
+      />
+      <div className="flex gap-2">
+        <Button size="sm" onClick={save} disabled={pending}>
+          {pending ? "Saving…" : "Save & locate"}
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => setOpen(false)} disabled={pending}>
+          Cancel
+        </Button>
+      </div>
     </div>
   );
 }

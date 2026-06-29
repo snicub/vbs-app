@@ -10,6 +10,13 @@ import { env } from "@/lib/env";
  */
 export type GeoPoint = { lat: number; lng: number };
 
+// The event is in Sisseton, SD. Bias geocoding toward there so a bare street
+// name resolves to the local home, not a same-named street in another state.
+const SISSETON: GeoPoint = { lat: 45.663, lng: -97.0481 };
+// Generous box over NE South Dakota (covers the pickup towns) — used as a *bias*,
+// not a hard bound, so a nearby rural address isn't excluded. left,top,right,bottom.
+const REGION_VIEWBOX = "-98.4,46.3,-95.8,44.6";
+
 export async function geocodeAddress(query: string): Promise<GeoPoint | null> {
   const q = query.trim();
   if (!q) return null;
@@ -32,7 +39,8 @@ export function familyAddressQuery(f: {
 async function geocodeMapbox(q: string, token: string): Promise<GeoPoint | null> {
   const url =
     `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(q)}.json` +
-    `?access_token=${encodeURIComponent(token)}&limit=1&country=us`;
+    `?access_token=${encodeURIComponent(token)}&limit=1&country=us` +
+    `&proximity=${SISSETON.lng},${SISSETON.lat}`;
   try {
     const res = await fetch(url);
     if (!res.ok) return null;
@@ -47,7 +55,9 @@ async function geocodeMapbox(q: string, token: string): Promise<GeoPoint | null>
 }
 
 async function geocodeNominatim(q: string): Promise<GeoPoint | null> {
-  const url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`;
+  const url =
+    `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1` +
+    `&countrycodes=us&viewbox=${REGION_VIEWBOX}`;
   try {
     const res = await fetch(url, {
       headers: { "User-Agent": "vbs-checkin/1.0 (one-time church VBS event)" },

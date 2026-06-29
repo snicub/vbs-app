@@ -29,6 +29,9 @@ export type KidRow = {
   hasAddress: boolean;
   /** Address was geocoded but didn't match — needs fixing, not just locating. */
   geocodeFailed: boolean;
+  /** Current home street + city, to pre-fill the inline address editor. */
+  street: string | null;
+  city: string | null;
   /** Derived current van for the day: morning_van_id ?? afternoon_van_id. */
   currentVanId: string | null;
 };
@@ -38,6 +41,8 @@ export type PinnableKid = {
   name: string;
   lat: number;
   lng: number;
+  street: string | null;
+  city: string | null;
   currentVanId: string | null;
   /** The van's zone color, or grey when unassigned / the van has no zone color. */
   currentVanColor: string;
@@ -50,6 +55,8 @@ export type NoAddressKid = {
   hasAddress: boolean;
   /** True = the address was tried and didn't match; needs fixing, not locating. */
   geocodeFailed: boolean;
+  street: string | null;
+  city: string | null;
 };
 
 export type VanAssignMapData = {
@@ -90,6 +97,8 @@ export function buildVanAssignMapData(
         name: k.name,
         lat: k.lat,
         lng: k.lng,
+        street: k.street,
+        city: k.city,
         currentVanId: k.currentVanId,
         currentVanColor: vanColor(k.currentVanId, zones),
       });
@@ -103,6 +112,8 @@ export function buildVanAssignMapData(
         name: k.name,
         hasAddress: k.hasAddress,
         geocodeFailed: k.geocodeFailed,
+        street: k.street,
+        city: k.city,
       });
     }
   }

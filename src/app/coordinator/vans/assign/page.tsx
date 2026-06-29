@@ -34,6 +34,7 @@ type FamilyRow = {
   lat: number | null;
   lng: number | null;
   street_address: string | null;
+  city: string | null;
   geocode_failed_at: string | null;
 };
 type VanRow = { id: string; name: string; active: boolean };
@@ -90,7 +91,7 @@ export default async function PickupMapPage({
   const { data: families } = familyIds.length
     ? await supabase
         .from("families")
-        .select("id, lat, lng, street_address, geocode_failed_at")
+        .select("id, lat, lng, street_address, city, geocode_failed_at")
         .in("id", familyIds)
         .returns<FamilyRow[]>()
     : { data: [] as FamilyRow[] };
@@ -134,6 +135,8 @@ export default async function PickupMapPage({
       // Address on file but a prior geocode didn't match → needs fixing, not
       // re-locating. Only meaningful while un-pinned (no coords).
       geocodeFailed: !!family?.geocode_failed_at && family?.lat == null,
+      street: family?.street_address ?? null,
+      city: family?.city ?? null,
       // Current van for the day is DERIVED: morning leg first, else afternoon.
       currentVanId: s.morning_van_id ?? s.afternoon_van_id,
     };

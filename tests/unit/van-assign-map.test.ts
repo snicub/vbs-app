@@ -21,6 +21,8 @@ function kid(over: Partial<KidRow> & Pick<KidRow, "studentId">): KidRow {
     lng: null,
     hasAddress: false,
     geocodeFailed: false,
+    street: null,
+    city: null,
     currentVanId: null,
     ...over,
   };
