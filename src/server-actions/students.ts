@@ -8,6 +8,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
 import { getLocalDate } from "@/lib/date";
+import { VBS_DATES } from "@/lib/registration/dates";
 import { resolveDayRecordUpdate } from "@/lib/day-record-plan";
 import { assignLegsForVan } from "@/lib/van-assign";
 import { boardedStopConflict } from "@/lib/routing";
@@ -476,6 +477,96 @@ export async function assignStudentToVan(
     .eq("event_date", eventDate);
 
   if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true };
+}
+
+// -- Assign a student to a van for EVERY VBS day (door-to-door) --
+
+const AssignVanAllDaysSchema = z.object({
+  studentId: z.string().uuid(),
+  vanId: z.string().uuid(),
+});
+
+/**
+ * Coordinator-only: put a student on a VAN for EVERY VBS day at once. Used to
+ * assign a kid to a region directly — e.g. one whose typed address won't geocode,
+ * but whose region the coordinator knows. Resolves the van's single zone, then
+ * sets the kid's stop legs (per their mode) on each VBS date. A day where the
+ * child is already boarded on a different van is skipped (boarded-stop guard),
+ * not failed, so a mid-week reassignment of the remaining days still works.
+ */
+export async function assignStudentToVanAllDays(input: unknown): Promise<AssignVanResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = AssignVanAllDaysSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+  const { studentId, vanId } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: routes } = await supabase
+    .from("routes")
+    .select("stop_ids")
+    .eq("van_id", vanId)
+    .returns<{ stop_ids: string[] }[]>();
+  const zoneStopIds = Array.from(new Set((routes ?? []).flatMap((r) => r.stop_ids)));
+  if (zoneStopIds.length === 0) {
+    return { ok: false, error: "This van has no pickup zone yet — set its route on the Vans screen first." };
+  }
+  if (zoneStopIds.length > 1) {
+    return { ok: false, error: "This van's routes cover more than one stop. Fix its route first." };
+  }
+  const zoneStopId = zoneStopIds[0]!;
+
+  const { data: recs } = await supabase
+    .from("student_day_status")
+    .select("event_date, state, mode, morning_stop_id, afternoon_stop_id")
+    .eq("student_id", studentId)
+    .in("event_date", [...VBS_DATES])
+    .returns<{
+      event_date: string;
+      state: string;
+      mode: string | null;
+      morning_stop_id: string | null;
+      afternoon_stop_id: string | null;
+    }[]>();
+  if (!recs || recs.length === 0) {
+    return { ok: false, error: "This student has no plan for the VBS days." };
+  }
+
+  for (const rec of recs) {
+    if (!rec.mode) continue;
+    const updates = assignLegsForVan(rec.mode, zoneStopId, {
+      morningStopId: rec.morning_stop_id,
+      afternoonStopId: rec.afternoon_stop_id,
+    });
+    if (Object.keys(updates).length === 0) continue;
+
+    const finalMorning =
+      updates.morning_stop_id !== undefined ? updates.morning_stop_id : rec.morning_stop_id;
+    const finalAfternoon =
+      updates.afternoon_stop_id !== undefined ? updates.afternoon_stop_id : rec.afternoon_stop_id;
+    const conflict = boardedStopConflict(
+      rec.state,
+      { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
+      { morningStopId: finalMorning, afternoonStopId: finalAfternoon },
+    );
+    if (conflict) continue;
+
+    const { error: updErr } = await supabase
+      .from("student_day_records")
+      .update(updates as never)
+      .eq("student_id", studentId)
+      .eq("event_date", rec.event_date);
+    if (updErr) return { ok: false, error: updErr.message };
+  }
 
   revalidatePath("/coordinator", "layout");
   revalidatePath("/table", "layout");

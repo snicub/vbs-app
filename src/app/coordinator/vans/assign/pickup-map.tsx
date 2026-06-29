@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { contrastText } from "@/lib/nametags/tag-data";
 import { UNASSIGNED_PIN_COLOR, type PinnableKid, type NoAddressKid } from "@/lib/van-assign-map";
-import { assignStudentToVan } from "@/server-actions/students";
+import { assignStudentToVan, assignStudentToVanAllDays } from "@/server-actions/students";
 import {
   autoAssignStopsFromAddresses,
   locateStudentHomes,
@@ -256,7 +256,7 @@ export function PickupMap({
             onSelectAll={selectAll}
             onClear={clearSelection}
           />
-          {noAddress.length > 0 && <NoAddressList kids={noAddress} />}
+          {noAddress.length > 0 && <NoAddressList kids={noAddress} vans={vans} />}
         </aside>
       </div>
 
@@ -396,7 +396,7 @@ function SideList({
   );
 }
 
-function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
+function NoAddressList({ kids, vans }: { kids: NoAddressKid[]; vans: VanOption[] }) {
   const failed = kids.filter((k) => k.hasAddress && k.geocodeFailed);
   const notLocated = kids.filter((k) => k.hasAddress && !k.geocodeFailed);
   const missing = kids.filter((k) => !k.hasAddress);
@@ -415,6 +415,7 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
             {failed.map((k) => (
               <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <RegionAssign studentId={k.studentId} vans={vans} />
                 <AddressEditor
                   studentId={k.studentId}
                   initialStreet={k.street}
@@ -440,6 +441,7 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
             {notLocated.map((k) => (
               <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <RegionAssign studentId={k.studentId} vans={vans} />
                 <AddressEditor
                   studentId={k.studentId}
                   initialStreet={k.street}
@@ -463,6 +465,7 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
             {missing.map((k) => (
               <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
                 <span className="min-w-0 flex-1 truncate">{k.name}</span>
+                <RegionAssign studentId={k.studentId} vans={vans} />
                 <AddressEditor
                   studentId={k.studentId}
                   initialStreet={k.street}
@@ -475,6 +478,48 @@ function NoAddressList({ kids }: { kids: NoAddressKid[] }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Compact "assign to a region" dropdown for a kid whose address can't be placed
+ * on the map. Bypasses geocoding entirely — the coordinator knows the region, so
+ * picking it here puts the kid on that van for EVERY VBS day. The address is still
+ * the driver's job to navigate; this just sets the van/color.
+ */
+function RegionAssign({ studentId, vans }: { studentId: string; vans: VanOption[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function assign(vanId: string) {
+    if (!vanId) return;
+    startTransition(async () => {
+      const r = await assignStudentToVanAllDays({ studentId, vanId });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Assigned to ${vans.find((v) => v.id === vanId)?.name ?? "the van"} (all days)`);
+      router.refresh();
+    });
+  }
+
+  if (vans.length === 0) return null;
+  return (
+    <select
+      defaultValue=""
+      disabled={pending}
+      onChange={(e) => assign(e.target.value)}
+      className="shrink-0 rounded border bg-card px-1.5 py-1 text-xs"
+      aria-label="Assign to a region"
+    >
+      <option value="">{pending ? "Assigning…" : "Assign to region…"}</option>
+      {vans.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+    </select>
   );
 }
 
