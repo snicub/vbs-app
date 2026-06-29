@@ -55,6 +55,11 @@ export function PickupMap({
     });
   }, []);
 
+  const selectAll = useCallback(() => {
+    setSelected(new Set(pinnable.map((k) => k.studentId)));
+  }, [pinnable]);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
+
   // Initialize the map once.
   useEffect(() => {
     let cancelled = false;
@@ -248,6 +253,8 @@ export function PickupMap({
             selected={selected}
             onToggle={toggle}
             onLocate={flyTo}
+            onSelectAll={selectAll}
+            onClear={clearSelection}
           />
           {noAddress.length > 0 && <NoAddressList kids={noAddress} />}
         </aside>
@@ -307,16 +314,41 @@ function SideList({
   selected,
   onToggle,
   onLocate,
+  onSelectAll,
+  onClear,
 }: {
   pinnable: PinnableKid[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   onLocate: (k: PinnableKid) => void;
+  onSelectAll: () => void;
+  onClear: () => void;
 }) {
+  const allSelected = pinnable.length > 0 && selected.size >= pinnable.length;
   return (
     <div className="rounded-lg border bg-card">
-      <div className="px-3 py-2 border-b text-sm font-semibold">
-        Homes on the map ({pinnable.length})
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-sm">
+        <span className="font-semibold">Homes on the map ({pinnable.length})</span>
+        {pinnable.length > 0 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={allSelected ? onClear : onSelectAll}
+              className="font-medium text-primary underline-offset-2 hover:underline"
+            >
+              {allSelected ? "Clear" : "Select all"}
+            </button>
+            {selected.size > 0 && !allSelected && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-muted-foreground underline-offset-2 hover:underline"
+              >
+                Clear ({selected.size})
+              </button>
+            )}
+          </div>
+        )}
       </div>
       {pinnable.length === 0 ? (
         <p className="px-3 py-3 text-sm text-muted-foreground">
