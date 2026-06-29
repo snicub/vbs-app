@@ -61,8 +61,8 @@ function MissingZoneBanner({ count }: { count: number }) {
       }
       toast.success(
         result.provisioned === 1
-          ? "Set up 1 van — confirm its color & times below"
-          : `Set up ${result.provisioned} vans — confirm their colors & times below`,
+          ? "Set up 1 van — confirm its color below"
+          : `Set up ${result.provisioned} vans — confirm their colors below`,
       );
       router.refresh();
     });
@@ -72,7 +72,7 @@ function MissingZoneBanner({ count }: { count: number }) {
     <div className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-[var(--anomaly-warn)]/40 bg-[var(--anomaly-warn)]/10 px-3 py-3 text-sm">
       <span>
         {count === 1 ? "1 van can't carry kids yet" : `${count} vans can't carry kids yet`} — they have no
-        pickup zone. Set one up, then confirm placeholder times.
+        pickup zone. Set one up, then confirm its color below.
       </span>
       <Button onClick={provision} disabled={pending} size="sm" variant="outline">
         {pending ? "Setting up…" : "Set up pickup zones"}

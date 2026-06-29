@@ -10,6 +10,7 @@ import {
   sameDriverAndAide,
   zoneStopIdForVan,
   findVansMissingZone,
+  buildZoneStopInsert,
   type DirectionRoute,
 } from "@/lib/vans";
 import { isValidHexColor } from "@/lib/validators";
@@ -94,12 +95,7 @@ async function provisionVanZone(
 ): Promise<{ ok: true; stopId: string } | { ok: false; error: string }> {
   const { data, error } = await supabase
     .from("stops")
-    .insert({
-      name: z.vanName,
-      town: z.vanName,
-      color_code: z.colorCode,
-      color_name: z.vanName,
-    } as never)
+    .insert(buildZoneStopInsert({ vanName: z.vanName, colorCode: z.colorCode }) as never)
     .select("id")
     .single<{ id: string }>();
   if (error || !data) return { ok: false, error: error?.message ?? "Could not create the van's pickup zone" };
@@ -186,16 +182,26 @@ export async function updateVan(input: unknown): Promise<Result> {
 
   const supabase = await createClient();
 
-  // Don't retire a van while it still routes kids — the status view would keep
-  // mapping children onto its pickup zone, stranding them on an inactive van.
+  // Don't retire a van while kids are still assigned to it — the status view
+  // would keep mapping them onto its pickup zone, stranding them on an inactive
+  // van. Check the ACTUAL rider count on the zone (door-to-door: a van's routes
+  // ALWAYS hold its zone stop, so the old "any route has stops" check made every
+  // van impossible to deactivate). Mirrors deleteVan's guard.
   if (fields.active === false) {
-    const { data: vanRoutes } = await supabase
+    const { data: routes } = await supabase
       .from("routes")
-      .select("stop_ids")
+      .select("van_id, direction, stop_ids")
       .eq("van_id", vanId)
-      .returns<{ stop_ids: string[] }[]>();
-    if ((vanRoutes ?? []).some((r) => r.stop_ids.length > 0)) {
-      return fail("Clear this van's routes before deactivating — kids are still assigned to it.");
+      .returns<DirectionRoute[]>();
+    const zoneStopId = zoneStopIdForVan(vanId, routes ?? []);
+    if (zoneStopId) {
+      const { count } = await supabase
+        .from("student_day_records")
+        .select("id", { count: "exact", head: true })
+        .or(`morning_stop_id.eq.${zoneStopId},afternoon_stop_id.eq.${zoneStopId}`);
+      if ((count ?? 0) > 0) {
+        return fail("Reassign this van's riders before deactivating it.");
+      }
     }
   }
 

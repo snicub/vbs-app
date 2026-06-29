@@ -7,6 +7,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
+import { getLocalDate } from "@/lib/date";
 import { resolveDayRecordUpdate } from "@/lib/day-record-plan";
 import { assignLegsForVan } from "@/lib/van-assign";
 import { boardedStopConflict } from "@/lib/routing";
@@ -125,6 +126,31 @@ export async function archiveStudent(input: unknown): Promise<ArchiveStudentResu
   const parsed = ArchiveStudentSchema.safeParse(input);
   if (!parsed.success) {
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+
+  // Don't archive a child who is mid-custody today (on a van or checked in) — they
+  // would vanish at once from the dashboard, van rider list, and the table lookup
+  // with no warning. Undo their status first. (not_started / checked-out / home /
+  // no-show are safe to archive.)
+  const today = getLocalDate();
+  const admin = createAdminClient();
+  const { data: live } = await admin
+    .from("student_day_status")
+    .select("state")
+    .eq("student_id", parsed.data.studentId)
+    .eq("event_date", today)
+    .maybeSingle<{ state: string }>();
+  const LIVE_STATES = new Set([
+    "van_boarded_am",
+    "arrived_at_site",
+    "site_checked_in",
+    "van_boarded_pm",
+  ]);
+  if (live && LIVE_STATES.has(live.state)) {
+    return {
+      ok: false,
+      error: "This child is checked in or on a van right now — undo their status before removing them from rosters.",
+    };
   }
 
   const supabase = await createClient();

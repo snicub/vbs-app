@@ -6,7 +6,8 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { geocodeAddress, familyAddressQuery } from "@/lib/geocode";
-import { assignStopsForMode, type StopPoint } from "@/lib/route-build";
+import { assignStopsForMode, nearestStopId, type StopPoint } from "@/lib/route-build";
+import { haversineMeters } from "@/lib/geo";
 import { ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
 import { VBS_DATES } from "@/lib/registration/dates";
 
@@ -17,6 +18,13 @@ const Schema = z.object({ eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
 // finishes them.
 const GEOCODE_CAP = 75;
 const GEOCODE_BATCH = 8;
+
+// A home farther than this from EVERY van zone means the address geocoded to the
+// wrong place (a same-named street in another state, a mistyped town). The pickup
+// regions are all within ~10mi of Sisseton, so a real home is well under this.
+// Such a kid is flagged for an address fix, NOT silently assigned to a wrong van.
+const MAX_HOME_TO_ZONE_MILES = 40;
+const METERS_PER_MILE = 1609.34;
 
 type Family = {
   id: string;
@@ -166,6 +174,27 @@ export async function autoAssignStopsFromAddresses(
     if (!point) {
       flaggedStudents.add(r.student_id); // no address — coordinator handles by hand
       continue;
+    }
+
+    // Sanity guard: if the home is implausibly far from every zone, the address
+    // geocoded to the wrong place. Don't put the kid on a wrong van — clear the
+    // bad point and flag the family ("Address didn't match — fix it"), so it
+    // surfaces for a fix instead of a silent wrong-van pin.
+    if (fam) {
+      const nearestId = nearestStopId(point, stops);
+      const nearest = stops.find((s) => s.id === nearestId);
+      if (
+        nearest &&
+        haversineMeters(point.lat, point.lng, nearest.lat, nearest.lng) / METERS_PER_MILE >
+          MAX_HOME_TO_ZONE_MILES
+      ) {
+        await admin
+          .from("families")
+          .update({ lat: null, lng: null, geocode_failed_at: new Date().toISOString() } as never)
+          .eq("id", fam.id);
+        flaggedStudents.add(r.student_id);
+        continue;
+      }
     }
 
     const next = assignStopsForMode(point, stops, r.mode, {

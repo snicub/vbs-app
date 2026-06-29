@@ -32,6 +32,32 @@ export type DirectionRoute = { van_id: string; direction: "am" | "pm"; stop_ids:
 export type StopConflict = { stopId: string; vanId: string; direction: "am" | "pm" };
 
 /**
+ * Build the `stops` insert payload for a van's single pickup zone. The zone
+ * carries the van's name + color. Scheduled times are left NULL (nullable since
+ * migration 0028): door-to-door has no shared van-wide pickup time, and seeding a
+ * placeholder would surface a fabricated "8:00 AM" pickup time to every family on
+ * the parent status page. The retired late/checked-out alarms read these times
+ * too, but they no longer fire (see anomaly.ts), so NULL is harmless there.
+ */
+export function buildZoneStopInsert(input: { vanName: string; colorCode: string }): {
+  name: string;
+  town: string;
+  color_code: string;
+  color_name: string;
+  scheduled_am_time: string | null;
+  scheduled_pm_time: string | null;
+} {
+  return {
+    name: input.vanName,
+    town: input.vanName,
+    color_code: input.colorCode,
+    color_name: input.vanName,
+    scheduled_am_time: null,
+    scheduled_pm_time: null,
+  };
+}
+
+/**
  * A van's pickup zone is the single stop on its route. Resolve that stop id from
  * the van's routes (prefer the AM route, fall back to PM). Returns null when the
  * van has no route stop yet — i.e. it still needs a zone.

@@ -402,17 +402,27 @@ export function VanManifest({
                         <StateBadge state={state} size="md" />
                       </div>
 
-                      {r.homeAddress ? (
+                      {r.homeAddress || r.homeMapsUrl ? (
                         <div className="space-y-1">
-                          <a
-                            href={r.homeMapsUrl ?? undefined}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="flex items-start gap-2 text-base font-medium text-primary underline-offset-2 hover:underline"
-                          >
-                            <MapPinIcon className="size-5 shrink-0 mt-0.5" />
-                            <span>{r.homeAddress} <span className="text-sm font-normal">(tap to navigate)</span></span>
-                          </a>
+                          {r.homeMapsUrl ? (
+                            <a
+                              href={r.homeMapsUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="flex items-start gap-2 text-base font-medium text-primary underline-offset-2 hover:underline"
+                            >
+                              <MapPinIcon className="size-5 shrink-0 mt-0.5" />
+                              <span>
+                                {r.homeAddress ?? "Home location"}{" "}
+                                <span className="text-sm font-normal">(tap to navigate)</span>
+                              </span>
+                            </a>
+                          ) : (
+                            <div className="flex items-start gap-2 text-base font-medium">
+                              <MapPinIcon className="size-5 shrink-0 mt-0.5 text-muted-foreground" />
+                              <span>{r.homeAddress}</span>
+                            </div>
+                          )}
                           {r.homeNotes && (
                             <div className="ml-7 text-sm text-muted-foreground">
                               📝 {r.homeNotes}

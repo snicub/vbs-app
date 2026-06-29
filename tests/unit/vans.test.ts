@@ -5,6 +5,7 @@ import {
   routeStopConflicts,
   zoneStopIdForVan,
   findVansMissingZone,
+  buildZoneStopInsert,
 } from "@/lib/vans";
 
 describe("orderStopIds", () => {
@@ -141,5 +142,26 @@ describe("findVansMissingZone", () => {
     expect(
       findVansMissingZone([{ id: "v5" }], [{ van_id: "v5", direction: "am", stop_ids: [] }]),
     ).toEqual([{ id: "v5" }]);
+  });
+});
+
+describe("buildZoneStopInsert", () => {
+  it("maps the van name onto name/town/color_name and the color onto color_code", () => {
+    expect(buildZoneStopInsert({ vanName: "Van 6", colorCode: "#0F766E" })).toEqual({
+      name: "Van 6",
+      town: "Van 6",
+      color_code: "#0F766E",
+      color_name: "Van 6",
+      scheduled_am_time: null,
+      scheduled_pm_time: null,
+    });
+  });
+
+  // Door-to-door has no shared van-wide pickup time, and fabricating one would
+  // show a fake "8:00 AM" pickup time to parents. The columns are nullable (0028).
+  it("leaves the scheduled times null", () => {
+    const payload = buildZoneStopInsert({ vanName: "Anything", colorCode: "#000000" });
+    expect(payload.scheduled_am_time).toBeNull();
+    expect(payload.scheduled_pm_time).toBeNull();
   });
 });
