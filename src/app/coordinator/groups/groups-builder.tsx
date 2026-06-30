@@ -166,11 +166,11 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
             : "No kids attending on this day."}
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:grid-cols-2">
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:block print:gap-0">
           {groups.map((g) => (
             <section
               key={g.label}
-              className="rounded-xl border bg-card overflow-hidden break-inside-avoid"
+              className="roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid print:break-before-page"
             >
               <header className="border-b bg-muted/40 px-4 py-2 space-y-1.5">
                 <div className="flex items-baseline justify-between gap-2">
