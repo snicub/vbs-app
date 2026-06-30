@@ -16,7 +16,7 @@ import {
   assignStudentToVanAllDays,
   updateStudentPhoto,
 } from "@/server-actions/students";
-import { SaveIcon, BusIcon, ImageIcon } from "lucide-react";
+import { SaveIcon, ImageIcon } from "lucide-react";
 
 type VanOption = {
   id: string;
@@ -132,13 +132,12 @@ export function StudentEditForm({
     });
   }
 
-  function assignRegion() {
-    if (!selectedVanId) {
-      toast.error("Pick a region first");
-      return;
-    }
+  // Saves the moment a region is picked — no separate button to forget.
+  function assignRegion(vanId: string) {
+    setSelectedVanId(vanId);
+    if (!vanId) return;
     startTransition(async () => {
-      const result = await assignStudentToVanAllDays({ studentId, vanId: selectedVanId });
+      const result = await assignStudentToVanAllDays({ studentId, vanId });
       if (!result.ok) {
         toast.error(result.error);
         return;
@@ -297,7 +296,8 @@ export function StudentEditForm({
                 <Select
                   id="van"
                   value={selectedVanId}
-                  onChange={(e) => setSelectedVanId(e.target.value)}
+                  disabled={pending}
+                  onChange={(e) => assignRegion(e.target.value)}
                 >
                   <option value="">-- choose a region --</option>
                   {vanOptions.map((v) => (
@@ -307,9 +307,9 @@ export function StudentEditForm({
                     </option>
                   ))}
                 </Select>
-                <Button onClick={assignRegion} disabled={pending} className="mt-2">
-                  <BusIcon /> Assign to region (all days)
-                </Button>
+                <p className="text-xs text-muted-foreground">
+                  {pending ? "Saving…" : "Saves the moment you pick — applies to all 3 days."}
+                </p>
               </>
             )}
           </div>
