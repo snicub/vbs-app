@@ -1,3 +1,4 @@
+import Link from "next/link";
 import {
   UsersIcon,
   BusIcon,
@@ -6,6 +7,7 @@ import {
   HomeIcon,
   UserXIcon,
   AlertTriangleIcon,
+  ChevronRightIcon,
   type LucideIcon,
 } from "lucide-react";
 import type { DashboardMetrics, VanRow } from "@/lib/coordinator/dashboard";
@@ -30,9 +32,12 @@ const CARDS: CardDef[] = [
 export function DashboardCards({
   metrics,
   vans,
+  date,
 }: {
   metrics: DashboardMetrics;
   vans: VanRow[];
+  /** The day being viewed, threaded into each van-group link. */
+  date: string;
 }) {
   return (
     <div className="space-y-4">
@@ -72,7 +77,11 @@ export function DashboardCards({
           </h2>
           <div className="grid gap-3 grid-cols-2 md:grid-cols-3 xl:grid-cols-6">
             {vans.map((v) => (
-              <div key={v.vanName} className="rounded-xl border bg-card p-4">
+              <Link
+                key={v.vanName}
+                href={`/coordinator/van-group/${v.vanId ?? "parent"}?date=${date}`}
+                className="group rounded-xl border bg-card p-4 block transition hover:border-primary/60 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
                 <div className="flex items-center gap-2">
                   <span
                     className="size-4 rounded-full border shrink-0"
@@ -80,6 +89,7 @@ export function DashboardCards({
                     aria-hidden
                   />
                   <span className="font-medium text-sm truncate">{v.vanName}</span>
+                  <ChevronRightIcon className="size-4 ml-auto shrink-0 text-muted-foreground group-hover:text-primary" aria-hidden />
                 </div>
                 <div className="mt-2 text-4xl font-bold leading-none tabular-nums">
                   {v.expected}
@@ -87,7 +97,10 @@ export function DashboardCards({
                 <div className="mt-1.5 text-xs text-muted-foreground">
                   coming · {v.checkedIn} in · {v.home} home
                 </div>
-              </div>
+                <div className="mt-1 text-xs font-medium text-primary opacity-0 group-hover:opacity-100 transition-opacity">
+                  Check kids in / out →
+                </div>
+              </Link>
             ))}
           </div>
         </section>

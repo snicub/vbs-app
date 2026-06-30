@@ -114,6 +114,15 @@ describe("dashboard: computeVanBreakdown", () => {
     expect(parent.expected).toBe(1);
   });
 
+  it("carries the van id for linking (null for the parent bucket)", () => {
+    const vans = computeVanBreakdown([
+      row({ vanId: "v1", vanName: "Red Van" }),
+      row({ vanId: null, vanName: null }),
+    ]);
+    expect(vans.find((v) => v.vanName === "Red Van")!.vanId).toBe("v1");
+    expect(vans.find((v) => v.vanName === "Parent drop-off")!.vanId).toBeNull();
+  });
+
   it("sorts van rows by name, parent bucket always last", () => {
     const vans = computeVanBreakdown([
       row({ vanId: null, vanName: null }),

@@ -52,6 +52,8 @@ export function computeMetrics(rows: DashStatus[]): DashboardMetrics {
 }
 
 export type VanRow = {
+  /** The van's id for linking to its group page; null = parent-drop-off bucket. */
+  vanId: string | null;
   vanName: string;
   colorCode: string | null;
   colorName: string | null;
@@ -77,6 +79,7 @@ export function computeVanBreakdown(rows: DashStatus[]): VanRow[] {
     let v = byVan.get(key);
     if (!v) {
       v = {
+        vanId: onVan ? r.vanId : null,
         vanName: onVan ? r.vanName ?? "Van" : PARENT_LABEL,
         colorCode: onVan ? r.colorCode : null,
         colorName: onVan ? r.colorName : null,

@@ -20,6 +20,7 @@ import { STATE_PRESENTATION } from "@/lib/state-presentation";
 import type { UserRole } from "@/types/domain";
 import { isCoordinator } from "@/lib/auth/roles";
 import { buildPickupOptions, type PickupOption } from "@/lib/checkin/pickup-options";
+import { offersPmVanCheckout } from "@/lib/checkin/pm-van";
 import {
   BusIcon,
   CheckIcon,
@@ -50,6 +51,8 @@ export function StudentActions({
   emergencyContact,
   guardians,
   authorizedPickup,
+  pmVanAvailable = true,
+  stayOnPage = false,
 }: {
   studentId: string;
   eventDate: string;
@@ -63,6 +66,15 @@ export function StudentActions({
   emergencyContact: { name: string; relationship: string | null } | null;
   guardians: { fullName: string; relationship: string | null }[];
   authorizedPickup: { id: string; fullName: string; relationship: string | null }[];
+  /** Whether a real PM van is assigned for this kid's afternoon leg. Gates the
+   *  "Send home on van" button so an un-routed van kid (no van) can't be
+   *  checked out onto a fabricated van chain. Defaults true (the table page,
+   *  which doesn't fetch the derived van, keeps its existing behavior). */
+  pmVanAvailable?: boolean;
+  /** On the single-student table page each action returns to /table to scan the
+   *  next kid. On a multi-student list (the van-group page) we stay put and just
+   *  refresh, so the coordinator can keep working down the list. */
+  stayOnPage?: boolean;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -94,7 +106,7 @@ export function StudentActions({
         showUndoToast(label, result.eventId);
       }
       router.refresh();
-      router.push("/table");
+      if (!stayOnPage) router.push("/table");
     });
   }
 
@@ -129,7 +141,7 @@ export function StudentActions({
       }
       toast.success(label);
       router.refresh();
-      router.push("/table");
+      if (!stayOnPage) router.push("/table");
     });
   }
 
@@ -231,7 +243,7 @@ export function StudentActions({
   // Kids whose mode is parent-only get only the "parent here now" button.
   // Once they're already on the PM van (van_boarded_pm), there's nothing
   // to choose — finishing the chain is the only option.
-  const usesPmVan = mode === "van" || mode === "parent_dropoff_only";
+  const usesPmVan = offersPmVanCheckout(mode, pmVanAvailable);
   const inVanPmChain = currentState === "van_boarded_pm";
 
   const allDone = currentState === "home" || currentState === "marked_no_show";

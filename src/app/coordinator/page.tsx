@@ -283,7 +283,7 @@ export default async function CoordinatorTodayPage({
       )}
 
       {/* Dashboard — big at-a-glance numbers + per-van rollup */}
-      <DashboardCards metrics={metrics} vans={vanRollup} />
+      <DashboardCards metrics={metrics} vans={vanRollup} date={today} />
 
       {/* Roster */}
       <RosterList students={sorted} />
