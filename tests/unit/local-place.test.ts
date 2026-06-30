@@ -1,5 +1,24 @@
 import { describe, it, expect } from "vitest";
-import { localPlace } from "@/lib/geocode";
+import { localPlace, parseCoordinate } from "@/lib/geocode";
+
+describe("parseCoordinate", () => {
+  it("parses a pasted Google Maps lat,lng", () => {
+    expect(parseCoordinate("45.681365, -97.019012")).toEqual({ lat: 45.681365, lng: -97.019012 });
+    expect(parseCoordinate("  45.681365,-97.019012  ")).toEqual({ lat: 45.681365, lng: -97.019012 });
+  });
+  it("finds a coordinate inside a larger string", () => {
+    expect(parseCoordinate("45.681365, -97.019012 google maps")).toEqual({
+      lat: 45.681365,
+      lng: -97.019012,
+    });
+  });
+  it("ignores plain street addresses and blanks", () => {
+    expect(parseCoordinate("45 Main St")).toBeNull();
+    expect(parseCoordinate("Barker Hill")).toBeNull();
+    expect(parseCoordinate("")).toBeNull();
+    expect(parseCoordinate(null)).toBeNull();
+  });
+});
 
 const parts = (city: string | null, street: string | null = null) => ({
   streetAddress: street,
@@ -25,15 +44,27 @@ describe("localPlace", () => {
     expect(localPlace(parts(null, "12440 Barker Hill Rd"))).toEqual({ lat: 45.581278, lng: -97.061277 });
   });
 
-  it("catches the 'barker bill' mistype (street wins over an Agency Village town)", () => {
+  it("the TOWN wins over a street name — Agency Village beats a 'barker' street", () => {
+    // Was the live bug: these landed in Barker Hill because of the street.
     expect(localPlace(parts("Agency village", "#710 barker bill"))).toEqual({
-      lat: 45.581278,
-      lng: -97.061277,
+      lat: 45.56781,
+      lng: -97.06721,
+    });
+    expect(localPlace(parts("Agency Village", "1055 Little Crow Dr"))).toEqual({
+      lat: 45.56781,
+      lng: -97.06721,
     });
   });
 
   it("treats Agency Village as Old Agency", () => {
     expect(localPlace(parts("Agency Village"))).toEqual({ lat: 45.56781, lng: -97.06721 });
+  });
+
+  it("falls back to the street only when the town isn't a region (Sisseton + Barker Hill st)", () => {
+    expect(localPlace(parts("Sisseton", "556 Barker Hill"))).toEqual({
+      lat: 45.581278,
+      lng: -97.061277,
+    });
   });
 
   it("returns null for a normal town the geocoder can handle", () => {

@@ -212,6 +212,21 @@ export function SignupForm({
           </div>
         </div>
 
+        {success.codes.length > 0 && (
+          <div className="space-y-2">
+            <p className="text-sm font-medium">Checking them in now? Tap their name:</p>
+            {success.codes.map((c) => (
+              <Link
+                key={c.code}
+                href={`/table/${c.code}`}
+                className={buttonVariants({ variant: "default" }) + " w-full justify-start text-base"}
+              >
+                Check in {c.studentName}
+              </Link>
+            ))}
+          </div>
+        )}
+
         <Link href="/" className={buttonVariants({ variant: "ghost" })}>
           Register another
         </Link>

@@ -45,11 +45,33 @@ const LOCAL_TOWNS: { match: RegExp; pt: GeoPoint }[] = [
   { match: /peever\s*flat/i, pt: { lat: 45.54375, lng: -96.95493 } },
 ];
 
-/** If the address's town/street names a known local region, return its center. */
+/**
+ * If the address names a known local region, return its center. The TOWN field
+ * decides the region and is checked FIRST — a reservation town there wins even
+ * when a street name mentions a different town (e.g. an "Agency Village" home on
+ * a road called "Barker Hill" belongs to Old Agency, not Barker Hill). The street
+ * is only a fallback when the town doesn't name a region.
+ */
 export function localPlace(f: AddressParts): GeoPoint | null {
-  const hay = `${f.city ?? ""} ${f.streetAddress ?? ""}`;
-  for (const lt of LOCAL_TOWNS) if (lt.match.test(hay)) return lt.pt;
+  for (const lt of LOCAL_TOWNS) if (f.city && lt.match.test(f.city)) return lt.pt;
+  for (const lt of LOCAL_TOWNS) if (f.streetAddress && lt.match.test(f.streetAddress)) return lt.pt;
   return null;
+}
+
+// A pasted "lat, lng" (e.g. straight from Google Maps). Requires ≥3 decimals so a
+// plain street number ("45 Main") never reads as a coordinate.
+const COORD_RE = /(-?\d{1,3}\.\d{3,})\s*,\s*(-?\d{1,3}\.\d{3,})/;
+
+/** Parse a Google-Maps-style "lat, lng" out of a string, else null. */
+export function parseCoordinate(s: string | null | undefined): GeoPoint | null {
+  if (!s) return null;
+  const m = COORD_RE.exec(s);
+  if (!m) return null;
+  const lat = Number(m[1]);
+  const lng = Number(m[2]);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return null;
+  if (Math.abs(lat) > 90 || Math.abs(lng) > 180) return null;
+  return { lat, lng };
 }
 
 /**
@@ -58,6 +80,9 @@ export function localPlace(f: AddressParts): GeoPoint | null {
  * geocode externally. Everything else goes through the Sisseton-biased geocoder.
  */
 export async function geocodeFamilyAddress(f: AddressParts): Promise<GeoPoint | null> {
+  // A pasted "lat, lng" (from Google Maps) is the exact spot — use it directly.
+  const coord = parseCoordinate(f.streetAddress) ?? parseCoordinate(f.city);
+  if (coord) return coord;
   const local = localPlace(f);
   if (local) return local;
   const q = familyAddressQuery(f);

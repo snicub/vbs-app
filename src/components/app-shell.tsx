@@ -21,6 +21,7 @@ function linksFor(role: UserRole): NavLink[] {
       { href: "/coordinator/groups", label: "Groups" },
       { href: "/coordinator/nametags", label: "Name Tags" },
       { href: "/coordinator/acupuncture", label: "Acupuncture" },
+      { href: "/coordinator/medical", label: "Medical" },
       { href: "/coordinator/stops", label: "Colors" },
       { href: "/coordinator/vans", label: "Vans" },
       { href: "/coordinator/van-rosters", label: "Driver Sheets" },
