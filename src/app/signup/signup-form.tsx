@@ -12,6 +12,7 @@ import { clientId } from "@/lib/offline/uuid";
 import { ageFromDob } from "@/lib/registration/age";
 import { toast } from "sonner";
 import { registerFamily } from "@/server-actions/registration";
+import { checkInByCode } from "@/server-actions/events";
 import type { ConsentKind } from "@/types/domain";
 import Link from "next/link";
 import { Trash2Icon } from "lucide-react";
@@ -61,6 +62,90 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
+/**
+ * Pops automatically after a successful registration so an on-site signup can be
+ * marked present in one tap. Each child gets a "Check in" button → checkInByCode
+ * records a parent drop-off (present at site). Closing reveals the success card.
+ */
+function CheckInModal({
+  codes,
+  onClose,
+}: {
+  codes: { studentName: string; code: string }[];
+  onClose: () => void;
+}) {
+  const [state, setState] = useState<Record<string, "idle" | "busy" | "done">>({});
+
+  async function checkIn(code: string) {
+    setState((s) => ({ ...s, [code]: "busy" }));
+    const res = await checkInByCode({ code });
+    if (!res.ok) {
+      toast.error(res.error);
+      setState((s) => ({ ...s, [code]: "idle" }));
+      return;
+    }
+    toast.success(res.alreadyIn ? `${res.name} is already checked in` : `${res.name} checked in`);
+    setState((s) => ({ ...s, [code]: "done" }));
+  }
+
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="checkin-title"
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-black/70 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-md space-y-4 rounded-2xl border-2 border-primary bg-card p-5 sm:p-6"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="space-y-1">
+          <h2 id="checkin-title" className="text-2xl font-bold">
+            Registered! Check in now?
+          </h2>
+          <p className="text-sm text-muted-foreground">
+            If the {codes.length === 1 ? "child is" : "children are"} here at the site, tap to check
+            them in. Otherwise tap Done.
+          </p>
+        </div>
+
+        <div className="space-y-2">
+          {codes.map((c) => {
+            const st = state[c.code] ?? "idle";
+            return st === "done" ? (
+              <div
+                key={c.code}
+                className="rounded-lg border-2 px-4 py-3 font-semibold"
+                style={{
+                  borderColor: "var(--state-safe)",
+                  backgroundColor: "color-mix(in oklab, var(--state-safe) 10%, transparent)",
+                  color: "var(--state-safe)",
+                }}
+              >
+                ✓ {c.studentName} checked in
+              </div>
+            ) : (
+              <Button
+                key={c.code}
+                className="w-full justify-start text-base min-h-12"
+                disabled={st === "busy"}
+                onClick={() => checkIn(c.code)}
+              >
+                {st === "busy" ? "Checking in…" : `Check in ${c.studentName}`}
+              </Button>
+            );
+          })}
+        </div>
+
+        <Button variant="outline" className="w-full" onClick={onClose}>
+          Done
+        </Button>
+      </div>
+    </div>
+  );
+}
+
 export function SignupForm({
   consents,
   regions,
@@ -92,6 +177,10 @@ export function SignupForm({
       codes: { studentName: string; code: string }[];
     }
   >(null);
+  // The check-in modal pops automatically on a successful registration so an
+  // on-site signup can be marked present in one tap. Closing it reveals the
+  // normal success card ("Register another").
+  const [checkInOpen, setCheckInOpen] = useState(false);
 
   const needsVan = students.some((s) => s.ridesVan);
 
@@ -185,6 +274,7 @@ export function SignupForm({
           statusUrl: result.familyStatusUrl,
           codes: result.wristbandCodes,
         });
+        setCheckInOpen(result.wristbandCodes.length > 0);
       } else {
         toast.error(result.error);
       }
@@ -204,7 +294,11 @@ export function SignupForm({
 
   if (success) {
     return (
-      <div className="space-y-6 rounded-lg border bg-card p-5 sm:p-6">
+      <>
+        {checkInOpen && (
+          <CheckInModal codes={success.codes} onClose={() => setCheckInOpen(false)} />
+        )}
+        <div className="space-y-6 rounded-lg border bg-card p-5 sm:p-6">
         <div className="flex items-start gap-3">
           <div
             aria-hidden
@@ -238,7 +332,8 @@ export function SignupForm({
         <Link href="/" className={buttonVariants({ variant: "ghost" })}>
           Register another
         </Link>
-      </div>
+        </div>
+      </>
     );
   }
 

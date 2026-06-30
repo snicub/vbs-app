@@ -255,6 +255,46 @@ const LookupSchema = z.object({
     .optional(),
 });
 
+const CheckInByCodeSchema = z.object({ code: z.string().trim().min(1) });
+
+/**
+ * One-tap "they're here" check-in by wristband code — used by the modal that
+ * pops right after registration so an on-site signup can be marked present
+ * without leaving the page. Records a parent drop-off (not_started →
+ * site_checked_in); if the child is already past not_started it's a no-op that
+ * reports `alreadyIn`. Reuses lookupByWristband (validation + permission) and
+ * submitEvent (record_event), so all the usual guards apply.
+ */
+export async function checkInByCode(
+  input: unknown,
+): Promise<
+  | { ok: true; name: string; alreadyIn: boolean }
+  | { ok: false; error: string }
+> {
+  const parsed = CheckInByCodeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+
+  const look = await lookupByWristband({ code: parsed.data.code });
+  if (!look.ok) return { ok: false, error: look.error };
+
+  const { student, status } = look;
+  const name = `${student.preferredFirstName ?? student.legalFirstName} ${student.legalLastName}`.trim();
+  if (!status) {
+    return { ok: false, error: `${name} has no schedule for today yet.` };
+  }
+  if (status.state !== "not_started") {
+    return { ok: true, name, alreadyIn: true };
+  }
+
+  const res = await submitEvent({
+    studentId: student.id,
+    eventDate: status.eventDate,
+    eventType: "parent_dropoff",
+  });
+  if (!res.ok) return { ok: false, error: res.error };
+  return { ok: true, name, alreadyIn: false };
+}
+
 export async function lookupByWristband(input: unknown): Promise<
   | {
       ok: true;
