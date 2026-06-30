@@ -50,7 +50,10 @@ export function VanManifest({
   const router = useRouter();
   const outbox = useOutbox({ submitEvent, smartCheckOut });
   const [pendingStudents, setPendingStudents] = useState<Set<string>>(new Set());
-  const [broadcasting, setBroadcasting] = useState(false);
+  // Auto-start location sharing on landing so the aide doesn't have to find the
+  // toggle — opening the van page prompts for GPS permission immediately. They
+  // can still tap "Stop GPS" to turn it off.
+  const [broadcasting, setBroadcasting] = useState(true);
   const [lastReportAt, setLastReportAt] = useState<Date | null>(null);
   const [gpsReachable, setGpsReachable] = useState(true);
   const [error, setError] = useState<string | null>(null);

@@ -59,9 +59,9 @@ export default async function VanPage({
 
   const { data: van } = await supabase
     .from("vans")
-    .select("id, name")
+    .select("id, name, capacity")
     .eq("id", vanId)
-    .maybeSingle<{ id: string; name: string }>();
+    .maybeSingle<{ id: string; name: string; capacity: number }>();
   if (!van) notFound();
 
   // Get today's statuses for kids on this van (AM or PM)
@@ -199,6 +199,19 @@ export default async function VanPage({
         </p>
         <VanDatePicker vanId={vanId} dates={[...VBS_DATES]} selected={day} today={today} />
       </header>
+
+      {van.capacity > 0 && roster.length > van.capacity && (
+        <div className="rounded-lg border-2 border-[var(--anomaly-warn)] bg-[var(--anomaly-warn)]/10 px-4 py-3">
+          <p className="text-base font-semibold text-[var(--anomaly-warn)]">
+            ⚠ {roster.length} riders · van holds {van.capacity} — make about{" "}
+            {Math.ceil(roster.length / van.capacity)} trips
+          </p>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Board a full load ({van.capacity}), drive them to the church, then come back for
+            the next group. Everyone stays on this list until you board them.
+          </p>
+        </div>
+      )}
 
       <VanManifest
         vanId={vanId}
