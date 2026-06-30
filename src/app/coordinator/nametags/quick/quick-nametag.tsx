@@ -10,6 +10,19 @@ type Region = { id: string; name: string; colorCode: string | null; colorName: s
 
 const ALIGN_KEY = "nametag-align-mm";
 const POS_KEY = "nametag-quick-pos";
+// Same default + storage key as the full name-tag sheet, so the alignment you dial
+// in on either screen applies to both.
+const DEFAULT_ALIGN = { x: -2, y: 2 };
+const NUDGE_BTN =
+  "rounded-md border px-2.5 py-1.5 text-sm leading-none hover:bg-muted active:bg-muted/70";
+
+function describeAlign(a: { x: number; y: number }): string {
+  if (a.x === 0 && a.y === 0) return "No nudge — using the default label margins.";
+  const parts: string[] = [];
+  if (a.x !== 0) parts.push(`${Math.abs(a.x)}mm ${a.x < 0 ? "left" : "right"}`);
+  if (a.y !== 0) parts.push(`${Math.abs(a.y)}mm ${a.y < 0 ? "up" : "down"}`);
+  return `Nudged ${parts.join(" + ")}.`;
+}
 
 /**
  * Print a single name tag on demand — for a walk-in, a late check-in, or a helper.
@@ -22,7 +35,7 @@ export function QuickNameTag({ regions }: { regions: Region[] }) {
   const [last, setLast] = useState("");
   const [regionId, setRegionId] = useState("");
   const [position, setPosition] = useState(1);
-  const [align, setAlign] = useState({ x: 0, y: 0 });
+  const [align, setAlign] = useState(DEFAULT_ALIGN);
 
   useEffect(() => {
     try {
@@ -37,6 +50,18 @@ export function QuickNameTag({ regions }: { regions: Region[] }) {
       /* ignore */
     }
   }, []);
+
+  function persistAlign(next: { x: number; y: number }) {
+    setAlign(next);
+    try {
+      localStorage.setItem(ALIGN_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
+  function nudge(dx: number, dy: number) {
+    persistAlign({ x: align.x + dx, y: align.y + dy });
+  }
 
   const region = regions.find((r) => r.id === regionId) ?? null;
   const colorCode = region?.colorCode ?? "#e5e7eb";
@@ -136,6 +161,25 @@ export function QuickNameTag({ regions }: { regions: Region[] }) {
           <p className="text-xs text-muted-foreground">
             Next tag prints on label <strong>{position}</strong> of 8 (then advances automatically).
           </p>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">Label alignment</span>
+          <span className="text-xs text-muted-foreground">shared with the full sheet</span>
+          <div className="ml-auto flex items-center gap-1">
+            <button type="button" onClick={() => nudge(0, -1)} className={NUDGE_BTN} title="Move up">▲</button>
+            <button type="button" onClick={() => nudge(-1, 0)} className={NUDGE_BTN} title="Move left">◀</button>
+            <button type="button" onClick={() => nudge(1, 0)} className={NUDGE_BTN} title="Move right">▶</button>
+            <button type="button" onClick={() => nudge(0, 1)} className={NUDGE_BTN} title="Move down">▼</button>
+            <button
+              type="button"
+              onClick={() => persistAlign({ x: 0, y: 0 })}
+              className="ml-1 rounded-md border px-2 py-1.5 text-xs hover:bg-muted"
+            >
+              Reset
+            </button>
+          </div>
+          <span className="w-full text-xs text-muted-foreground">{describeAlign(align)}</span>
         </div>
 
         <div className="flex items-center gap-4">

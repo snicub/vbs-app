@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
@@ -183,7 +184,16 @@ export default async function VanPage({
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
       <header className="space-y-2">
-        <h1 className="text-3xl font-semibold">{van.name} — riders</h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-3xl font-semibold">{van.name} — riders</h1>
+          <Link
+            href="/signup"
+            target="_blank"
+            className="rounded-lg border-2 border-primary px-3 py-2 text-base font-semibold text-primary hover:bg-primary/10"
+          >
+            + Register a new student
+          </Link>
+        </div>
         <p className="text-muted-foreground text-base">
           {roster.length} kid{roster.length === 1 ? "" : "s"}
         </p>
