@@ -10,6 +10,7 @@ import { contrastText } from "@/lib/nametags/tag-data";
 import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/pickup-order";
 import { PrintButton } from "./print-button";
 import { RiderQr } from "./rider-qr";
+import { RegionSelect } from "./region-select";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Van Rosters — Coordinator" };
@@ -111,6 +112,7 @@ export default async function VanRostersPage({
   const assignByVan = new Map((assignments ?? []).map((a) => [a.van_id, a]));
 
   type Rider = {
+    studentId: string;
     name: string;
     address: string;
     notes: string | null;
@@ -128,6 +130,7 @@ export default async function VanRostersPage({
     const f = familyById.get(s.family_id);
     const cityLine = [f?.city, f?.state, f?.postal_code].map((p) => p?.trim()).filter(Boolean).join(", ");
     return {
+      studentId: s.id,
       name: `${s.preferred_first_name ?? s.legal_first_name} ${s.legal_last_name}`.trim(),
       address: [f?.street_address?.trim(), cityLine].filter(Boolean).join(" · ") || "—",
       notes: f?.notes?.trim() || null,
@@ -158,6 +161,7 @@ export default async function VanRostersPage({
     }
   }
   const sortRiders = (rs: Rider[]) => rs.slice().sort((a, b) => a.name.localeCompare(b.name));
+  const vanOptions = (vans ?? []).map((v) => ({ id: v.id, name: v.name }));
 
   return (
     <main className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-5 print:py-0">
@@ -214,7 +218,7 @@ export default async function VanRostersPage({
                       </div>
                       <ul className="divide-y">
                         {stop.riders.map((r, i) => (
-                          <RiderRow key={i} r={r} />
+                          <RiderRow key={i} r={r} currentVanId={v.id} eventDate={day} vans={vanOptions} />
                         ))}
                       </ul>
                     </li>
@@ -226,7 +230,7 @@ export default async function VanRostersPage({
                       </div>
                       <ul className="divide-y">
                         {tail.map((r, i) => (
-                          <RiderRow key={i} r={r} />
+                          <RiderRow key={i} r={r} currentVanId={v.id} eventDate={day} vans={vanOptions} />
                         ))}
                       </ul>
                     </li>
@@ -245,7 +249,7 @@ export default async function VanRostersPage({
           </div>
           <ul className="divide-y">
             {sortRiders(unassigned).map((r, i) => (
-              <RiderRow key={i} r={r} />
+              <RiderRow key={i} r={r} currentVanId={null} eventDate={day} vans={vanOptions} />
             ))}
           </ul>
         </section>
@@ -256,8 +260,12 @@ export default async function VanRostersPage({
 
 function RiderRow({
   r,
+  currentVanId,
+  eventDate,
+  vans,
 }: {
   r: {
+    studentId: string;
     name: string;
     address: string;
     notes: string | null;
@@ -270,11 +278,22 @@ function RiderRow({
     lat: number | null;
     lng: number | null;
   };
+  currentVanId: string | null;
+  eventDate: string;
+  vans: { id: string; name: string }[];
 }) {
   return (
     <li className="flex items-start justify-between gap-3 px-3 py-2 text-sm break-inside-avoid">
-      <div className="min-w-0 space-y-0.5">
-        <div className="font-semibold">{r.name}</div>
+      <div className="min-w-0 space-y-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-semibold">{r.name}</span>
+          <RegionSelect
+            studentId={r.studentId}
+            currentVanId={currentVanId}
+            eventDate={eventDate}
+            vans={vans}
+          />
+        </div>
         <div>
           <span className="text-muted-foreground">Home: </span>
           {r.address}
