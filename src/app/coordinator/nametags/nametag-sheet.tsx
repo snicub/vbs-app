@@ -1,11 +1,27 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CSSProperties } from "react";
 import { contrastText, type NameTag } from "@/lib/nametags/tag-data";
+
+const ALIGN_KEY = "nametag-align-mm";
+// Default nudge: 2mm left + 2mm down, correcting the common "prints high and to
+// the right" offset. Adjust per printer with the on-screen controls.
+const DEFAULT_ALIGN = { x: -2, y: 2 };
+const NUDGE_BTN =
+  "rounded-md border px-2.5 py-1.5 text-sm leading-none hover:bg-muted active:bg-muted/70";
+
+function describeAlign(a: { x: number; y: number }): string {
+  if (a.x === 0 && a.y === 0) return "No nudge — using the default label margins.";
+  const parts: string[] = [];
+  if (a.x !== 0) parts.push(`${Math.abs(a.x)}mm ${a.x < 0 ? "left" : "right"}`);
+  if (a.y !== 0) parts.push(`${Math.abs(a.y)}mm ${a.y < 0 ? "up" : "down"}`);
+  return `Nudged ${parts.join(" + ")}.`;
+}
 
 export function NameTagSheet({
   tags,
@@ -23,6 +39,38 @@ export function NameTagSheet({
   vans: string[];
 }) {
   const router = useRouter();
+  // Per-printer print alignment nudge (mm). Persisted so it sticks across visits.
+  const [align, setAlign] = useState(DEFAULT_ALIGN);
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(ALIGN_KEY);
+      if (raw) {
+        const v = JSON.parse(raw);
+        if (typeof v?.x === "number" && typeof v?.y === "number") setAlign(v);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+  function nudge(dx: number, dy: number) {
+    setAlign((a) => {
+      const next = { x: a.x + dx, y: a.y + dy };
+      try {
+        localStorage.setItem(ALIGN_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
+  function resetAlign() {
+    setAlign({ x: 0, y: 0 });
+    try {
+      localStorage.setItem(ALIGN_KEY, JSON.stringify({ x: 0, y: 0 }));
+    } catch {
+      /* ignore */
+    }
+  }
 
   function applyFilters(next: { date?: string; town?: string; van?: string }) {
     const params = new URLSearchParams();
@@ -88,6 +136,35 @@ export function NameTagSheet({
             Print name tags
           </Button>
         </div>
+
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
+          <span className="text-sm font-medium">Label alignment</span>
+          <span className="text-xs text-muted-foreground">
+            print one test sheet, then nudge (1mm per tap) until the tags sit on the labels
+          </span>
+          <div className="ml-auto flex items-center gap-1">
+            <button type="button" onClick={() => nudge(0, -1)} className={NUDGE_BTN} title="Move up">
+              ▲
+            </button>
+            <button type="button" onClick={() => nudge(-1, 0)} className={NUDGE_BTN} title="Move left">
+              ◀
+            </button>
+            <button type="button" onClick={() => nudge(1, 0)} className={NUDGE_BTN} title="Move right">
+              ▶
+            </button>
+            <button type="button" onClick={() => nudge(0, 1)} className={NUDGE_BTN} title="Move down">
+              ▼
+            </button>
+            <button
+              type="button"
+              onClick={resetAlign}
+              className="ml-1 rounded-md border px-2 py-1.5 text-xs hover:bg-muted"
+            >
+              Reset
+            </button>
+          </div>
+          <span className="w-full text-xs text-muted-foreground">{describeAlign(align)}</span>
+        </div>
       </div>
 
       {tags.length === 0 ? (
@@ -100,6 +177,12 @@ export function NameTagSheet({
             <div
               key={pi}
               className="nametag-page grid grid-cols-2 gap-3 print:gap-0"
+              style={
+                {
+                  "--align-x": `${align.x}mm`,
+                  "--align-y": `${align.y}mm`,
+                } as CSSProperties
+              }
             >
               {pageTags.map((t) => (
                 <article

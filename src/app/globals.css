@@ -176,7 +176,13 @@
     width: 8.5in;
     height: 11in;
     box-sizing: border-box;
-    padding: 0.5in 0.75in; /* 0.5" top/bottom, 0.75" left/right */
+    /* Base margins 0.5" top/bottom, 0.75" left/right, plus a user-adjustable
+     * nudge (--align-x / --align-y, set per printer on the name-tags screen).
+     * +x shifts content right, +y shifts it down. */
+    padding-top: calc(0.5in + var(--align-y, 0mm));
+    padding-bottom: calc(0.5in - var(--align-y, 0mm));
+    padding-left: calc(0.75in + var(--align-x, 0mm));
+    padding-right: calc(0.75in - var(--align-x, 0mm));
     display: grid;
     grid-template-columns: 3.375in 3.375in;
     grid-auto-rows: 2.3333in;
