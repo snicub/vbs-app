@@ -25,6 +25,25 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   const [teachers, setTeachers] = useState(6);
   const [perGroupTeachers, setPerGroupTeachers] = useState(1);
   const [mix, setMix] = useState(false);
+  // Teacher names per group (by group label), typed in for the printout.
+  const [teacherNames, setTeacherNames] = useState<Record<string, string[]>>({});
+  const teachersFor = (label: string) => teacherNames[label] ?? [""];
+  function setTeacher(label: string, idx: number, value: string) {
+    setTeacherNames((prev) => {
+      const list = [...(prev[label] ?? [""])];
+      list[idx] = value;
+      return { ...prev, [label]: list };
+    });
+  }
+  function addTeacher(label: string) {
+    setTeacherNames((prev) => ({ ...prev, [label]: [...(prev[label] ?? [""]), ""] }));
+  }
+  function removeTeacher(label: string, idx: number) {
+    setTeacherNames((prev) => {
+      const list = (prev[label] ?? [""]).filter((_, i) => i !== idx);
+      return { ...prev, [label]: list.length ? list : [""] };
+    });
+  }
 
   const { groups, poolCount } = useMemo(() => {
     const pool = source === "present" ? kids.filter((k) => k.present) : kids;
@@ -122,11 +141,45 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
               key={g.label}
               className="rounded-xl border bg-card overflow-hidden break-inside-avoid"
             >
-              <header className="flex items-baseline justify-between gap-2 border-b bg-muted/40 px-4 py-2">
-                <h2 className="font-semibold">{g.label}</h2>
-                <span className="text-xs text-muted-foreground whitespace-nowrap">
-                  {g.count} {g.count === 1 ? "kid" : "kids"}
-                </span>
+              <header className="border-b bg-muted/40 px-4 py-2 space-y-1.5">
+                <div className="flex items-baseline justify-between gap-2">
+                  <h2 className="font-semibold">{g.label}</h2>
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {g.count} {g.count === 1 ? "kid" : "kids"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                  <span className="text-xs font-medium text-muted-foreground">
+                    Teacher{teachersFor(g.label).length > 1 ? "s" : ""}:
+                  </span>
+                  {teachersFor(g.label).map((t, ti) => (
+                    <span key={ti} className="inline-flex items-center gap-0.5">
+                      <input
+                        value={t}
+                        onChange={(e) => setTeacher(g.label, ti, e.target.value)}
+                        placeholder="name"
+                        className="w-28 rounded border-b border-dashed bg-transparent px-1 outline-none focus:bg-yellow-100 print:border-0 print:focus:bg-transparent"
+                      />
+                      {teachersFor(g.label).length > 1 && (
+                        <button
+                          type="button"
+                          onClick={() => removeTeacher(g.label, ti)}
+                          className="print:hidden text-muted-foreground hover:text-destructive"
+                          title="Remove teacher"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </span>
+                  ))}
+                  <button
+                    type="button"
+                    onClick={() => addTeacher(g.label)}
+                    className="print:hidden text-xs font-medium text-primary hover:underline"
+                  >
+                    + teacher
+                  </button>
+                </div>
               </header>
               <ul className="divide-y">
                 {g.kids.map((k) => (
