@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 import { contrastText } from "@/lib/nametags/tag-data";
+import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/pickup-order";
 import { PrintButton } from "./print-button";
 
 export const dynamic = "force-dynamic";
@@ -40,6 +41,8 @@ type Family = {
   notes: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
+  lat: number | null;
+  lng: number | null;
 };
 
 export default async function VanRostersPage({
@@ -90,7 +93,7 @@ export default async function VanRostersPage({
   const { data: families } = familyIds.length
     ? await createAdminClient()
         .from("families")
-        .select("id, primary_guardian_name, primary_phone, street_address, city, state, postal_code, notes, emergency_contact_name, emergency_contact_phone")
+        .select("id, primary_guardian_name, primary_phone, street_address, city, state, postal_code, notes, emergency_contact_name, emergency_contact_phone, lat, lng")
         .in("id", familyIds)
         .returns<Family[]>()
     : { data: [] as Family[] };
@@ -116,6 +119,9 @@ export default async function VanRostersPage({
     emergencyPhone: string | null;
     allergies: string | null;
     medical: string | null;
+    lat: number | null;
+    lng: number | null;
+    addressKey: string;
   };
   function riderFor(s: Student): Rider {
     const f = familyById.get(s.family_id);
@@ -130,6 +136,9 @@ export default async function VanRostersPage({
       emergencyPhone: f?.emergency_contact_phone ?? null,
       allergies: s.allergies,
       medical: s.medical_notes,
+      lat: f?.lat ?? null,
+      lng: f?.lng ?? null,
+      addressKey: f?.street_address?.trim() ?? "",
     };
   }
 
@@ -161,37 +170,75 @@ export default async function VanRostersPage({
         <PrintButton />
       </header>
 
-      {(vans ?? []).map((v) => {
-        const riders = sortRiders(ridersByVan.get(v.id) ?? []);
+      {(vans ?? []).flatMap((v) => {
+        const riders = ridersByVan.get(v.id) ?? [];
         const assign = assignByVan.get(v.id);
         const color = colorByVan.get(v.id) ?? "#e5e7eb";
-        return (
-          <section key={v.id} className="rounded-lg border break-inside-avoid">
-            <div
-              className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-t-lg"
-              style={{ backgroundColor: color, color: contrastText(color), printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+        const crews = parseCrews(assign?.driver_name ?? null, assign?.aide_name ?? null);
+        const { stops, unlocated } = orderPickup(riders);
+        const numLoads = Math.max(1, crews.length);
+        const loads = splitStopsIntoLoads(stops, numLoads);
+
+        return loads.map((loadStops, li) => {
+          const crew = crews[li];
+          const tail = li === loads.length - 1 ? unlocated : [];
+          const totalKids =
+            loadStops.reduce((sum, s) => sum + s.riders.length, 0) + tail.length;
+          return (
+            <section
+              key={`${v.id}:${li}`}
+              className="rounded-lg border break-inside-avoid print:break-before-page"
             >
-              <span className="font-bold text-lg">{v.name}</span>
-              <span className="text-sm font-medium">
-                Driver: {assign?.driver_name || "—"} · Aide: {assign?.aide_name || "—"} · {riders.length} kid
-                {riders.length === 1 ? "" : "s"} (cap {v.capacity})
-              </span>
-            </div>
-            {riders.length === 0 ? (
-              <p className="px-3 py-2 text-sm text-muted-foreground">No riders assigned.</p>
-            ) : (
-              <ul className="divide-y">
-                {riders.map((r, i) => (
-                  <RiderRow key={i} r={r} />
-                ))}
-              </ul>
-            )}
-          </section>
-        );
+              <div
+                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-t-lg"
+                style={{ backgroundColor: color, color: contrastText(color), printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
+              >
+                <span className="font-bold text-lg">
+                  {v.name}
+                  {numLoads > 1 ? ` — Van ${li + 1} of ${numLoads}` : ""}
+                </span>
+                <span className="text-sm font-medium">
+                  Driver: {crew?.driver || "—"} · Aide: {crew?.aide || "—"} · {totalKids} kid
+                  {totalKids === 1 ? "" : "s"}
+                </span>
+              </div>
+              {totalKids === 0 ? (
+                <p className="px-3 py-2 text-sm text-muted-foreground">No riders for this van.</p>
+              ) : (
+                <ol className="divide-y">
+                  {loadStops.map((stop, si) => (
+                    <li key={si} className="break-inside-avoid">
+                      <div className="px-3 pt-2 text-xs font-bold uppercase tracking-wide text-muted-foreground">
+                        Stop {si + 1} · {stop.riders[0]!.address}
+                      </div>
+                      <ul className="divide-y">
+                        {stop.riders.map((r, i) => (
+                          <RiderRow key={i} r={r} />
+                        ))}
+                      </ul>
+                    </li>
+                  ))}
+                  {tail.length > 0 && (
+                    <li className="break-inside-avoid">
+                      <div className="px-3 pt-2 text-xs font-bold uppercase tracking-wide text-[var(--anomaly-warn)]">
+                        ⚠ No map location — confirm pickup
+                      </div>
+                      <ul className="divide-y">
+                        {tail.map((r, i) => (
+                          <RiderRow key={i} r={r} />
+                        ))}
+                      </ul>
+                    </li>
+                  )}
+                </ol>
+              )}
+            </section>
+          );
+        });
       })}
 
       {unassigned.length > 0 && (
-        <section className="rounded-lg border-2 border-[var(--anomaly-warn)] break-inside-avoid">
+        <section className="rounded-lg border-2 border-[var(--anomaly-warn)] break-inside-avoid print:break-before-page">
           <div className="px-3 py-2 font-bold text-[var(--anomaly-warn)]">
             ⚠ Not on a van ({unassigned.length}) — parent drop-off or needs routing
           </div>

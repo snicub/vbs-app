@@ -387,7 +387,8 @@ export async function ensureVanZones(): Promise<EnsureResult> {
 
 const NameField = z
   .string()
-  .max(60, "Name is too long")
+  // Allows several comma-separated names for a region run by multiple crews.
+  .max(200, "Too long")
   .nullable()
   .transform((v) => {
     const trimmed = v?.trim() ?? "";

@@ -162,7 +162,14 @@
  * print-color-adjust forces the color band to actually print.
  * --------------------------------------------------------------------------*/
 @media print {
+  /* Default printed pages (van rosters, etc.) keep a normal margin so nothing
+   * runs off the edge. The name-tag sheet opts into a zero-margin named page so
+   * its cards land exactly on the Avery label grid. */
   @page {
+    size: letter;
+    margin: 0.5in;
+  }
+  @page labels {
     size: letter;
     margin: 0;
   }
@@ -173,6 +180,7 @@
   }
 
   .nametag-page {
+    page: labels;
     width: 8.5in;
     height: 11in;
     box-sizing: border-box;

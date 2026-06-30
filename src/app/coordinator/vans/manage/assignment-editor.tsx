@@ -34,6 +34,13 @@ export function AssignmentEditor({
         <Input type="date" value={date} onChange={(e) => changeDate(e.target.value)} className="w-auto" />
       </label>
 
+      <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+        Running a region with more than one van? List the crews comma-separated, in
+        the same order — e.g. Driver <strong>John, Mike, Sam</strong> + Aide{" "}
+        <strong>Jane, Sue, Amy</strong> = 3 crews. The driver sheets split that region&apos;s
+        kids into one page per crew.
+      </p>
+
       {vans.length === 0 ? (
         <p className="text-sm text-muted-foreground">Add an active van first.</p>
       ) : (
@@ -99,22 +106,22 @@ function AssignRow({
     <li className="flex flex-wrap items-end gap-2 rounded-lg border bg-card px-3 py-3">
       <span className="w-full font-medium sm:w-20">{van.name}</span>
       <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Driver</span>
+        <span className="block text-muted-foreground">Driver(s)</span>
         <Input
           value={driver}
           onChange={(e) => setDriver(e.target.value)}
-          placeholder="Driver name"
-          maxLength={60}
+          placeholder="e.g. John  (or John, Mike, Sam)"
+          maxLength={200}
           autoComplete="off"
         />
       </label>
       <label className="space-y-1 text-sm">
-        <span className="block text-muted-foreground">Aide</span>
+        <span className="block text-muted-foreground">Aide(s)</span>
         <Input
           value={aide}
           onChange={(e) => setAide(e.target.value)}
-          placeholder="Aide name"
-          maxLength={60}
+          placeholder="e.g. Jane  (or Jane, Sue, Amy)"
+          maxLength={200}
           autoComplete="off"
         />
       </label>
