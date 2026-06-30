@@ -18,7 +18,7 @@ type StudentDbRow = {
   allergies: string | null;
   medical_notes: string | null;
   photo_path: string | null;
-  families: { primary_guardian_name: string; primary_phone: string } | null;
+  families: { primary_guardian_name: string; primary_phone: string; street_address: string | null; city: string | null } | null;
 };
 
 type DayStatusRow = {
@@ -39,7 +39,7 @@ export default async function StudentsDashboardPage() {
     .select(
       `id, legal_first_name, legal_last_name, preferred_first_name, wristband_code,
        dob, age_at_registration, allergies, medical_notes, photo_path,
-       families(primary_guardian_name, primary_phone)`,
+       families(primary_guardian_name, primary_phone, street_address, city)`,
     )
     .is("archived_at", null)
     .order("legal_last_name")
@@ -50,7 +50,7 @@ export default async function StudentsDashboardPage() {
     .select(
       `id, legal_first_name, legal_last_name, preferred_first_name, wristband_code,
        dob, age_at_registration, allergies, medical_notes, photo_path,
-       families(primary_guardian_name, primary_phone)`,
+       families(primary_guardian_name, primary_phone, street_address, city)`,
     )
     .not("archived_at", "is", null)
     .order("legal_last_name")
@@ -97,6 +97,7 @@ export default async function StudentsDashboardPage() {
       medicalNotes: s.medical_notes,
       familyName: s.families?.primary_guardian_name ?? "—",
       familyPhone: s.families?.primary_phone ?? "",
+      address: [s.families?.street_address, s.families?.city].filter(Boolean).join(", "),
       state: status?.state ?? "not_started",
       morningStop: morningStop ? `${morningStop.name} (${morningStop.town})` : "",
       afternoonStop: afternoonStop ? `${afternoonStop.name} (${afternoonStop.town})` : "",

@@ -22,6 +22,7 @@ type FilterableRow = {
   lastName: string;
   wristbandCode: string;
   familyName: string;
+  address: string;
   morningStop: string;
   afternoonStop: string;
   age: number | null;
@@ -55,6 +56,7 @@ export function filterStudents<T extends FilterableRow>(rows: T[], f: StudentFil
         r.lastName.toLowerCase().includes(q) ||
         r.wristbandCode.toLowerCase().includes(q) ||
         r.familyName.toLowerCase().includes(q) ||
+        r.address.toLowerCase().includes(q) ||
         r.morningStop.toLowerCase().includes(q) ||
         r.afternoonStop.toLowerCase().includes(q)
       )

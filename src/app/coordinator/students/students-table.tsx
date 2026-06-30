@@ -28,6 +28,7 @@ export type StudentRow = {
   medicalNotes: string | null;
   familyName: string;
   familyPhone: string;
+  address: string;
   state: string;
   morningStop: string;
   afternoonStop: string;

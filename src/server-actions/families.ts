@@ -7,6 +7,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { env } from "@/lib/env";
 import { normalizePhone, OptionalEmailSchema } from "@/lib/registration/schema";
+import { geocodeFamilyAddress } from "@/lib/geocode";
 
 const FamilyIdSchema = z.object({ familyId: z.string().uuid() });
 
@@ -164,9 +165,9 @@ export async function updateFamilyContacts(
     return { ok: true };
   }
 
-  // If the home address changed, drop the stored coordinates so the next
-  // "Suggest vans from addresses" re-geocodes the new location (geocoding runs
-  // at build time, not here — keeping this save fast and offline-safe).
+  // If the home address changed, geocode it RIGHT HERE so the new spot (including
+  // a pasted "lat, lng" coordinate) takes effect immediately — no need to re-run
+  // "Suggest vans from addresses" first.
   if (updates.street_address !== undefined || updates.city !== undefined) {
     const { data: current } = await admin
       .from("families")
@@ -183,10 +184,15 @@ export async function updateFamilyContacts(
       current &&
       (newStreet !== (current.street_address ?? null) || newCity !== (current.city ?? null))
     ) {
-      updates.lat = null;
-      updates.lng = null;
-      // A new address gets a fresh geocode attempt — drop any prior failure flag.
-      updates.geocode_failed_at = null;
+      const pt = await geocodeFamilyAddress({
+        streetAddress: newStreet,
+        city: newCity,
+        state: "SD",
+        postalCode: null,
+      });
+      updates.lat = pt?.lat ?? null;
+      updates.lng = pt?.lng ?? null;
+      updates.geocode_failed_at = pt ? null : new Date().toISOString();
     }
   }
 

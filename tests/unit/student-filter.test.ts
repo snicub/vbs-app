@@ -13,6 +13,7 @@ type Row = {
   lastName: string;
   wristbandCode: string;
   familyName: string;
+  address: string;
   morningStop: string;
   afternoonStop: string;
   age: number | null;
@@ -25,6 +26,7 @@ const row = (over: Partial<Row> & { id: string }): Row => ({
   lastName: "Byron",
   wristbandCode: "AB23X",
   familyName: "Byron",
+  address: "12 Maple St, Sisseton",
   morningStop: "Maple",
   afternoonStop: "Oak",
   age: 8,
@@ -40,6 +42,11 @@ describe("filterStudents — query", () => {
     row({ id: "1", firstName: "Ada", lastName: "Byron", wristbandCode: "AB23X", familyName: "Byron", morningStop: "Maple" }),
     row({ id: "2", firstName: "Grace", lastName: "Hopper", wristbandCode: "GH99Z", familyName: "Hopper", morningStop: "Oak" }),
   ];
+  it("matches by address", () => {
+    expect(
+      filterStudents([row({ id: "9", address: "705 Old Agency Dr" })], { ...NO_FILTER, query: "old agency" }).map((r) => r.id),
+    ).toEqual(["9"]);
+  });
   it("matches across first/last/code/family/stop, case-insensitive", () => {
     expect(filterStudents(rows, { ...NO_FILTER, query: "ada" }).map((r) => r.id)).toEqual(["1"]);
     expect(filterStudents(rows, { ...NO_FILTER, query: "HOPPER" }).map((r) => r.id)).toEqual(["2"]);

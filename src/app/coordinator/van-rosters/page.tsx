@@ -9,6 +9,7 @@ import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 import { contrastText } from "@/lib/nametags/tag-data";
 import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/pickup-order";
 import { PrintButton } from "./print-button";
+import { RiderQr } from "./rider-qr";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Van Rosters — Coordinator" };
@@ -266,33 +267,38 @@ function RiderRow({
     emergencyPhone: string | null;
     allergies: string | null;
     medical: string | null;
+    lat: number | null;
+    lng: number | null;
   };
 }) {
   return (
-    <li className="px-3 py-2 text-sm space-y-0.5 break-inside-avoid">
-      <div className="font-semibold">{r.name}</div>
-      <div>
-        <span className="text-muted-foreground">Home: </span>
-        {r.address}
-        {r.notes && <span className="text-muted-foreground"> — {r.notes}</span>}
-      </div>
-      <div>
-        <span className="text-muted-foreground">Guardian: </span>
-        {r.guardian}
-        {r.guardianPhone && <span> · {r.guardianPhone}</span>}
-        {r.emergencyName && (
-          <span className="text-muted-foreground">
-            {" "}
-            · Emergency: {r.emergencyName}
-            {r.emergencyPhone ? ` ${r.emergencyPhone}` : ""}
-          </span>
+    <li className="flex items-start justify-between gap-3 px-3 py-2 text-sm break-inside-avoid">
+      <div className="min-w-0 space-y-0.5">
+        <div className="font-semibold">{r.name}</div>
+        <div>
+          <span className="text-muted-foreground">Home: </span>
+          {r.address}
+          {r.notes && <span className="text-muted-foreground"> — {r.notes}</span>}
+        </div>
+        <div>
+          <span className="text-muted-foreground">Guardian: </span>
+          {r.guardian}
+          {r.guardianPhone && <span> · {r.guardianPhone}</span>}
+          {r.emergencyName && (
+            <span className="text-muted-foreground">
+              {" "}
+              · Emergency: {r.emergencyName}
+              {r.emergencyPhone ? ` ${r.emergencyPhone}` : ""}
+            </span>
+          )}
+        </div>
+        {(r.allergies || r.medical) && (
+          <div className="font-medium text-[var(--medical)]">
+            ⚕ {[r.allergies, r.medical].filter(Boolean).join(" · ")}
+          </div>
         )}
       </div>
-      {(r.allergies || r.medical) && (
-        <div className="font-medium text-[var(--medical)]">
-          ⚕ {[r.allergies, r.medical].filter(Boolean).join(" · ")}
-        </div>
-      )}
+      {r.lat != null && r.lng != null && <RiderQr lat={r.lat} lng={r.lng} />}
     </li>
   );
 }
