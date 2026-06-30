@@ -231,7 +231,7 @@ export function StudentsTable({
               <SortableHeader label="PM stop" k="afternoonStop" sortKey={sortKey} sortDir={sortDir} onClick={toggleSort} />
               <th className="text-left px-3 py-2">Family</th>
               <th className="text-left px-3 py-2 w-20">Code</th>
-              <th className="text-left px-3 py-2 w-12"></th>
+              <th className="text-right px-3 py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -262,13 +262,22 @@ export function StudentsTable({
                 </td>
                 <td className="px-3 py-2 font-mono text-xs">{r.wristbandCode}</td>
                 <td className="px-3 py-2">
-                  <Link
-                    href={`/coordinator/students/${r.id}/edit`}
-                    className="text-muted-foreground hover:text-foreground"
-                    title="Edit"
-                  >
-                    <PencilIcon className="size-4" />
-                  </Link>
+                  <div className="flex items-center justify-end gap-2">
+                    <Link
+                      href={`/table/${r.wristbandCode}`}
+                      className="rounded-md bg-primary px-2.5 py-1.5 text-xs font-medium text-primary-foreground hover:opacity-90"
+                      title="Check this child in"
+                    >
+                      Check in
+                    </Link>
+                    <Link
+                      href={`/coordinator/students/${r.id}/edit`}
+                      className="text-muted-foreground hover:text-foreground"
+                      title="Edit"
+                    >
+                      <PencilIcon className="size-4" />
+                    </Link>
+                  </div>
                 </td>
               </tr>
             ))}
@@ -301,12 +310,18 @@ export function StudentsTable({
               <Avatar url={r.photoUrl} alt={`${r.firstName} ${r.lastName}`} size={48} />
               <div className="flex-1 min-w-0 space-y-1.5">
                 <div className="flex items-start justify-between gap-2">
-                  <Link href={`/table/${r.wristbandCode}`} className="font-medium hover:underline truncate">
+                  <span className="font-medium truncate">
                     {r.firstName} {r.lastName}
-                  </Link>
+                  </span>
                   <StateBadge state={r.state as DayState} size="sm" />
                 </div>
                 <SafetyPills allergies={r.allergies} medicalNotes={r.medicalNotes} />
+                <Link
+                  href={`/table/${r.wristbandCode}`}
+                  className="inline-block rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground hover:opacity-90"
+                >
+                  Check in
+                </Link>
                 <div className="text-xs text-muted-foreground space-y-0.5">
                   <div className="flex items-center gap-2">
                     <code className="font-mono">{r.wristbandCode}</code>
