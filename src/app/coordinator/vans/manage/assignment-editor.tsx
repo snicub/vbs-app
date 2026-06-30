@@ -10,6 +10,29 @@ import { parseCrews } from "@/lib/van-rosters/pickup-order";
 import { PlusIcon, XIcon } from "lucide-react";
 
 type AssignVM = { vanId: string; driverName: string | null; aideName: string | null };
+type Pair = { driver: string; aide: string };
+
+function initialPairs(driverName: string | null, aideName: string | null): Pair[] {
+  const crews = parseCrews(driverName, aideName);
+  return crews.length > 0 ? crews : [{ driver: "", aide: "" }];
+}
+
+/** True when any pair lists the same person as both driver and aide. */
+function hasSelfPair(pairs: Pair[]): boolean {
+  return pairs.some((p) => {
+    const d = p.driver.trim().toLowerCase();
+    const a = p.aide.trim().toLowerCase();
+    return !!d && d === a;
+  });
+}
+
+/** Comma-joined (positional) so the driver sheets read them back as crews. */
+function joinPairs(pairs: Pair[]): { driverName: string; aideName: string } {
+  return {
+    driverName: pairs.map((p) => p.driver.trim()).filter(Boolean).join(", "),
+    aideName: pairs.map((p) => p.aide.trim()).filter(Boolean).join(", "),
+  };
+}
 
 export function AssignmentEditor({
   date,
@@ -21,6 +44,62 @@ export function AssignmentEditor({
   assignments: AssignVM[];
 }) {
   const router = useRouter();
+  // State is lifted here so a single "Save all" can write every van at once.
+  // The whole editor is keyed by date at the call site, so it remounts (and
+  // re-seeds from that day's assignments) when the date changes.
+  const [pairsByVan, setPairsByVan] = useState<Record<string, Pair[]>>(() => {
+    const m: Record<string, Pair[]> = {};
+    for (const v of vans) {
+      const a = assignments.find((x) => x.vanId === v.id);
+      m[v.id] = initialPairs(a?.driverName ?? null, a?.aideName ?? null);
+    }
+    return m;
+  });
+  const [pending, startTransition] = useTransition();
+
+  function update(vanId: string, fn: (ps: Pair[]) => Pair[]) {
+    setPairsByVan((m) => ({ ...m, [vanId]: fn(m[vanId] ?? [{ driver: "", aide: "" }]) }));
+  }
+
+  function saveVan(vanId: string, vanName: string) {
+    const pairs = pairsByVan[vanId] ?? [];
+    if (hasSelfPair(pairs)) {
+      toast.error("Driver and aide in a pair must be different people");
+      return;
+    }
+    startTransition(async () => {
+      const result = await setVanAssignment({ vanId, assignmentDate: date, ...joinPairs(pairs) });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      const n = pairs.filter((p) => p.driver.trim() || p.aide.trim()).length;
+      toast.success(`${vanName} — ${n || "no"} ${n === 1 ? "pair" : "pairs"} saved`);
+      router.refresh();
+    });
+  }
+
+  function saveAll() {
+    const offender = vans.find((v) => hasSelfPair(pairsByVan[v.id] ?? []));
+    if (offender) {
+      toast.error(`${offender.name}: driver and aide in a pair must be different people`);
+      return;
+    }
+    startTransition(async () => {
+      const results = await Promise.all(
+        vans.map((v) =>
+          setVanAssignment({ vanId: v.id, assignmentDate: date, ...joinPairs(pairsByVan[v.id] ?? []) }),
+        ),
+      );
+      const errors = results.flatMap((r) => (r.ok ? [] : [r.error]));
+      if (errors.length > 0) {
+        toast.error(`Saved ${results.length - errors.length}/${results.length} vans — ${errors[0]}`);
+      } else {
+        toast.success(`All ${vans.length} vans saved`);
+      }
+      router.refresh();
+    });
+  }
 
   function changeDate(d: string) {
     const params = new URLSearchParams();
@@ -30,10 +109,17 @@ export function AssignmentEditor({
 
   return (
     <div className="space-y-3">
-      <label className="inline-block space-y-1 text-sm">
-        <span className="block text-muted-foreground">Date</span>
-        <Input type="date" value={date} onChange={(e) => changeDate(e.target.value)} className="w-auto" />
-      </label>
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <label className="inline-block space-y-1 text-sm">
+          <span className="block text-muted-foreground">Date</span>
+          <Input type="date" value={date} onChange={(e) => changeDate(e.target.value)} className="w-auto" />
+        </label>
+        {vans.length > 0 && (
+          <Button onClick={saveAll} disabled={pending}>
+            {pending ? "Saving…" : "Save all"}
+          </Button>
+        )}
+      </div>
 
       <p className="rounded-md bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
         Add a driver + aide <strong>pair for each van</strong> running the region
@@ -45,88 +131,56 @@ export function AssignmentEditor({
         <p className="text-sm text-muted-foreground">Add an active van first.</p>
       ) : (
         <ul className="space-y-2">
-          {vans.map((v) => {
-            const a = assignments.find((x) => x.vanId === v.id);
-            return (
-              <AssignRow
-                key={`${date}:${v.id}`}
-                van={v}
-                date={date}
-                driverName={a?.driverName ?? null}
-                aideName={a?.aideName ?? null}
-              />
-            );
-          })}
+          {vans.map((v) => (
+            <AssignRow
+              key={v.id}
+              van={v}
+              pairs={pairsByVan[v.id] ?? [{ driver: "", aide: "" }]}
+              pending={pending}
+              onSetPair={(i, field, value) =>
+                update(v.id, (ps) => ps.map((p, j) => (j === i ? { ...p, [field]: value } : p)))
+              }
+              onAddPair={() => update(v.id, (ps) => [...ps, { driver: "", aide: "" }])}
+              onRemovePair={(i) => update(v.id, (ps) => (ps.length > 1 ? ps.filter((_, j) => j !== i) : ps))}
+              onSave={() => saveVan(v.id, v.name)}
+            />
+          ))}
         </ul>
+      )}
+
+      {vans.length > 0 && (
+        <div className="flex justify-end pt-1">
+          <Button onClick={saveAll} disabled={pending}>
+            {pending ? "Saving…" : "Save all"}
+          </Button>
+        </div>
       )}
     </div>
   );
 }
 
-type Pair = { driver: string; aide: string };
-
 function AssignRow({
   van,
-  date,
-  driverName,
-  aideName,
+  pairs,
+  pending,
+  onSetPair,
+  onAddPair,
+  onRemovePair,
+  onSave,
 }: {
   van: { id: string; name: string };
-  date: string;
-  driverName: string | null;
-  aideName: string | null;
+  pairs: Pair[];
+  pending: boolean;
+  onSetPair: (i: number, field: keyof Pair, value: string) => void;
+  onAddPair: () => void;
+  onRemovePair: (i: number) => void;
+  onSave: () => void;
 }) {
-  const router = useRouter();
-  const initial = parseCrews(driverName, aideName);
-  const [pairs, setPairs] = useState<Pair[]>(
-    initial.length > 0 ? initial : [{ driver: "", aide: "" }],
-  );
-  const [pending, startTransition] = useTransition();
-
-  function setPair(i: number, field: keyof Pair, value: string) {
-    setPairs((ps) => ps.map((p, j) => (j === i ? { ...p, [field]: value } : p)));
-  }
-  function addPair() {
-    setPairs((ps) => [...ps, { driver: "", aide: "" }]);
-  }
-  function removePair(i: number) {
-    setPairs((ps) => (ps.length > 1 ? ps.filter((_, j) => j !== i) : ps));
-  }
-
-  function save() {
-    for (const p of pairs) {
-      const d = p.driver.trim().toLowerCase();
-      const a = p.aide.trim().toLowerCase();
-      if (d && a && d === a) {
-        toast.error("Driver and aide in a pair must be different people");
-        return;
-      }
-    }
-    // Stored comma-joined (positional) so the driver sheets read them back as crews.
-    const driverJoined = pairs.map((p) => p.driver.trim()).filter(Boolean).join(", ");
-    const aideJoined = pairs.map((p) => p.aide.trim()).filter(Boolean).join(", ");
-    startTransition(async () => {
-      const result = await setVanAssignment({
-        vanId: van.id,
-        assignmentDate: date,
-        driverName: driverJoined,
-        aideName: aideJoined,
-      });
-      if (!result.ok) {
-        toast.error(result.error);
-        return;
-      }
-      const n = pairs.filter((p) => p.driver.trim() || p.aide.trim()).length;
-      toast.success(`${van.name} — ${n || "no"} ${n === 1 ? "pair" : "pairs"} saved`);
-      router.refresh();
-    });
-  }
-
   return (
     <li className="rounded-lg border bg-card px-3 py-3 space-y-2.5">
       <div className="flex items-center justify-between gap-2">
         <span className="font-semibold">{van.name}</span>
-        <Button onClick={save} disabled={pending} size="sm">
+        <Button onClick={onSave} disabled={pending} size="sm" variant="outline">
           {pending ? "Saving…" : "Save"}
         </Button>
       </div>
@@ -140,7 +194,7 @@ function AssignRow({
             <span className="block text-muted-foreground">Driver</span>
             <Input
               value={p.driver}
-              onChange={(e) => setPair(i, "driver", e.target.value)}
+              onChange={(e) => onSetPair(i, "driver", e.target.value)}
               placeholder="Driver name"
               maxLength={60}
               autoComplete="off"
@@ -150,7 +204,7 @@ function AssignRow({
             <span className="block text-muted-foreground">Aide</span>
             <Input
               value={p.aide}
-              onChange={(e) => setPair(i, "aide", e.target.value)}
+              onChange={(e) => onSetPair(i, "aide", e.target.value)}
               placeholder="Aide name"
               maxLength={60}
               autoComplete="off"
@@ -159,7 +213,7 @@ function AssignRow({
           {pairs.length > 1 && (
             <button
               type="button"
-              onClick={() => removePair(i)}
+              onClick={() => onRemovePair(i)}
               className="mb-1 inline-flex size-9 items-center justify-center rounded-md border text-muted-foreground hover:bg-muted"
               title={`Remove pair ${i + 1}`}
             >
@@ -171,7 +225,7 @@ function AssignRow({
 
       <button
         type="button"
-        onClick={addPair}
+        onClick={onAddPair}
         className="inline-flex items-center gap-1 text-sm font-medium text-primary hover:underline"
       >
         <PlusIcon className="size-4" /> Add another driver/aide pair

@@ -137,7 +137,7 @@ export default async function ManageVansPage({
 
       <section className="space-y-3">
         <h2 className="text-lg font-semibold">Driver &amp; aide</h2>
-        <AssignmentEditor date={day} vans={activeVans} assignments={assignmentList} />
+        <AssignmentEditor key={day} date={day} vans={activeVans} assignments={assignmentList} />
       </section>
     </div>
   );
