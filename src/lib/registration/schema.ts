@@ -51,6 +51,9 @@ export const AuthorizedPickupSchema = z.object({
 
 export const StudentTransportSchema = z.object({
   mode: z.enum(["van", "parent_dropoff_only", "parent_pickup_only", "parent_both"]),
+  // Optional pickup region (a van's zone stop) chosen at signup — skips the
+  // address-geocoding guess and puts the kid straight on the right van.
+  regionStopId: z.string().uuid().nullable().optional(),
 });
 
 /**

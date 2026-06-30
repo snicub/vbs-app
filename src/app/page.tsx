@@ -1,6 +1,8 @@
 import { SignupForm } from "./signup/signup-form";
 import { consentText, CONSENT_TEXT, CONSENT_VERSION } from "@/lib/consents/text";
 import { hashConsentText } from "@/lib/consents/hash";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Register your family — VBS" };
@@ -19,12 +21,26 @@ export default async function Home() {
     }),
   );
 
+  // Pickup regions (each van's zone stop) so a registrant who knows the region can
+  // pick it directly — no address-geocoding guesswork.
+  const admin = createAdminClient();
+  const [{ data: vans }, { data: routes }] = await Promise.all([
+    admin.from("vans").select("id, name").eq("active", true).order("name").returns<{ id: string; name: string }[]>(),
+    admin.from("routes").select("van_id, direction, stop_ids").returns<DirectionRoute[]>(),
+  ]);
+  const regions = (vans ?? [])
+    .map((v) => {
+      const stopId = zoneStopIdForVan(v.id, routes ?? []);
+      return stopId ? { stopId, name: v.name } : null;
+    })
+    .filter((r): r is { stopId: string; name: string } => r !== null);
+
   return (
     <main className="mx-auto max-w-2xl px-4 py-8">
       <header className="mb-8">
         <h1 className="text-2xl font-semibold tracking-tight">South Dakota Vacation Bible School 2026: Better Together</h1>
       </header>
-      <SignupForm consents={consents} />
+      <SignupForm consents={consents} regions={regions} />
     </main>
   );
 }

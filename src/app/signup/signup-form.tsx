@@ -3,6 +3,7 @@
 import { useState, useRef, useId, cloneElement, isValidElement } from "react";
 import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Select } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -60,7 +61,14 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-export function SignupForm({ consents }: { consents: ConsentItem[] }) {
+export function SignupForm({
+  consents,
+  regions,
+}: {
+  consents: ConsentItem[];
+  regions: { stopId: string; name: string }[];
+}) {
+  const [regionStopId, setRegionStopId] = useState("");
   const [family, setFamily] = useState({
     primaryGuardianName: "",
     primaryEmail: "",
@@ -131,7 +139,10 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
           allergies: null,
           medicalNotes: s.medicalNotes || null,
           photoBytes: s.photo ? await blobToBase64(s.photo.blob) : null,
-          transport: { mode: s.ridesVan ? "van" : "parent_both" },
+          transport: {
+            mode: s.ridesVan ? "van" : "parent_both",
+            regionStopId: s.ridesVan && regionStopId ? regionStopId : null,
+          },
         })),
       );
 
@@ -364,6 +375,22 @@ export function SignupForm({ consents }: { consents: ConsentItem[] }) {
             />
           </Field>
         </div>
+        {needsVan && regions.length > 0 && (
+          <Field label="Pickup region (pick it if you know it)">
+            <Select value={regionStopId} onChange={(e) => setRegionStopId(e.target.value)}>
+              <option value="">Figure it out from my address</option>
+              {regions.map((r) => (
+                <option key={r.stopId} value={r.stopId}>
+                  {r.name}
+                </option>
+              ))}
+            </Select>
+            <p className="mt-1 text-xs text-muted-foreground">
+              Choosing your region here puts the kids straight on the right van — no address
+              guessing needed.
+            </p>
+          </Field>
+        )}
       </section>
 
       <details className="rounded-2xl border bg-card px-4 py-3 shadow-sm">

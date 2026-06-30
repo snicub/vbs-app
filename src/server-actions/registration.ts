@@ -199,15 +199,20 @@ export async function registerFamily(
   const studentMeta = inserted;
   const dayRows = data.students.flatMap((s, i) => {
     const studentId = studentMeta[i]!.id;
+    const mode = s.transport.mode;
+    // If a pickup region was chosen at signup, put the kid straight on that van's
+    // zone for the legs their mode uses. Otherwise stops stay null and the
+    // coordinator routes them later (Suggest from addresses / the pickup map).
+    const region = s.transport.regionStopId ?? null;
+    const morning = region && (mode === "van" || mode === "parent_pickup_only") ? region : null;
+    const afternoon = region && (mode === "van" || mode === "parent_dropoff_only") ? region : null;
     return VBS_DATES.map((d) => ({
       student_id: studentId,
       event_date: d,
       attending: true,
-      mode: s.transport.mode,
-      // Stops are assigned later when the coordinator builds van routes from
-      // addresses; families no longer pick a stop at registration.
-      morning_stop_id: null,
-      afternoon_stop_id: null,
+      mode,
+      morning_stop_id: morning,
+      afternoon_stop_id: afternoon,
     }));
   });
   const { error: dayErr } = await admin.from("student_day_records").insert(dayRows as never);
