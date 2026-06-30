@@ -1,0 +1,4 @@
+- [Capacity cron rename](project_capacity_cron_rename.md) — over-capacity alert is now /api/cron/capacity-check; still texts COORDINATOR_PHONE (notifications domain).
+- [arrived_at_site count gap](project_arrived_at_site_count_gap.md) — accepted-for-go-live: arrived_at_site counts in no dashboard card; cards don't sum to expected for that brief window.
+- [Closeout + announcements removed](project_closeout_announcements_removed.md) — both deleted as "not needed"; spec/CLAUDE.md stale; end-of-day accounting now lives only on the dashboard.
+- [Dead scheduled-time anomalies](project_dead_scheduled_time_anomalies.md) — is_late_am + is_in_but_not_out never fire (null van-zone times + suppressed); only the 2 van-transit alerts are live.

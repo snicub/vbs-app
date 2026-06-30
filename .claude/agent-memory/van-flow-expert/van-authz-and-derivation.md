@@ -1,0 +1,33 @@
+---
+name: van-authz-and-derivation
+description: How driver/aide van membership + PM-checkout authorization actually work — view-derived van IDs, _authorize_event by KIND, smart_checkout 0018 chain. Verified 2026-06-16.
+metadata:
+  type: project
+---
+
+Van membership and driver/aide authz are **derived live from the kid's stop**, never stored. Confirmed against migrations + view on 2026-06-16.
+
+**Van membership derivation (`student_day_status` view, latest def = migration 0012):**
+- View row set is `from student_day_records r` with **NO `attending` filter** — `attending` is only exposed as a column. Any consumer that wants attending-only must filter it themselves.
+- `morning_van_id` / `afternoon_van_id` come from `left join am_route/pm_route on route.stop_id = r.morning_stop_id / r.afternoon_stop_id`, where `*_route` is `unnest(routes.stop_ids)` filtered by direction. **NULL stop → NULL van.** No fallback.
+
+**Driver/aide authz (`_authorize_event`, latest def = migration 0017):**
+- coordinator/admin → always true. parent → always false.
+- driver==aide (no role distinction in DB). Allowed event KINDs: only the 4 van events (`van_boarded_am/_offloaded_am/_boarded_pm/_offloaded_pm`) + `override` (for the Undo toast).
+- AM events require `morning_van_id == _van_assigned_to_user_today(uid)`; PM events require `afternoon_van_id ==` it. `_van_assigned_to_user_today` (migration 0006) = the van where the user is driver_user_id OR aide_user_id on `current_date`. **NULL afternoon_van → `NULL = van` → false → 42501.**
+
+**`smart_checkout` (latest def = migration 0022; authz block byte-identical to 0018):** authz moved AFTER state/mode/path derivation, inside the advisory lock. Chain authorized by KIND: van-PM chain gated on `van_offloaded_pm` (assigned-afternoon-van check), parent chain gated on `parent_pickup`. This is the 0018 fix — before it, the whole chain was checked against `site_checked_out` which drivers/aides may never write, so every "Dropped off" tap 42501'd. **The 0018 authz is intact through 0022 and correct as of 2026-06-17.** 0022 adds optional `p_occurred_at` (chain stamped from it + per-event `+Nms` offset, defaults to now()); it drops the old 6-arg signature so the name resolves unambiguously.
+
+**0022 idempotency anchor (verified 2026-06-17, supersedes 0021 note):** key = `smart_checkout:<student>:<date>:<anchor>:<event_type>` where `<anchor>` = id of the latest event at chain-build time **over ALL rows incl. superseded/override** (`order by occurred_at desc, id desc limit 1`, coalesced to `'start'`). Insert wrapped in `begin/exception when unique_violation then null`. Global unique index on `idempotency_key` (migration 0003) so the guard fires. Double-tap / concurrent retry from any start state = clean no-op. **Undo-then-redo NOW WORKS:** an undo inserts an `override` row whose `occurred_at` is now(), making it the newest row → anchor moves to the override id → fresh key → the re-checkout records. (The 0021 note that "the anchor does NOT move on an Undo-then-redo" is STALE — anchor is over ALL rows, not the `_derive_state`-filtered set.)
+
+Staff (non-parent) use the **admin client** for smart_checkout (`check-out.ts`), so RLS is bypassed — release safety rests entirely on `_authorize_event` + `getSessionUser`, NOT RLS.
+
+**Door-to-door zone model — re-verified 2026-06-29 (final pre-event review). Latest view def is now migration 0026** (added `join public.students s … and s.archived_at is null`, and `/van/[vanId]` now DOES `.eq("attending", true)` — the old attending-filter bug is fixed on this surface). Derivation (`am_route`/`pm_route` unnest join) is unchanged from 0011→0026.
+- Each van = ONE pickup zone (a `stops` row carrying the van's color). `createVan` (vans.ts) provisions the zone AND calls `setVanRouteStops`, which inserts **BOTH** `direction=am` and `direction=pm` routes with `stop_ids=[zoneStop]` (vans.ts ~line 113-114). So a kid assigned that zone on both legs resolves to the SAME van for `morning_van_id` AND `afternoon_van_id` → PM-offload authz (`v_afternoon_van = v_assigned_van`) passes. A van created any other way (only one route) would NULL one leg and 42501 that direction.
+- **A kid with NO zone assigned is INVISIBLE on every van rider list** (NULL stop → NULL van → filtered out by the `.or(morning_van_id.eq,afternoon_van_id.eq)`). This is worse than the no-address flag, which only fires for kids who ARE on the van. The no-address flag (`/van/[vanId]/van-manifest.tsx` ~line 432) catches "on the van but family address blank/un-geocoded"; the zone-less kid just doesn't appear. Catching zone-less kids is the coordinator "Needs routing" worklist's job, upstream of the van surface.
+- **Addresses on the rider list:** `/van/[vanId]/page.tsx` reads `families` (street_address/city/state/postal_code/notes/lat/lng) via `createClient()`. RLS `families_own_or_staff_select` allows any `_is_staff()` (incl. driver/aide) to read ALL families — so a SIGNED-IN driver/aide gets addresses. In **no-login mode** (`ALLOW_NO_LOGIN=true`) `createClient()` returns the **service-role admin client** (server.ts line 25) which bypasses RLS entirely → addresses also load. Both modes work. `families.notes` is the coordinator-entered "Address notes" field (student edit form), correct to surface as "📝".
+- **No-login mode bypasses van authz entirely:** actor = oldest coordinator → `_authorize_event` returns true unconditionally → AM board + PM drop-off never 42501 regardless of which van. Reliability win for tomorrow; assigned-van scoping is simply not enforced (each of the 5 devices opens its own van URL). See [[no-login-session-mode]].
+- **GPS in no-login mode:** broadcastVanLocation's assignment check fails (coordinator isn't a driver/aide on the van) → hits the coordinator-override branch → logs ONE `van_gps_override` incident per van per day (dedup query works; `incidents` has occurred_at/van_id/category/reported_by_user_id). ~5 incidents/day of harmless noise. GPS still upserts.
+- **Loop workflow (27 riders, cap-12 van, multiple loops):** no capacity cap anywhere on the rider list — all 27 render. Per-kid state-machine drives buttons (boarded kid loses its board button; dropped kid loses its drop button), so a van boarding/dropping in batches across loops works. Two watch-items, neither a van blocker: (1) all riders share one zone → identical `stopOrder` → sorted by NAME only, no per-loop ordering; (2) early-loop AM-boarded kids can trip `is_boarded_but_not_arrived` (30-min threshold) on the COORDINATOR dashboard while the van finishes later loops — false-ish amber, not a stranding.
+
+Related: [[van-flow-known-bugs]], [[no-login-session-mode]]

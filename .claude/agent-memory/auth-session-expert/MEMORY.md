@@ -1,0 +1,4 @@
+- [Test coverage gaps](project_test-coverage-gaps.md) — only roles.test.ts exists; no-login gate + getSessionUser + link-guardian untested; how to test the gate (extract pure resolveNoSession)
+- [Surface drift](project_surface-drift.md) — auth callback / magic-link flow is GONE (now email+password); briefing/CLAUDE.md are stale on this — grep before citing
+- [No-login client selection](project_no-login-client-selection.md) — createClient returns admin client when ALLOW_NO_LOGIN; the 4a2b64c fix for stale-cookie-blanks-pages; record_event re-verifies role
+- [No-login preconditions](project_no-login-preconditions.md) — kiosk needs BOTH: flag string-exact "true" AND a coordinator/admin row in public.users, else null→lockout

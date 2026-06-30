@@ -1,0 +1,2 @@
+- [Presentation contract](project_presentation-contract.md) — how the single-source state/anomaly map is wired, its guards (safeDayState), and the known single-source test-coverage holes
+- [Dialog primitive gap](project_dialog-primitive-gap.md) — there is NO shared ui/dialog; modals are hand-rolled per-screen (van photo-verify, confirm-dialog); @base-ui dialog is installed but unused

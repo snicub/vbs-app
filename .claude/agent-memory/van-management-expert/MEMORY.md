@@ -1,0 +1,1 @@
+- [Van management domain invariants](project_van_invariants.md) — The load-bearing rules behind fleet setup (derived membership, conflict guard, per-(date,van) assignment) and where they live.

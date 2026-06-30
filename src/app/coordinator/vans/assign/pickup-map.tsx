@@ -476,6 +476,9 @@ function SideList({
                     >
                       {k.name}
                     </button>
+                    {g.key === "__none__" && (
+                      <RegionAssign studentId={k.studentId} vans={vans} />
+                    )}
                     <AddressEditor
                       studentId={k.studentId}
                       initialStreet={k.street}

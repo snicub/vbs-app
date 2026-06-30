@@ -1,0 +1,3 @@
+- [Review branch context](project_review_branch.md) — review-only audit on feat/vbs-safety-offline-routing-efficiency; createSignedUrls signedUrl can be null w/o error. (signedUrlsFor mapping NOW tested — tests/unit/signed-urls.test.ts.)
+- [Photo consent gap](project_photo_consent_gap.md) — photo collected at signup but no active v3 consent covers it; accepted gap (photo optional + private bucket), not a send-link blocker.
+- [Orphan photo on failed registration](project_orphan_photo_on_failed_registration.md) — registerFamily cleanup deletes DB rows only, leaves the uploaded photo in the private bucket; accepted (unreachable, KB of cruft).

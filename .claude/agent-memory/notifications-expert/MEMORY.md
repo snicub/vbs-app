@@ -1,0 +1,5 @@
+- [Anomaly-watch race design](project_anomaly-watch-race-design.md) — claim-then-send on the anomaly_notifications PK; W8 lib extraction is behaviorally identical to the route.
+- [Notifications known gaps](project_notifications-known-gaps.md) — null zone scheduled times kill is_late_am + is_in_but_not_out; only boarded/pm-stuck anomalies fire; no email ever sent.
+- [Opt-out enforced per-caller](project_optout-enforced-per-caller.md) — sendSms does NOT filter opt-out; each blast caller does; confirmation-on-register is the one intentional unfiltered send.
+- [Status link delivery](project_status-link-delivery.md) — confirmation SMS is the SOLE carrier of /parent/<token>; day-before reminder cron is now DELETED, no family-facing scheduled send remains.
+- [Capacity-check cron](project_capacity-check-cron.md) — replaced day-before reminder: coordinator-ONLY van-over-capacity text at 7PM Central; vercel.json has exactly two crons now.

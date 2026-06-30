@@ -12,8 +12,8 @@ import { ageFromDob } from "@/lib/registration/age";
 import { toast } from "sonner";
 import {
   updateStudent,
-  updateStudentDayRecord,
-  assignStudentToVan,
+  updateStudentModeAllDays,
+  assignStudentToVanAllDays,
   updateStudentPhoto,
 } from "@/server-actions/students";
 import { SaveIcon, BusIcon, ImageIcon } from "lucide-react";
@@ -33,11 +33,8 @@ async function blobToBase64(blob: Blob): Promise<string> {
   return btoa(binary);
 }
 
-const RIDES_VAN = new Set(["van", "parent_dropoff_only", "parent_pickup_only"]);
-
 export function StudentEditForm({
   studentId,
-  eventDate,
   initialName,
   initialAllergies,
   initialMedicalNotes,
@@ -45,8 +42,6 @@ export function StudentEditForm({
   initialAge,
   currentPhotoUrl,
   initialMode,
-  initialAttending,
-  hasDayRecord,
   vanOptions,
   currentVanId,
 }: {
@@ -77,7 +72,6 @@ export function StudentEditForm({
   const [photoPending, startPhotoTransition] = useTransition();
 
   const [mode, setMode] = useState(initialMode ?? "van");
-  const [attending, setAttending] = useState(initialAttending);
   const [selectedVanId, setSelectedVanId] = useState(currentVanId ?? "");
 
   function onDobChange(value: string) {
@@ -126,35 +120,34 @@ export function StudentEditForm({
     });
   }
 
-  function savePlan() {
+  function saveMode() {
     startTransition(async () => {
-      const result = await updateStudentDayRecord({ studentId, eventDate, mode, attending });
+      const result = await updateStudentModeAllDays({ studentId, mode });
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success("Today's plan saved");
+      toast.success("Transport mode saved (all VBS days)");
       router.refresh();
     });
   }
 
-  function assignVan() {
+  function assignRegion() {
     if (!selectedVanId) {
-      toast.error("Pick a van first");
+      toast.error("Pick a region first");
       return;
     }
     startTransition(async () => {
-      const result = await assignStudentToVan({ studentId, eventDate, vanId: selectedVanId });
+      const result = await assignStudentToVanAllDays({ studentId, vanId: selectedVanId });
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success("Assigned to van");
+      toast.success("Assigned to region (all VBS days)");
       router.refresh();
     });
   }
 
-  const ridesVan = RIDES_VAN.has(mode);
   const currentVan = vanOptions.find((v) => v.id === currentVanId) ?? null;
 
   return (
@@ -256,98 +249,72 @@ export function StudentEditForm({
         </div>
       </section>
 
-      {/* Today's plan section */}
-      {hasDayRecord && (
-        <section className="rounded-lg border bg-card p-4 space-y-4">
-          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-            Today&apos;s plan ({eventDate})
-          </h2>
+      {/* Transport & region — applies to ALL VBS days (door-to-door) */}
+      <section className="rounded-lg border bg-card p-4 space-y-4">
+        <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
+          Transport &amp; region
+          <span className="ml-2 normal-case font-normal text-muted-foreground/80">
+            (applies to every VBS day)
+          </span>
+        </h2>
 
-          <div className="flex items-center gap-3">
-            <input
-              type="checkbox"
-              id="attending"
-              checked={attending}
-              onChange={(e) => setAttending(e.target.checked)}
-              className="size-5 rounded accent-primary"
-            />
-            <Label htmlFor="attending">Attending today</Label>
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="mode">Transport mode</Label>
-            <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
-              <option value="van">Van (both ways)</option>
-              <option value="parent_dropoff_only">Parent dropoff, van home</option>
-              <option value="parent_pickup_only">Van to site, parent pickup</option>
-              <option value="parent_both">Parent both ways</option>
-            </Select>
-          </div>
-
-          <Button onClick={savePlan} disabled={pending}>
-            <SaveIcon /> Save today&apos;s plan
+        <div className="space-y-1.5">
+          <Label htmlFor="mode">How they get to &amp; from VBS</Label>
+          <Select id="mode" value={mode} onChange={(e) => setMode(e.target.value)}>
+            <option value="van">Van both ways</option>
+            <option value="parent_dropoff_only">Parent drops off, van home</option>
+            <option value="parent_pickup_only">Van to site, parent picks up</option>
+            <option value="parent_both">Parent both ways (no van)</option>
+          </Select>
+          <Button onClick={saveMode} disabled={pending} className="mt-2">
+            <SaveIcon /> Save transport mode
           </Button>
-        </section>
-      )}
+        </div>
 
-      {/* Van assignment section (door-to-door) */}
-      {hasDayRecord && ridesVan && (
-        <section className="rounded-lg border bg-card p-4 space-y-4">
-          <h2 className="font-semibold text-sm uppercase tracking-wide text-muted-foreground">
-            Assign to a van
-          </h2>
-
-          <p className="text-sm text-muted-foreground">
-            {currentVan ? (
-              <>
-                Currently on{" "}
-                <span className="font-medium text-foreground">{currentVan.name}</span>
-                {currentVan.zoneTown ? ` (${currentVan.zoneTown})` : ""}.
-              </>
-            ) : (
-              <span className="text-[var(--anomaly-warn)]">
-                Not on a van yet — pick one below.
-              </span>
-            )}
-          </p>
-
-          {vanOptions.length === 0 ? (
+        {mode !== "parent_both" && (
+          <div className="space-y-1.5 border-t pt-4">
+            <Label htmlFor="van">Region (van)</Label>
             <p className="text-sm text-muted-foreground">
-              No vans with a pickup zone are set up yet. Configure vans on the Vans screen.
+              {currentVan ? (
+                <>
+                  Currently on{" "}
+                  <span className="font-medium text-foreground">{currentVan.name}</span>
+                  {currentVan.zoneColorName ? ` (${currentVan.zoneColorName})` : ""}.
+                </>
+              ) : (
+                <span className="text-[var(--anomaly-warn)]">
+                  Not on a van yet — save the mode above, then pick a region.
+                </span>
+              )}
             </p>
-          ) : (
-            <>
-              <div className="space-y-1.5">
-                <Label htmlFor="van">Van</Label>
+
+            {vanOptions.length === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No vans with a pickup zone yet — set them up on the Vans screen.
+              </p>
+            ) : (
+              <>
                 <Select
                   id="van"
                   value={selectedVanId}
                   onChange={(e) => setSelectedVanId(e.target.value)}
                 >
-                  <option value="">-- choose a van --</option>
+                  <option value="">-- choose a region --</option>
                   {vanOptions.map((v) => (
                     <option key={v.id} value={v.id}>
                       {v.name}
-                      {v.zoneTown ? ` — ${v.zoneTown}` : ""}
                       {v.zoneColorName ? ` (${v.zoneColorName})` : ""}
                     </option>
                   ))}
                 </Select>
-              </div>
-
-              <Button onClick={assignVan} disabled={pending}>
-                <BusIcon /> Assign to van
-              </Button>
-            </>
-          )}
-        </section>
-      )}
-
-      {!hasDayRecord && (
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          No day record for {eventDate}. This student may not be registered for today.
-        </div>
-      )}
+                <Button onClick={assignRegion} disabled={pending} className="mt-2">
+                  <BusIcon /> Assign to region (all days)
+                </Button>
+              </>
+            )}
+          </div>
+        )}
+      </section>
     </div>
   );
 }

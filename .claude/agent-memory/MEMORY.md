@@ -1,0 +1,1 @@
+- [Offline coupling surface](project_offline_coupling_surface.md) — the one seam (2 replay senders in van-manifest); how to judge ripple from other flows fast.

@@ -1,0 +1,7 @@
+- [registerFamily insert chain](registerfamily-insert-chain.md) — exact insert order, partial-failure modes, and the consent-kind verification gap
+- [Consent v3 set and integrity model](consent-integrity.md) — v3 active kinds, the min(3)-not-set guard weakness, enum still holds all 5 kinds
+- [Field validation mirror points](field-validation-rules.md) — dob-or-age, optional-email, client/server mirrors (NOTE: van-requires-STOP section is superseded — see address-routing memory)
+- [Address routing & null stops](address-routing-and-null-stops.md) — post-rework: collects address not stop; deriveMode mapping; van kids get NULL stop ids; view-NULL cascade (no van/color/time, is_late_am dead)
+- [Parent token page projection](parent-token-page.md) — token validation, one-family service-role read, missing noindex, mailto guard status
+- [Wristband generation constraints](wristband-generation.md) — 32-char alphabet, checksum weights, DB format regex is wider than the alphabet
+- [Family vs guardian split](family-guardian-split.md) — family.primary_* (display/SMS) decoupled from guardians rows (auth match); updateFamilyContacts vs updateGuardianPhone; NOT-NULL cols

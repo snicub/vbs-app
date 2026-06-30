@@ -484,6 +484,73 @@ export async function assignStudentToVan(
   return { ok: true };
 }
 
+// -- Set a student's transport MODE for EVERY VBS day --
+
+const UpdateModeAllDaysSchema = z.object({
+  studentId: z.string().uuid(),
+  mode: z.enum(["van", "parent_dropoff_only", "parent_pickup_only", "parent_both"]),
+});
+
+/**
+ * Coordinator-only: set a student's transport mode for EVERY VBS day at once
+ * (e.g. "parent drops off AM, van home PM" = parent_dropoff_only). Reuses
+ * resolveDayRecordUpdate per day so a mode change clears the legs that mode no
+ * longer uses (the van assignment then re-points the legs it does use).
+ */
+export async function updateStudentModeAllDays(input: unknown): Promise<UpdateDayRecordResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = UpdateModeAllDaysSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+  const { studentId, mode } = parsed.data;
+  const supabase = await createClient();
+
+  const { data: recs } = await supabase
+    .from("student_day_status")
+    .select("event_date, state, mode, morning_stop_id, afternoon_stop_id")
+    .eq("student_id", studentId)
+    .in("event_date", [...VBS_DATES])
+    .returns<{
+      event_date: string;
+      state: string;
+      mode: string | null;
+      morning_stop_id: string | null;
+      afternoon_stop_id: string | null;
+    }[]>();
+  if (!recs || recs.length === 0) {
+    return { ok: false, error: "This student has no plan for the VBS days." };
+  }
+
+  for (const rec of recs) {
+    const resolved = resolveDayRecordUpdate(
+      {
+        state: rec.state,
+        mode: rec.mode,
+        morningStopId: rec.morning_stop_id,
+        afternoonStopId: rec.afternoon_stop_id,
+      },
+      { mode },
+    );
+    if (!resolved.ok) return { ok: false, error: resolved.error };
+    if (Object.keys(resolved.updates).length === 0) continue;
+    const { error } = await supabase
+      .from("student_day_records")
+      .update(resolved.updates as never)
+      .eq("student_id", studentId)
+      .eq("event_date", rec.event_date);
+    if (error) return { ok: false, error: error.message };
+  }
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true };
+}
+
 // -- Assign a student to a van for EVERY VBS day (door-to-door) --
 
 const AssignVanAllDaysSchema = z.object({

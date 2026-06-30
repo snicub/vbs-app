@@ -43,8 +43,9 @@ export function NameTagSheet({
             Name tags — {formatDate(date)}
           </h1>
           <p className="text-sm text-muted-foreground">
-            {tags.length} tag{tags.length === 1 ? "" : "s"} · prints on plain
-            letter paper, cut along the dashed lines.
+            {tags.length} tag{tags.length === 1 ? "" : "s"} · sized for{" "}
+            <span className="font-medium text-foreground">Avery 5395</span> adhesive name
+            badges (8 per sheet). Print at <span className="font-medium text-foreground">100% / Actual size</span> — not &ldquo;fit to page.&rdquo;
           </p>
           <p className="text-sm text-muted-foreground">
             Tap a name to edit it before printing — changes apply to this printout only.
@@ -94,32 +95,39 @@ export function NameTagSheet({
           No attending students for this date{town || van ? " with these filters" : ""}.
         </p>
       ) : (
-        <div className="nametag-grid mt-4 grid grid-cols-2 gap-3 print:mt-0 print:gap-0">
-          {tags.map((t) => (
-            <article
-              key={t.studentId}
-              className="nametag-card flex flex-col overflow-hidden rounded-lg border border-dashed border-gray-400 bg-white"
+        <div className="mt-4 space-y-6 print:mt-0 print:space-y-0">
+          {chunk(tags, 8).map((pageTags, pi) => (
+            <div
+              key={pi}
+              className="nametag-page grid grid-cols-2 gap-3 print:gap-0"
             >
-              <NameTagBand tag={t} />
-              <div className="flex flex-1 flex-col items-center justify-center px-3 py-3 text-center text-gray-900">
-                <span
-                  contentEditable
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  className="nametag-name rounded px-1 text-3xl font-bold leading-tight [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
+              {pageTags.map((t) => (
+                <article
+                  key={t.studentId}
+                  className="nametag-card flex flex-col overflow-hidden rounded-lg border border-dashed border-gray-400 bg-white"
                 >
-                  {t.firstName}
-                </span>
-                <span
-                  contentEditable
-                  suppressContentEditableWarning
-                  spellCheck={false}
-                  className="rounded px-1 text-lg font-medium [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
-                >
-                  {t.lastName}
-                </span>
-              </div>
-            </article>
+                  <NameTagBand tag={t} />
+                  <div className="flex flex-1 flex-col items-center justify-center px-3 py-3 text-center text-gray-900">
+                    <span
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      className="nametag-name rounded px-1 text-3xl font-bold leading-tight [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
+                    >
+                      {t.firstName}
+                    </span>
+                    <span
+                      contentEditable
+                      suppressContentEditableWarning
+                      spellCheck={false}
+                      className="rounded px-1 text-lg font-medium [overflow-wrap:anywhere] outline-none focus:bg-yellow-100 print:focus:bg-transparent"
+                    >
+                      {t.lastName}
+                    </span>
+                  </div>
+                </article>
+              ))}
+            </div>
           ))}
         </div>
       )}
@@ -204,6 +212,12 @@ function NameTagBand({ tag: t }: { tag: NameTag }) {
       <span className="shrink-0 text-sm font-semibold">{t.colorName ?? "P"}</span>
     </div>
   );
+}
+
+function chunk<T>(arr: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < arr.length; i += size) out.push(arr.slice(i, i + size));
+  return out;
 }
 
 function formatDate(iso: string): string {
