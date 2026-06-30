@@ -173,6 +173,18 @@
     size: letter;
     margin: 0;
   }
+  /* Van rosters: zero page margin removes the band where the browser prints its
+   * date/title/URL header, so the sheet is clean. The visual margin is restored
+   * by padding on each section instead. */
+  @page roster {
+    size: letter;
+    margin: 0;
+  }
+  .roster-section {
+    page: roster;
+    padding: 0.5in 0.55in;
+    box-sizing: border-box;
+  }
 
   html,
   body {

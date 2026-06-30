@@ -103,6 +103,12 @@ export default async function CoordinatorVansPage() {
             Print rosters
           </Link>
           <Link
+            href="/coordinator/vans/qr"
+            className={buttonVariants({ variant: "outline", size: "sm" })}
+          >
+            QR codes
+          </Link>
+          <Link
             href="/coordinator/vans/manage"
             className={buttonVariants({ variant: "outline", size: "sm" })}
           >
