@@ -26,7 +26,7 @@ const row = (over: Partial<Row> & { id: string }): Row => ({
   lastName: "Byron",
   wristbandCode: "AB23X",
   familyName: "Byron",
-  address: "12 Maple St, Sisseton",
+  address: "1 Main St, Sisseton",
   morningStop: "Maple",
   afternoonStop: "Oak",
   age: 8,
