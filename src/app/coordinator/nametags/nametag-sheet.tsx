@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import type { CSSProperties } from "react";
@@ -132,9 +133,13 @@ export function NameTagSheet({
               ))}
             </Select>
           </label>
-          <Button onClick={() => window.print()} className="ml-auto">
-            Print name tags
-          </Button>
+          <Link
+            href="/coordinator/nametags/quick"
+            className={buttonVariants({ variant: "outline" }) + " ml-auto"}
+          >
+            Quick single tag
+          </Link>
+          <Button onClick={() => window.print()}>Print name tags</Button>
         </div>
 
         <div className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/30 px-3 py-2">
