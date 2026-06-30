@@ -1,10 +1,12 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
+import { defaultVbsDate, VBS_DATES } from "@/lib/registration/dates";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan } from "@/lib/auth/roles";
 import { signedUrlsFor } from "@/lib/storage/signed-url";
 import { VanManifest } from "./van-manifest";
+import { VanDatePicker } from "./van-date-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -34,10 +36,13 @@ type StudentRow = {
 
 export default async function VanPage({
   params,
+  searchParams,
 }: {
   params: Promise<{ vanId: string }>;
+  searchParams: Promise<{ date?: string }>;
 }) {
   const { vanId } = await params;
+  const { date } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (!canDriveVan(user.role)) {
@@ -46,6 +51,11 @@ export default async function VanPage({
 
   const supabase = await createClient();
   const today = getLocalDate();
+  // Show "today" during the event; before it starts (today isn't a VBS day) fall
+  // back to the first VBS day so the roster isn't empty. An explicit ?date= picks
+  // any VBS day — for rehearsing the boarding flow ahead of time.
+  const day =
+    date && VBS_DATES.includes(date) ? date : defaultVbsDate(today);
 
   const { data: van } = await supabase
     .from("vans")
@@ -60,7 +70,7 @@ export default async function VanPage({
     .select(
       "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_name, wristband_color_for_day, morning_stop_id, afternoon_stop_id",
     )
-    .eq("event_date", today)
+    .eq("event_date", day)
     .eq("attending", true)
     .or(`morning_van_id.eq.${vanId},afternoon_van_id.eq.${vanId}`)
     .returns<StatusRow[]>();
@@ -182,16 +192,17 @@ export default async function VanPage({
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
-      <header className="space-y-1">
+      <header className="space-y-2">
         <h1 className="text-3xl font-semibold">{van.name} — riders</h1>
         <p className="text-muted-foreground text-base">
-          {today} · {roster.length} kid{roster.length === 1 ? "" : "s"}
+          {roster.length} kid{roster.length === 1 ? "" : "s"}
         </p>
+        <VanDatePicker vanId={vanId} dates={[...VBS_DATES]} selected={day} today={today} />
       </header>
 
       <VanManifest
         vanId={vanId}
-        eventDate={today}
+        eventDate={day}
         roster={roster}
         loadedAt={new Date().toISOString()}
       />
