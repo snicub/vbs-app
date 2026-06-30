@@ -52,6 +52,8 @@ export function VanManifest({
   const outbox = useOutbox({ submitEvent, smartCheckOut });
   const [pendingStudents, setPendingStudents] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState("");
+  // Two-tap confirm for "not coming today" (no_show is terminal — don't fire on a stray tap).
+  const [confirmNoShow, setConfirmNoShow] = useState<string | null>(null);
   // Auto-start location sharing on landing so the aide doesn't have to find the
   // toggle — opening the van page prompts for GPS permission immediately. They
   // can still tap "Stop GPS" to turn it off.
@@ -373,6 +375,8 @@ export function VanManifest({
                     isLegalTransition(state, "parent_pickup"));
                 // Boarded by mistake? Allow reverting while still on the van.
                 const canCancelBoarding = state === "van_boarded_am";
+                // A kid who hasn't started today can be marked not-coming (no-show).
+                const canMarkNoShow = isLegalTransition(state, "no_show");
                 return (
                   <li
                     key={r.studentId}
@@ -489,7 +493,7 @@ export function VanManifest({
                         density="comfortable"
                       />
 
-                      {(canBoardAm || canCheckOut || canCancelBoarding) && (
+                      {(canBoardAm || canCheckOut || canCancelBoarding || canMarkNoShow) && (
                         <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:flex-wrap">
                           {canBoardAm && (
                             <Button
@@ -520,6 +524,26 @@ export function VanManifest({
                               onClick={() => cancelBoardingFor(r.studentId)}
                             >
                               ↩ Cancel boarding
+                            </Button>
+                          )}
+                          {canMarkNoShow && (
+                            <Button
+                              variant="outline"
+                              size="lg"
+                              className="w-full text-base min-h-14 sm:w-auto"
+                              disabled={isPending || isQueued}
+                              onClick={() => {
+                                if (confirmNoShow === r.studentId) {
+                                  setConfirmNoShow(null);
+                                  fire(r.studentId, "no_show");
+                                } else {
+                                  setConfirmNoShow(r.studentId);
+                                }
+                              }}
+                            >
+                              {confirmNoShow === r.studentId
+                                ? "Tap again — confirm not coming"
+                                : "Not coming today"}
                             </Button>
                           )}
                         </div>

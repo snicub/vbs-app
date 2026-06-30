@@ -25,6 +25,17 @@ describe("localPlace", () => {
     expect(localPlace(parts(null, "12440 Barker Hill Rd"))).toEqual({ lat: 45.581278, lng: -97.061277 });
   });
 
+  it("catches the 'barker bill' mistype (street wins over an Agency Village town)", () => {
+    expect(localPlace(parts("Agency village", "#710 barker bill"))).toEqual({
+      lat: 45.581278,
+      lng: -97.061277,
+    });
+  });
+
+  it("treats Agency Village as Old Agency", () => {
+    expect(localPlace(parts("Agency Village"))).toEqual({ lat: 45.56781, lng: -97.06721 });
+  });
+
   it("returns null for a normal town the geocoder can handle", () => {
     expect(localPlace(parts("Sisseton"))).toBeNull();
     expect(localPlace(parts("Peever"))).toBeNull(); // plain Peever is a real town
