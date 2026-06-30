@@ -34,11 +34,14 @@ export function PickupMap({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [targetVanId, setTargetVanId] = useState<string | null>(vans[0]?.id ?? null);
   const [pending, setPending] = useState<null | "assign" | "suggest" | "locate">(null);
+  const [me, setMe] = useState<{ lat: number; lng: number; acc: number | null } | null>(null);
+  const [mapReady, setMapReady] = useState(false);
 
   const mapHostRef = useRef<HTMLDivElement>(null);
   const leafletRef = useRef<{
     map: import("leaflet").Map;
     markers: Map<string, import("leaflet").Marker>;
+    meMarker: import("leaflet").CircleMarker | null;
     L: typeof import("leaflet");
   } | null>(null);
   // A ref mirror of `selected` so the marker click handler (bound once) reads
@@ -104,7 +107,8 @@ export function PickupMap({
         );
       }
 
-      leafletRef.current = { map, markers, L };
+      leafletRef.current = { map, markers, meMarker: null, L };
+      setMapReady(true);
     }
     init();
     return () => {
@@ -114,6 +118,40 @@ export function PickupMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Track the coordinator's own live location (browser GPS). Errors are ignored.
+  useEffect(() => {
+    if (typeof navigator === "undefined" || !navigator.geolocation) return;
+    const id = navigator.geolocation.watchPosition(
+      (pos) =>
+        setMe({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy ?? null }),
+      () => {},
+      { enableHighAccuracy: true, maximumAge: 10_000, timeout: 20_000 },
+    );
+    return () => navigator.geolocation.clearWatch(id);
+  }, []);
+
+  // Draw / move the "you are here" dot (blue, distinct from the kid pins).
+  useEffect(() => {
+    const ctx = leafletRef.current;
+    if (!ctx || !me) return;
+    const { L, map } = ctx;
+    const label = `You are here${me.acc != null ? ` · ±${Math.round(me.acc)}m` : ""}`;
+    if (!ctx.meMarker) {
+      ctx.meMarker = L.circleMarker([me.lat, me.lng], {
+        radius: 7,
+        color: "#1d4ed8",
+        fillColor: "#3b82f6",
+        fillOpacity: 0.9,
+        weight: 3,
+      })
+        .addTo(map)
+        .bindPopup(label);
+    } else {
+      ctx.meMarker.setLatLng([me.lat, me.lng]);
+      ctx.meMarker.getPopup()?.setContent(label);
+    }
+  }, [me, mapReady]);
 
   // Re-style markers when selection changes (color is server-driven, refreshed
   // by router.refresh() after an assign, so it's fixed for a given render).
@@ -141,6 +179,13 @@ export function PickupMap({
     if (!ctx) return;
     ctx.map.flyTo([k.lat, k.lng], 15, { duration: 0.6 });
   }, []);
+
+  const flyToMe = useCallback(() => {
+    const ctx = leafletRef.current;
+    if (!ctx || !me) return;
+    ctx.map.flyTo([me.lat, me.lng], 15, { duration: 0.6 });
+    ctx.meMarker?.openPopup();
+  }, [me]);
 
   async function runAssign() {
     if (!targetVanId || selected.size === 0) return;
@@ -233,6 +278,21 @@ export function PickupMap({
             ? "Locating…"
             : `Locate ${locatableCount} home${locatableCount === 1 ? "" : "s"}`}
         </Button>
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={!me}
+          title={me ? "Center on your location" : "Waiting for your location…"}
+          onClick={flyToMe}
+        >
+          📍 {me ? "Me" : "Locating you…"}
+        </Button>
+        {me && (
+          <span className="text-xs text-muted-foreground">
+            You: {me.lat.toFixed(5)}, {me.lng.toFixed(5)}
+          </span>
+        )}
       </div>
 
       <div className="grid gap-3 lg:grid-cols-[1fr_320px]">
