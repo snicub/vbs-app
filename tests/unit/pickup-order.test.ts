@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/pickup-order";
+import { orderPickup, splitStopsIntoLoads, parseCrews, twoOptRoundTrip } from "@/lib/van-rosters/pickup-order";
 
 const r = (addressKey: string, lat: number | null, lng: number | null, name = addressKey) => ({
   addressKey,
@@ -49,6 +49,30 @@ describe("orderPickup", () => {
     expect(stops).toHaveLength(1);
     expect(unlocated).toHaveLength(1);
     expect(unlocated[0]!.name).toBe("Y");
+  });
+});
+
+describe("twoOptRoundTrip", () => {
+  const stop = (lat: number, lng: number, name: string) => ({ riders: [name], lat, lng });
+  // A square with the hub at one corner. (lat = y, lng = x; small planar deltas.)
+  const hub = { lat: 0, lng: 0 };
+
+  it("uncrosses an X-shaped route (the classic 2-opt fix)", () => {
+    // Visiting the two far corners diagonally crosses the return legs.
+    const crossed = [stop(0, 10, "x10"), stop(10, 0, "0x"), stop(10, 10, "xx")];
+    const fixed = twoOptRoundTrip(crossed, hub);
+    // The shortest round trip walks the square perimeter: (0,10)→(10,10)→(10,0).
+    expect(fixed.map((s) => s.riders[0])).toEqual(["x10", "xx", "0x"]);
+  });
+
+  it("never lengthens an already-optimal order", () => {
+    const optimal = [stop(0, 10, "a"), stop(10, 10, "b"), stop(10, 0, "c")];
+    expect(twoOptRoundTrip(optimal, hub).map((s) => s.riders[0])).toEqual(["a", "b", "c"]);
+  });
+
+  it("is a no-op for fewer than 3 stops", () => {
+    const two = [stop(5, 5, "a"), stop(1, 1, "b")];
+    expect(twoOptRoundTrip(two, hub)).toBe(two);
   });
 });
 
