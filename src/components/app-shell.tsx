@@ -23,6 +23,7 @@ function linksFor(role: UserRole): NavLink[] {
       { href: "/coordinator/acupuncture", label: "Acupuncture" },
       { href: "/coordinator/stops", label: "Colors" },
       { href: "/coordinator/vans", label: "Vans" },
+      { href: "/coordinator/van-rosters", label: "Driver Sheets" },
       { href: "/photos", label: "Photos" },
     ];
   }
