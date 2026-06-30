@@ -2,7 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   computeMetrics,
   computeVanBreakdown,
+  METRIC_MATCHERS,
   type DashStatus,
+  type MetricKey,
 } from "@/lib/coordinator/dashboard";
 
 function row(p: Partial<DashStatus>): DashStatus {
@@ -17,6 +19,32 @@ function row(p: Partial<DashStatus>): DashStatus {
     ...p,
   };
 }
+
+describe("dashboard: METRIC_MATCHERS match the card counts", () => {
+  // A spread of states + an anomaly, so every card has both members and non-members.
+  const rows = [
+    row({ state: "not_started" }),
+    row({ state: "van_boarded_am" }),
+    row({ state: "van_boarded_pm" }),
+    row({ state: "site_checked_in" }),
+    row({ state: "site_checked_out" }),
+    row({ state: "home" }),
+    row({ state: "marked_no_show" }),
+    row({ state: "site_checked_in", hasAnomaly: true }),
+    row({ state: "site_checked_in", attending: false }),
+  ];
+
+  it("each card's filtered count equals computeMetrics for that key", () => {
+    const metrics = computeMetrics(rows);
+    const attending = rows.filter((r) => r.attending);
+    for (const key of Object.keys(METRIC_MATCHERS) as MetricKey[]) {
+      const filtered = attending.filter((r) =>
+        METRIC_MATCHERS[key]({ state: r.state, hasAnomaly: r.hasAnomaly }),
+      ).length;
+      expect(filtered, key).toBe(metrics[key]);
+    }
+  });
+});
 
 describe("dashboard: computeMetrics", () => {
   it("counts only attending students as expected", () => {

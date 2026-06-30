@@ -38,16 +38,48 @@ export type DashboardMetrics = {
   needsAttention: number;
 };
 
+export type MetricKey = keyof DashboardMetrics;
+
+/**
+ * One predicate per stat card, evaluated on an attending row. `computeMetrics`
+ * counts with these AND the roster filters with these, so tapping a card always
+ * shows exactly the kids the number promised.
+ */
+export const METRIC_MATCHERS: Record<MetricKey, (r: { state: string; hasAnomaly: boolean }) => boolean> = {
+  expected: () => true,
+  onBoard: (r) => ON_BOARD.has(r.state),
+  atSite: (r) => AT_SITE_NOW.has(r.state),
+  checkedIn: (r) => REACHED_CHECK_IN.has(r.state),
+  home: (r) => r.state === "home",
+  noShow: (r) => r.state === "marked_no_show",
+  needsAttention: (r) => r.hasAnomaly,
+};
+
+export const METRIC_LABELS: Record<MetricKey, string> = {
+  expected: "Expected today",
+  onBoard: "On a van now",
+  atSite: "At site now",
+  checkedIn: "Checked in today",
+  home: "Home safe",
+  noShow: "No-shows",
+  needsAttention: "Needs attention",
+};
+
+export function isMetricKey(v: string | null | undefined): v is MetricKey {
+  return v != null && v in METRIC_MATCHERS;
+}
+
 export function computeMetrics(rows: DashStatus[]): DashboardMetrics {
   const att = rows.filter((r) => r.attending);
+  const count = (k: MetricKey) => att.filter((r) => METRIC_MATCHERS[k](r)).length;
   return {
-    expected: att.length,
-    onBoard: att.filter((r) => ON_BOARD.has(r.state)).length,
-    atSite: att.filter((r) => AT_SITE_NOW.has(r.state)).length,
-    checkedIn: att.filter((r) => REACHED_CHECK_IN.has(r.state)).length,
-    home: att.filter((r) => r.state === "home").length,
-    noShow: att.filter((r) => r.state === "marked_no_show").length,
-    needsAttention: att.filter((r) => r.hasAnomaly).length,
+    expected: count("expected"),
+    onBoard: count("onBoard"),
+    atSite: count("atSite"),
+    checkedIn: count("checkedIn"),
+    home: count("home"),
+    noShow: count("noShow"),
+    needsAttention: count("needsAttention"),
   };
 }
 

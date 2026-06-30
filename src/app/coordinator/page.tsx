@@ -15,7 +15,7 @@ import {
 import { AlertTriangleIcon, MapPinOffIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
 import { DashboardCards } from "./dashboard-cards";
-import { computeMetrics, computeVanBreakdown } from "@/lib/coordinator/dashboard";
+import { computeMetrics, computeVanBreakdown, isMetricKey } from "@/lib/coordinator/dashboard";
 import { needsRouting } from "@/lib/routing";
 import { RouteBuildButton } from "./route-build-button";
 
@@ -51,7 +51,7 @@ type StudentRow = {
 export default async function CoordinatorTodayPage({
   searchParams,
 }: {
-  searchParams: Promise<{ date?: string }>;
+  searchParams: Promise<{ date?: string; show?: string }>;
 }) {
   const user = await getSessionUser();
   if (!user) redirect("/login");
@@ -59,8 +59,9 @@ export default async function CoordinatorTodayPage({
     return <main className="p-6 text-sm">Coordinator access required.</main>;
   }
 
-  const { date } = await searchParams;
+  const { date, show } = await searchParams;
   const today = date ?? defaultVbsDate(getLocalDate());
+  const activeMetric = isMetricKey(show) ? show : null;
 
   const supabase = await createClient();
 
@@ -286,7 +287,7 @@ export default async function CoordinatorTodayPage({
       <DashboardCards metrics={metrics} vans={vanRollup} date={today} />
 
       {/* Roster */}
-      <RosterList students={sorted} />
+      <RosterList students={sorted} show={activeMetric} date={today} />
     </div>
   );
 }

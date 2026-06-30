@@ -46,9 +46,10 @@ export function DashboardCards({
           const value = metrics[key];
           const muted = value === 0;
           return (
-            <div
+            <Link
               key={key}
-              className="rounded-xl border bg-card p-4 border-t-4"
+              href={`/coordinator?date=${date}&show=${key}#roster`}
+              className="group rounded-xl border bg-card p-4 border-t-4 block transition hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               style={{ borderTopColor: muted ? "var(--border)" : tone }}
             >
               <Icon
@@ -62,10 +63,10 @@ export function DashboardCards({
               >
                 {value}
               </div>
-              <div className="mt-1.5 text-sm font-medium text-muted-foreground">
+              <div className="mt-1.5 text-sm font-medium text-muted-foreground group-hover:text-foreground">
                 {label}
               </div>
-            </div>
+            </Link>
           );
         })}
       </section>

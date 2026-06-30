@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { XIcon } from "lucide-react";
 import { type AnomalyKind } from "@/lib/anomaly";
 import { STATE_PRESENTATION, safeDayState } from "@/lib/state-presentation";
 import { StateBadge, SafetyPills } from "@/components/state-badge";
+import { METRIC_MATCHERS, METRIC_LABELS, type MetricKey } from "@/lib/coordinator/dashboard";
 
 export type RosterStudent = {
   student_id: string;
@@ -20,24 +22,47 @@ export type RosterStudent = {
   anomalies: AnomalyKind[];
 };
 
-export function RosterList({ students }: { students: RosterStudent[] }) {
+export function RosterList({
+  students,
+  show,
+  date,
+}: {
+  students: RosterStudent[];
+  /** Active stat-card filter from the URL; null = whole roster. */
+  show?: MetricKey | null;
+  /** The viewed day, so the "clear filter" link preserves it. */
+  date?: string;
+}) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
+  const byMetric = show
+    ? students.filter((s) =>
+        METRIC_MATCHERS[show]({ state: s.state, hasAnomaly: s.anomalies.length > 0 }),
+      )
+    : students;
   const visible = needle
-    ? students.filter(
+    ? byMetric.filter(
         (s) =>
           s.name.toLowerCase().includes(needle) ||
           s.familyName.toLowerCase().includes(needle) ||
           s.wristbandCode.toLowerCase().includes(needle),
       )
-    : students;
+    : byMetric;
 
   return (
-    <section className="rounded-xl border bg-card overflow-hidden">
+    <section id="roster" className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
       <div className="border-b px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
         <h2 className="font-semibold text-sm shrink-0">
-          Roster ({students.length})
+          {show ? `${METRIC_LABELS[show]} (${byMetric.length})` : `Roster (${students.length})`}
         </h2>
+        {show && (
+          <Link
+            href={`/coordinator${date ? `?date=${date}` : ""}#roster`}
+            className="inline-flex items-center gap-1 rounded-full border bg-muted/40 px-2 py-0.5 text-xs text-muted-foreground hover:text-foreground shrink-0"
+          >
+            <XIcon className="size-3" /> clear filter
+          </Link>
+        )}
         <input
           type="search"
           placeholder="Search by name, family, or wristband code…"
@@ -47,7 +72,7 @@ export function RosterList({ students }: { students: RosterStudent[] }) {
         />
         {needle && (
           <span className="text-xs text-muted-foreground shrink-0">
-            {visible.length} of {students.length}
+            {visible.length} of {byMetric.length}
           </span>
         )}
         {!needle && (
@@ -58,7 +83,11 @@ export function RosterList({ students }: { students: RosterStudent[] }) {
       </div>
       {visible.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground text-center">
-          No students match &ldquo;{query}&rdquo;
+          {needle
+            ? `No students match “${query}”`
+            : show
+              ? `No kids in “${METRIC_LABELS[show]}” right now.`
+              : "No students."}
         </p>
       ) : (
         <ul className="divide-y">
