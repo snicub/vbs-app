@@ -1,12 +1,10 @@
 import { redirect, notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { getLocalDate } from "@/lib/date";
-import { defaultVbsDate, VBS_DATES } from "@/lib/registration/dates";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan } from "@/lib/auth/roles";
 import { signedUrlsFor } from "@/lib/storage/signed-url";
 import { VanManifest } from "./van-manifest";
-import { VanDatePicker } from "./van-date-picker";
 
 export const dynamic = "force-dynamic";
 
@@ -36,13 +34,10 @@ type StudentRow = {
 
 export default async function VanPage({
   params,
-  searchParams,
 }: {
   params: Promise<{ vanId: string }>;
-  searchParams: Promise<{ date?: string }>;
 }) {
   const { vanId } = await params;
-  const { date } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (!canDriveVan(user.role)) {
@@ -50,12 +45,7 @@ export default async function VanPage({
   }
 
   const supabase = await createClient();
-  const today = getLocalDate();
-  // Show "today" during the event; before it starts (today isn't a VBS day) fall
-  // back to the first VBS day so the roster isn't empty. An explicit ?date= picks
-  // any VBS day — for rehearsing the boarding flow ahead of time.
-  const day =
-    date && VBS_DATES.includes(date) ? date : defaultVbsDate(today);
+  const day = getLocalDate();
 
   const { data: van } = await supabase
     .from("vans")
@@ -197,7 +187,6 @@ export default async function VanPage({
         <p className="text-muted-foreground text-base">
           {roster.length} kid{roster.length === 1 ? "" : "s"}
         </p>
-        <VanDatePicker vanId={vanId} dates={[...VBS_DATES]} selected={day} today={today} />
       </header>
 
       {van.capacity > 0 && roster.length > van.capacity && (

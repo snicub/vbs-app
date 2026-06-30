@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { submitEvent } from "@/server-actions/events";
+import { submitEvent, cancelBoarding } from "@/server-actions/events";
 import { smartCheckOut } from "@/server-actions/check-out";
 import { broadcastVanLocation } from "@/server-actions/van";
 import { isLegalTransition } from "@/lib/events/state-machine";
@@ -50,6 +51,7 @@ export function VanManifest({
   const router = useRouter();
   const outbox = useOutbox({ submitEvent, smartCheckOut });
   const [pendingStudents, setPendingStudents] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
   // Auto-start location sharing on landing so the aide doesn't have to find the
   // toggle — opening the van page prompts for GPS permission immediately. They
   // can still tap "Stop GPS" to turn it off.
@@ -216,6 +218,24 @@ export function VanManifest({
       });
   }
 
+  function cancelBoardingFor(studentId: string) {
+    addPending(studentId);
+    void cancelBoarding({ studentId, eventDate })
+      .then((result) => {
+        removePending(studentId);
+        if (!result.ok) {
+          toast.error(result.error);
+          return;
+        }
+        toast.success("Boarding cancelled");
+        router.refresh();
+      })
+      .catch(() => {
+        removePending(studentId);
+        toast.error("Couldn't cancel — check your connection and try again.");
+      });
+  }
+
   function fire(studentId: string, eventType: string) {
     // Client-generated key so an offline replay dedupes to one event; captured
     // time so the event records when it happened, not when it later syncs.
@@ -314,8 +334,21 @@ export function VanManifest({
         </Button>
       </div>
 
-      <ul className="space-y-4 mt-5">
-        {roster.map((r) => {
+      <Input
+        placeholder="Search this van's riders by name…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="mt-5 text-base"
+      />
+
+      <ul className="space-y-4 mt-3">
+        {roster
+          .filter((r) =>
+            search.trim()
+              ? r.name.toLowerCase().includes(search.trim().toLowerCase())
+              : true,
+          )
+          .map((r) => {
                 const state = safeDayState(r.state);
                 const presentation = STATE_PRESENTATION[state];
                 const isPending = pendingStudents.has(r.studentId);
@@ -329,6 +362,8 @@ export function VanManifest({
                   (isLegalTransition(state, "site_checked_out") ||
                     isLegalTransition(state, "van_offloaded_pm") ||
                     isLegalTransition(state, "parent_pickup"));
+                // Boarded by mistake? Allow reverting while still on the van.
+                const canCancelBoarding = state === "van_boarded_am";
                 return (
                   <li
                     key={r.studentId}
@@ -445,7 +480,7 @@ export function VanManifest({
                         density="comfortable"
                       />
 
-                      {(canBoardAm || canCheckOut) && (
+                      {(canBoardAm || canCheckOut || canCancelBoarding) && (
                         <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:flex-wrap">
                           {canBoardAm && (
                             <Button
@@ -465,6 +500,17 @@ export function VanManifest({
                               onClick={() => requestVerify(r, "drop_off")}
                             >
                               <HomeIcon /> Dropped off
+                            </Button>
+                          )}
+                          {canCancelBoarding && (
+                            <Button
+                              variant="outline"
+                              size="lg"
+                              className="w-full text-base min-h-14 sm:w-auto"
+                              disabled={isPending || isQueued}
+                              onClick={() => cancelBoardingFor(r.studentId)}
+                            >
+                              ↩ Cancel boarding
                             </Button>
                           )}
                         </div>

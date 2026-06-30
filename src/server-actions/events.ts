@@ -194,6 +194,56 @@ export async function undoEvent(input: unknown): Promise<
 }
 
 /**
+ * Cancel an AM boarding tapped by mistake — reverts the child to "not started".
+ * Only works while they're still "on the van" (no check-in recorded yet), so it
+ * can never rewrite a kid who has already moved on. Reuses undoEvent so all the
+ * supersession + audit rules apply.
+ */
+const CancelBoardingSchema = z.object({
+  studentId: z.string().uuid(),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export async function cancelBoarding(input: unknown): Promise<
+  { ok: true } | { ok: false; error: string }
+> {
+  const session = await getSessionUser();
+  if (!session) return { ok: false, error: "Not signed in" };
+  const parsed = CancelBoardingSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+  const { studentId, eventDate } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: status } = await admin
+    .from("student_day_status")
+    .select("state")
+    .eq("student_id", studentId)
+    .eq("event_date", eventDate)
+    .maybeSingle<{ state: string }>();
+  if (status?.state !== "van_boarded_am") {
+    return {
+      ok: false,
+      error: "Can only cancel while the child is still on the van (not checked in yet).",
+    };
+  }
+
+  const { data: ev } = await admin
+    .from("student_day_events")
+    .select("id")
+    .eq("student_id", studentId)
+    .eq("event_date", eventDate)
+    .eq("event_type", "van_boarded_am")
+    .is("superseded_by_event_id", null)
+    .order("occurred_at", { ascending: false })
+    .limit(1)
+    .maybeSingle<{ id: string }>();
+  if (!ev) return { ok: false, error: "No boarding found to cancel." };
+
+  const result = await undoEvent({ eventId: ev.id });
+  return result.ok ? { ok: true } : result;
+}
+
+/**
  * Look up a student by wristband code (case-insensitive after validation).
  * Returns the student's current-day status for the table UI.
  */
