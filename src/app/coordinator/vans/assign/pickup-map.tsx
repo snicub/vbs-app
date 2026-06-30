@@ -250,6 +250,7 @@ export function PickupMap({
         <aside className="space-y-3">
           <SideList
             pinnable={pinnable}
+            vans={vans}
             selected={selected}
             onToggle={toggle}
             onLocate={flyTo}
@@ -309,8 +310,38 @@ export function PickupMap({
   );
 }
 
+/** Group located kids by their current van/region — named vans alphabetical,
+ *  "No van yet" last; kids sorted by name within each region. */
+function groupByRegion(
+  pinnable: PinnableKid[],
+  vans: VanOption[],
+): { key: string; name: string; color: string; kids: PinnableKid[] }[] {
+  const vanById = new Map(vans.map((v) => [v.id, v]));
+  const byVan = new Map<string, PinnableKid[]>();
+  for (const k of pinnable) {
+    const key = k.currentVanId ?? "__none__";
+    (byVan.get(key) ?? byVan.set(key, []).get(key)!).push(k);
+  }
+  return Array.from(byVan.entries())
+    .map(([key, kids]) => {
+      const van = key === "__none__" ? undefined : vanById.get(key);
+      return {
+        key,
+        name: van?.name ?? "No van yet",
+        color: van?.colorCode ?? UNASSIGNED_PIN_COLOR,
+        kids: kids.slice().sort((a, b) => a.name.localeCompare(b.name)),
+      };
+    })
+    .sort((a, b) => {
+      if (a.key === "__none__") return 1;
+      if (b.key === "__none__") return -1;
+      return a.name.localeCompare(b.name);
+    });
+}
+
 function SideList({
   pinnable,
+  vans,
   selected,
   onToggle,
   onLocate,
@@ -318,6 +349,7 @@ function SideList({
   onClear,
 }: {
   pinnable: PinnableKid[];
+  vans: VanOption[];
   selected: Set<string>;
   onToggle: (id: string) => void;
   onLocate: (k: PinnableKid) => void;
@@ -325,6 +357,7 @@ function SideList({
   onClear: () => void;
 }) {
   const allSelected = pinnable.length > 0 && selected.size >= pinnable.length;
+  const groups = groupByRegion(pinnable, vans);
   return (
     <div className="rounded-lg border bg-card">
       <div className="flex items-center justify-between gap-2 border-b px-3 py-2 text-sm">
@@ -355,42 +388,46 @@ function SideList({
           No located homes for this day yet — use “Locate homes”.
         </p>
       ) : (
-        <ul className="max-h-[42dvh] overflow-y-auto divide-y">
-          {pinnable.map((k) => {
-            const color = k.currentVanColor;
-            const onVan = !!k.currentVanId;
-            return (
-              <li key={k.studentId} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
-                <input
-                  type="checkbox"
-                  className="size-4 shrink-0"
-                  checked={selected.has(k.studentId)}
-                  onChange={() => onToggle(k.studentId)}
-                  aria-label={`Select ${k.name}`}
-                />
+        <div className="max-h-[42dvh] overflow-y-auto">
+          {groups.map((g) => (
+            <div key={g.key}>
+              <div className="sticky top-0 z-10 flex items-center gap-2 border-b bg-muted/80 px-3 py-1.5 text-xs font-semibold backdrop-blur">
                 <span
                   className="inline-block size-3 rounded-full border shrink-0"
-                  style={{ background: color }}
-                  title={onVan ? "On a van" : "No van yet"}
+                  style={{ background: g.color }}
                   aria-hidden
                 />
-                <button
-                  type="button"
-                  className="min-w-0 flex-1 truncate text-left hover:underline"
-                  onClick={() => onLocate(k)}
-                >
-                  {k.name}
-                </button>
-                <AddressEditor
-                  studentId={k.studentId}
-                  initialStreet={k.street}
-                  initialCity={k.city}
-                  cta="Edit address"
-                />
-              </li>
-            );
-          })}
-        </ul>
+                {g.name} ({g.kids.length})
+              </div>
+              <ul className="divide-y">
+                {g.kids.map((k) => (
+                  <li key={k.studentId} className="flex flex-wrap items-center gap-2 px-3 py-2 text-sm">
+                    <input
+                      type="checkbox"
+                      className="size-4 shrink-0"
+                      checked={selected.has(k.studentId)}
+                      onChange={() => onToggle(k.studentId)}
+                      aria-label={`Select ${k.name}`}
+                    />
+                    <button
+                      type="button"
+                      className="min-w-0 flex-1 truncate text-left hover:underline"
+                      onClick={() => onLocate(k)}
+                    >
+                      {k.name}
+                    </button>
+                    <AddressEditor
+                      studentId={k.studentId}
+                      initialStreet={k.street}
+                      initialCity={k.city}
+                      cta="Edit address"
+                    />
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       )}
     </div>
   );
