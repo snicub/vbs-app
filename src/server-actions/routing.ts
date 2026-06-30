@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
-import { geocodeAddress, familyAddressQuery } from "@/lib/geocode";
+import { geocodeFamilyAddress, familyAddressQuery } from "@/lib/geocode";
 import { assignStopsForMode, nearestStopId, type StopPoint } from "@/lib/route-build";
 import { haversineMeters } from "@/lib/geo";
 import { ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
@@ -135,7 +135,7 @@ export async function autoAssignStopsFromAddresses(
   for (let i = 0; i < families.length; i += GEOCODE_BATCH) {
     const batch = families.slice(i, i + GEOCODE_BATCH);
     const points = await Promise.all(
-      batch.map(async (fam) => ({ id: fam.id, pt: await geocodeAddress(familyAddressQuery(toAddr(fam))) })),
+      batch.map(async (fam) => ({ id: fam.id, pt: await geocodeFamilyAddress(toAddr(fam)) })),
     );
     for (const { id, pt } of points) {
       if (!pt) {
@@ -284,7 +284,7 @@ export async function locateStudentHomes(
   for (let i = 0; i < families.length; i += GEOCODE_BATCH) {
     const batch = families.slice(i, i + GEOCODE_BATCH);
     const points = await Promise.all(
-      batch.map(async (fam) => ({ id: fam.id, pt: await geocodeAddress(familyAddressQuery(toAddr(fam))) })),
+      batch.map(async (fam) => ({ id: fam.id, pt: await geocodeFamilyAddress(toAddr(fam)) })),
     );
     for (const { id, pt } of points) {
       if (!pt) {
@@ -354,8 +354,7 @@ export async function setStudentHomeAddress(input: unknown): Promise<SetHomeAddr
     .maybeSingle<{ family_id: string }>();
   if (!student) return { ok: false, error: "Student not found" };
 
-  const query = familyAddressQuery({ streetAddress, city, state: "SD", postalCode: null });
-  const pt = query ? await geocodeAddress(query) : null;
+  const pt = await geocodeFamilyAddress({ streetAddress, city, state: "SD", postalCode: null });
 
   const { error } = await admin
     .from("families")

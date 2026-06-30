@@ -23,13 +23,46 @@ export async function geocodeAddress(query: string): Promise<GeoPoint | null> {
   return env.MAPBOX_TOKEN ? geocodeMapbox(q, env.MAPBOX_TOKEN) : geocodeNominatim(q);
 }
 
-/** Build a single-line query from a family's address parts. */
-export function familyAddressQuery(f: {
+type AddressParts = {
   streetAddress: string | null;
   city: string | null;
   state: string | null;
   postalCode: string | null;
-}): string {
+};
+
+// Local reservation/town names the external geocoder does NOT recognize — an
+// address using one of these as its town would fail to geocode (or worse, match a
+// same-named street far away). Each maps to the region's center, so the home
+// resolves to the right region/van. The driver still navigates by the full street
+// address shown on the rider list. Keep these in sync with the van zones.
+const LOCAL_TOWNS: { match: RegExp; pt: GeoPoint }[] = [
+  { match: /b[ae]rk\w*\s*hill/i, pt: { lat: 45.581278, lng: -97.061277 } },
+  { match: /long\s*hollow/i, pt: { lat: 45.65316, lng: -97.04586 } },
+  { match: /old\s*agency/i, pt: { lat: 45.56781, lng: -97.06721 } },
+  { match: /peever\s*flat/i, pt: { lat: 45.54375, lng: -96.95493 } },
+];
+
+/** If the address's town/street names a known local region, return its center. */
+export function localPlace(f: AddressParts): GeoPoint | null {
+  const hay = `${f.city ?? ""} ${f.streetAddress ?? ""}`;
+  for (const lt of LOCAL_TOWNS) if (lt.match.test(hay)) return lt.pt;
+  return null;
+}
+
+/**
+ * Geocode a family's home. A known local town (Barker Hill, Long Hollows, Old
+ * Agency, Peever Flat) resolves straight to the region center — those names don't
+ * geocode externally. Everything else goes through the Sisseton-biased geocoder.
+ */
+export async function geocodeFamilyAddress(f: AddressParts): Promise<GeoPoint | null> {
+  const local = localPlace(f);
+  if (local) return local;
+  const q = familyAddressQuery(f);
+  return q ? geocodeAddress(q) : null;
+}
+
+/** Build a single-line query from a family's address parts. */
+export function familyAddressQuery(f: AddressParts): string {
   return [f.streetAddress, f.city, f.state, f.postalCode]
     .map((p) => p?.trim())
     .filter(Boolean)
