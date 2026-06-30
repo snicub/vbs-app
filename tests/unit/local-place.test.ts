@@ -37,7 +37,9 @@ describe("localPlace", () => {
   it("resolves the other local reservation towns", () => {
     expect(localPlace(parts("Long Hollows"))).toEqual({ lat: 45.65316, lng: -97.04586 });
     expect(localPlace(parts("Old Agency"))).toEqual({ lat: 45.56781, lng: -97.06721 });
-    expect(localPlace(parts("Peever Flat"))).toEqual({ lat: 45.54375, lng: -96.95493 });
+    // Peever + Peever Flat merged → one Peever zone.
+    expect(localPlace(parts("Peever Flat"))).toEqual({ lat: 45.5391, lng: -96.9578 });
+    expect(localPlace(parts("Peever"))).toEqual({ lat: 45.5391, lng: -96.9578 });
   });
 
   it("matches when the town is written in the street line", () => {
@@ -67,9 +69,8 @@ describe("localPlace", () => {
     });
   });
 
-  it("returns null for a normal town the geocoder can handle", () => {
+  it("returns null when no region is named (geocoder handles it)", () => {
     expect(localPlace(parts("Sisseton"))).toBeNull();
-    expect(localPlace(parts("Peever"))).toBeNull(); // plain Peever is a real town
     expect(localPlace(parts(null, null))).toBeNull();
   });
 });

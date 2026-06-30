@@ -36,13 +36,13 @@ type AddressParts = {
 // resolves to the right region/van. The driver still navigates by the full street
 // address shown on the rider list. Keep these in sync with the van zones.
 const LOCAL_TOWNS: { match: RegExp; pt: GeoPoint }[] = [
-  // Barker Hill — also catch the common "barker bill" mistype. Checked first so a
-  // "barker …" street wins even when the town field says something else.
+  // Barker Hill — also catch the common "barker bill" / "barkerhill" mistypes.
   { match: /b[ae]rk\w*\s*(hill|bill)/i, pt: { lat: 45.581278, lng: -97.061277 } },
   { match: /long\s*hollow/i, pt: { lat: 45.65316, lng: -97.04586 } },
   // Old Agency is the community of Agency Village, so accept either name.
   { match: /old\s*agency|agency\s*village/i, pt: { lat: 45.56781, lng: -97.06721 } },
-  { match: /peever\s*flat/i, pt: { lat: 45.54375, lng: -96.95493 } },
+  // Peever + Peever Flat(s) merged into one van — both map to the Peever zone.
+  { match: /peever/i, pt: { lat: 45.5391, lng: -96.9578 } },
 ];
 
 /**

@@ -28,30 +28,31 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   // Optional age-range filter: build groups from only kids in this band.
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
-  // When set, only this group is shown to the printer (a single full-page roster).
-  const [printOnly, setPrintOnly] = useState<string | null>(null);
+  // When set (a group index), only that group is shown to the printer.
+  const [printOnly, setPrintOnly] = useState<number | null>(null);
   useEffect(() => {
     if (printOnly == null) return;
     window.print();
     setPrintOnly(null);
   }, [printOnly]);
-  // Teacher names per group (by group label), typed in for the printout.
-  const [teacherNames, setTeacherNames] = useState<Record<string, string[]>>({});
-  const teachersFor = (label: string) => teacherNames[label] ?? [""];
-  function setTeacher(label: string, idx: number, value: string) {
+  // Teacher names per group, keyed by group INDEX (stable across control tweaks —
+  // the label embeds the age range, which changes when you regroup).
+  const [teacherNames, setTeacherNames] = useState<Record<number, string[]>>({});
+  const teachersFor = (gi: number) => teacherNames[gi] ?? [""];
+  function setTeacher(gi: number, idx: number, value: string) {
     setTeacherNames((prev) => {
-      const list = [...(prev[label] ?? [""])];
+      const list = [...(prev[gi] ?? [""])];
       list[idx] = value;
-      return { ...prev, [label]: list };
+      return { ...prev, [gi]: list };
     });
   }
-  function addTeacher(label: string) {
-    setTeacherNames((prev) => ({ ...prev, [label]: [...(prev[label] ?? [""]), ""] }));
+  function addTeacher(gi: number) {
+    setTeacherNames((prev) => ({ ...prev, [gi]: [...(prev[gi] ?? [""]), ""] }));
   }
-  function removeTeacher(label: string, idx: number) {
+  function removeTeacher(gi: number, idx: number) {
     setTeacherNames((prev) => {
-      const list = (prev[label] ?? [""]).filter((_, i) => i !== idx);
-      return { ...prev, [label]: list.length ? list : [""] };
+      const list = (prev[gi] ?? [""]).filter((_, i) => i !== idx);
+      return { ...prev, [gi]: list.length ? list : [""] };
     });
   }
 
@@ -174,12 +175,15 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
         </p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:block print:gap-0">
-          {groups.map((g) => (
+          {groups.map((g, gi) => (
             <section
-              key={g.label}
+              key={gi}
               className={cn(
-                "roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid print:break-before-page",
-                printOnly && printOnly !== g.label && "print:hidden",
+                "roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid",
+                // One-per-page only when printing the whole set; a single-group
+                // print needs no leading break (avoids a blank first page).
+                printOnly == null && "print:break-before-page",
+                printOnly != null && printOnly !== gi && "print:hidden",
               )}
             >
               <header className="border-b bg-muted/40 px-4 py-2 space-y-1.5">
@@ -191,7 +195,7 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
                     </span>
                     <button
                       type="button"
-                      onClick={() => setPrintOnly(g.label)}
+                      onClick={() => setPrintOnly(gi)}
                       className="print:hidden rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted"
                     >
                       Print
@@ -200,20 +204,20 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
                 </div>
                 <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm print:text-lg">
                   <span className="text-xs font-medium text-muted-foreground">
-                    Teacher{teachersFor(g.label).length > 1 ? "s" : ""}:
+                    Teacher{teachersFor(gi).length > 1 ? "s" : ""}:
                   </span>
-                  {teachersFor(g.label).map((t, ti) => (
+                  {teachersFor(gi).map((t, ti) => (
                     <span key={ti} className="inline-flex items-center gap-0.5">
                       <input
                         value={t}
-                        onChange={(e) => setTeacher(g.label, ti, e.target.value)}
+                        onChange={(e) => setTeacher(gi, ti, e.target.value)}
                         placeholder="name"
                         className="w-28 rounded border-b border-dashed bg-transparent px-1 outline-none focus:bg-yellow-100 print:border-0 print:focus:bg-transparent"
                       />
-                      {teachersFor(g.label).length > 1 && (
+                      {teachersFor(gi).length > 1 && (
                         <button
                           type="button"
-                          onClick={() => removeTeacher(g.label, ti)}
+                          onClick={() => removeTeacher(gi, ti)}
                           className="print:hidden text-muted-foreground hover:text-destructive"
                           title="Remove teacher"
                         >
@@ -224,7 +228,7 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
                   ))}
                   <button
                     type="button"
-                    onClick={() => addTeacher(g.label)}
+                    onClick={() => addTeacher(gi)}
                     className="print:hidden text-xs font-medium text-primary hover:underline"
                   >
                     + teacher
