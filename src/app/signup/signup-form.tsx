@@ -235,8 +235,8 @@ export function SignupForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-6">
-      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+    <form onSubmit={onSubmit} className="space-y-4">
+      <section className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
         <h2 className="text-xl font-semibold">Caregiver&apos;s info</h2>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label="Your name" required>
@@ -267,7 +267,7 @@ export function SignupForm({
         </Field>
       </section>
 
-      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+      <section className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Children</h2>
           <Button
@@ -279,7 +279,7 @@ export function SignupForm({
           </Button>
         </div>
         {students.map((s, i) => (
-          <fieldset key={s.id} className="rounded-xl border bg-muted/30 p-4 space-y-4">
+          <fieldset key={s.id} className="rounded-xl border bg-muted/30 p-3 space-y-3">
             <div className="flex items-center justify-between gap-2">
               <span className="text-base font-medium">Child #{i + 1}</span>
               {students.length > 1 && (
@@ -360,7 +360,7 @@ export function SignupForm({
         ))}
       </section>
 
-      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+      <section className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
         <div>
           <h2 className="text-xl font-semibold">
             Home address
@@ -440,8 +440,17 @@ export function SignupForm({
         </div>
       </details>
 
-      <section className="space-y-4 rounded-2xl border bg-card p-5 shadow-sm sm:p-6">
+      <section className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
         <h2 className="text-xl font-semibold">Please agree to the following</h2>
+        <label className="flex gap-3 items-center rounded-lg border-2 border-primary/40 bg-primary/5 p-3 min-h-12">
+          <Checkbox
+            checked={consents.length > 0 && agreedKinds.size === consents.length}
+            onCheckedChange={(checked: boolean) =>
+              setAgreedKinds(checked ? new Set(consents.map((c) => c.kind)) : new Set())
+            }
+          />
+          <span className="text-base font-semibold">Agree to all</span>
+        </label>
         <div className="space-y-3">
           {consents.map((c) => (
             <label key={c.kind} className="flex gap-3 items-start rounded-lg border bg-muted/30 p-3">
