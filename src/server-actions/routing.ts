@@ -95,7 +95,7 @@ export async function autoAssignStopsFromAddresses(
   // is named after the region). This is what makes routing exact: a Barker Hill
   // address goes to the stop literally named "Barker Hill", never to whatever zone
   // is geographically nearest a hardcoded center.
-  const REGION_KEYS = ["barker", "hollow", "agency", "peever"] as const;
+  const REGION_KEYS = ["barker", "hollow", "agency", "peever", "sisseton"] as const;
   const zoneStopIdByKey = new Map<string, string>();
   for (const s of stopsData ?? []) {
     if (!routedStopIds.has(s.id)) continue;

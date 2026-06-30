@@ -47,15 +47,29 @@ const LOCAL_TOWNS: { match: RegExp; key: string; pt: GeoPoint }[] = [
   { match: /peever/i, key: "peever", pt: { lat: 45.5391, lng: -96.9578 } },
 ];
 
+// Catch-all bucket for in-town Sisseton homes that name NO specific reservation
+// region — they ride the "Sisseton general" van. Checked LAST so a Sisseton-town
+// home on a "Barker Hill" road still goes to Barker Hill.
+// /siss/ catches the common mistypes too (sisseton, sisseron, sissteon).
+const SISSETON_GENERAL = { match: /siss/i, key: "sisseton", pt: { lat: 45.663, lng: -97.0481 } };
+
 /**
- * The matched local region for an address. The TOWN field decides and is checked
- * FIRST — a reservation town there wins even when a street name mentions a different
- * town (an "Agency Village" home on a road called "Barker Hill" is Old Agency). The
- * street is only a fallback when the town doesn't name a region.
+ * The matched local region for an address, in priority order:
+ *   1) the TOWN field names a specific region (wins over the street),
+ *   2) else the STREET names a specific region,
+ *   3) else a Sisseton town/street → the "Sisseton general" bucket.
+ * So an "Agency Village" home on a "Barker Hill" road is Old Agency; a "Sisseton"
+ * home on a "Barker Hill" road is Barker Hill; a plain Sisseton home is general.
  */
-function matchLocalTown(f: AddressParts): (typeof LOCAL_TOWNS)[number] | null {
+function matchLocalTown(f: AddressParts): { key: string; pt: GeoPoint } | null {
   for (const lt of LOCAL_TOWNS) if (f.city && lt.match.test(f.city)) return lt;
   for (const lt of LOCAL_TOWNS) if (f.streetAddress && lt.match.test(f.streetAddress)) return lt;
+  if (
+    (f.city && SISSETON_GENERAL.match.test(f.city)) ||
+    (f.streetAddress && SISSETON_GENERAL.match.test(f.streetAddress))
+  ) {
+    return SISSETON_GENERAL;
+  }
   return null;
 }
 

@@ -14,6 +14,7 @@ const BARKER_HILL: GeoPoint = { lat: 45.581278, lng: -97.061277 };
 const LONG_HOLLOWS: GeoPoint = { lat: 45.65316, lng: -97.04586 };
 const OLD_AGENCY: GeoPoint = { lat: 45.56781, lng: -97.06721 };
 const PEEVER: GeoPoint = { lat: 45.5391, lng: -96.9578 };
+const SISSETON: GeoPoint = { lat: 45.663, lng: -97.0481 };
 
 const parts = (city: string | null, street: string | null = null) => ({
   streetAddress: street,
@@ -53,10 +54,13 @@ const cases: Case[] = [
   { desc: "Miles — Sissteon typo town, barker hill street → Barker Hill", city: "Sissteon", street: "551 Barker hill", want: BARKER_HILL },
   { desc: "town null, region in the street line", city: null, street: "12440 Barker Hill Rd", want: BARKER_HILL },
 
-  // --- Neither town nor street names a region → null (external geocoder / flag) ---
-  { desc: "Sisseton in-town, no region keyword anywhere → null", city: "Sisseton", street: "123 Main St", want: null },
+  // --- In-town Sisseton with no specific region → the Sisseton-general bucket ---
+  { desc: "Sisseton in-town, no specific region → Sisseton general", city: "Sisseton", street: "123 Main St", want: SISSETON },
+  { desc: "Sisseron typo town, no specific region → Sisseton general", city: "Sisseron", street: "5 Elm", want: SISSETON },
+
+  // --- Neither town nor street names anything we know → null (flagged) ---
   { desc: "empty address → null", city: null, street: null, want: null },
-  { desc: "blank strings → null", city: "  ", street: "  ", want: null },
+  { desc: "out-of-area town → null", city: "Watertown", street: "1 Oak", want: null },
 ];
 
 describe("region bucketing — localPlace (town-first)", () => {

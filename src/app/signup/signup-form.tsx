@@ -130,6 +130,10 @@ export function SignupForm({
       toast.error("Please pick your pickup region for the van.");
       return;
     }
+    if (!family.primaryGuardianName.trim() || !family.primaryPhone.trim() || !family.primaryEmail.trim()) {
+      toast.error("Please fill in the caregiver's name, phone, and email.");
+      return;
+    }
 
     submittingRef.current = true;
     setPending(true);
@@ -261,8 +265,9 @@ export function SignupForm({
             />
           </Field>
         </div>
-        <Field label="Email">
+        <Field label="Email" required>
           <Input
+            required
             type="email"
             autoComplete="email"
             value={family.primaryEmail}

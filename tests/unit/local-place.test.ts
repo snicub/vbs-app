@@ -69,8 +69,12 @@ describe("localPlace", () => {
     });
   });
 
-  it("returns null when no region is named (geocoder handles it)", () => {
-    expect(localPlace(parts("Sisseton"))).toBeNull();
+  it("Sisseton (no specific region) → the Sisseton-general bucket", () => {
+    expect(localPlace(parts("Sisseton"))).toEqual({ lat: 45.663, lng: -97.0481 });
+  });
+
+  it("returns null when nothing local is named", () => {
+    expect(localPlace(parts("Watertown"))).toBeNull();
     expect(localPlace(parts(null, null))).toBeNull();
   });
 });
