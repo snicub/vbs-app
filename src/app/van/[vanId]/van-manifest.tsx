@@ -123,11 +123,20 @@ export function VanManifest({
         }
       },
       (err) => {
-        setError(err.message);
-        toast.error(`GPS error: ${err.message}`);
-        setBroadcasting(false);
+        // Only a real permission block should stop sharing. A slow first fix or a
+        // dropped signal (timeout / position unavailable) must NOT flip GPS off —
+        // watchPosition keeps trying, so we just show "not reaching" and wait.
+        if (err.code === err.PERMISSION_DENIED) {
+          setError(
+            "Location is blocked. Tap the lock/location icon in your browser's address bar, set Location to Allow, then reload.",
+          );
+          toast.error("Location is blocked — allow it in your browser, then reload.");
+          setBroadcasting(false);
+        } else {
+          setGpsReachable(false);
+        }
       },
-      { enableHighAccuracy: true, maximumAge: 5000, timeout: 15_000 },
+      { enableHighAccuracy: true, maximumAge: 5000, timeout: 30_000 },
     );
 
     function onVisibility() {
