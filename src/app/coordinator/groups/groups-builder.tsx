@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { buildGroups, teachersNeeded, type GroupKid } from "@/lib/coordinator/groups";
@@ -28,6 +28,13 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   // Optional age-range filter: build groups from only kids in this band.
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
+  // When set, only this group is shown to the printer (a single full-page roster).
+  const [printOnly, setPrintOnly] = useState<string | null>(null);
+  useEffect(() => {
+    if (printOnly == null) return;
+    window.print();
+    setPrintOnly(null);
+  }, [printOnly]);
   // Teacher names per group (by group label), typed in for the printout.
   const [teacherNames, setTeacherNames] = useState<Record<string, string[]>>({});
   const teachersFor = (label: string) => teacherNames[label] ?? [""];
@@ -170,16 +177,28 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
           {groups.map((g) => (
             <section
               key={g.label}
-              className="roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid print:break-before-page"
+              className={cn(
+                "roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid print:break-before-page",
+                printOnly && printOnly !== g.label && "print:hidden",
+              )}
             >
               <header className="border-b bg-muted/40 px-4 py-2 space-y-1.5">
                 <div className="flex items-baseline justify-between gap-2">
-                  <h2 className="font-semibold">{g.label}</h2>
-                  <span className="text-xs text-muted-foreground whitespace-nowrap">
-                    {g.count} {g.count === 1 ? "kid" : "kids"}
+                  <h2 className="font-semibold print:text-2xl">{g.label}</h2>
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <span className="text-xs text-muted-foreground print:text-base">
+                      {g.count} {g.count === 1 ? "kid" : "kids"}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setPrintOnly(g.label)}
+                      className="print:hidden rounded-md border px-2 py-1 text-xs font-medium hover:bg-muted"
+                    >
+                      Print
+                    </button>
                   </span>
                 </div>
-                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm print:text-lg">
                   <span className="text-xs font-medium text-muted-foreground">
                     Teacher{teachersFor(g.label).length > 1 ? "s" : ""}:
                   </span>
@@ -216,17 +235,17 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
                 {g.kids.map((k) => (
                   <li
                     key={k.studentId}
-                    className="flex items-center justify-between gap-2 px-4 py-2"
+                    className="flex items-center justify-between gap-2 px-4 py-2 print:px-2 print:py-2.5"
                   >
                     <Link
                       href={`/table/${k.wristbandCode}`}
-                      className="font-medium hover:underline truncate"
+                      className="font-medium hover:underline truncate print:text-xl"
                     >
                       {k.firstName} {k.lastName}
                     </Link>
-                    <span className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground">
+                    <span className="flex items-center gap-3 shrink-0 text-xs text-muted-foreground print:text-base">
                       <span>{k.age != null ? `age ${k.age}` : "age —"}</span>
-                      <code className="font-mono">{k.wristbandCode}</code>
+                      <code className="font-mono print:hidden">{k.wristbandCode}</code>
                     </span>
                   </li>
                 ))}
