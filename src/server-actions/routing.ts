@@ -5,8 +5,8 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
-import { geocodeFamilyAddress, familyAddressQuery, localPlace } from "@/lib/geocode";
-import { assignStopsForMode, type StopPoint } from "@/lib/route-build";
+import { geocodeFamilyAddress, familyAddressQuery, localRegionKey } from "@/lib/geocode";
+import { type StopPoint } from "@/lib/route-build";
 import { ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
 import { VBS_DATES } from "@/lib/registration/dates";
 
@@ -82,14 +82,26 @@ export async function autoAssignStopsFromAddresses(
 
   const { data: stopsData } = await admin
     .from("stops")
-    .select("id, lat, lng")
-    .returns<{ id: string; lat: number | null; lng: number | null }[]>();
+    .select("id, name, lat, lng")
+    .returns<{ id: string; name: string; lat: number | null; lng: number | null }[]>();
   const stops: StopPoint[] = (stopsData ?? [])
     .filter(
-      (s): s is { id: string; lat: number; lng: number } =>
+      (s): s is { id: string; name: string; lat: number; lng: number } =>
         s.lat != null && s.lng != null && routedStopIds.has(s.id),
     )
     .map((s) => ({ id: s.id, lat: s.lat, lng: s.lng }));
+
+  // Map each region key → that region's routed zone stop, BY NAME (the zone stop
+  // is named after the region). This is what makes routing exact: a Barker Hill
+  // address goes to the stop literally named "Barker Hill", never to whatever zone
+  // is geographically nearest a hardcoded center.
+  const REGION_KEYS = ["barker", "hollow", "agency", "peever"] as const;
+  const zoneStopIdByKey = new Map<string, string>();
+  for (const s of stopsData ?? []) {
+    if (!routedStopIds.has(s.id)) continue;
+    const lower = s.name.toLowerCase();
+    for (const key of REGION_KEYS) if (lower.includes(key)) zoneStopIdByKey.set(key, s.id);
+  }
   if (stops.length === 0) {
     return {
       ok: false,
@@ -159,31 +171,25 @@ export async function autoAssignStopsFromAddresses(
     if (!needsAm && !needsPm) continue; // already routed
 
     const fam = r.students?.families;
-    // DETERMINISTIC, NEVER GUESS: only auto-assign when the TOWN (or, as a
-    // fallback, the street) clearly names one of our regions. We do NOT route a
-    // kid onto the geographically-nearest van off a fuzzy geocode — an address
-    // the geocoder placed but no region word matches stays FLAGGED for the
-    // coordinator to put on the map by hand. Same address → same region, always.
-    const region = fam ? localPlace(toAddr(fam)) : null;
-    if (!region) {
+    // DETERMINISTIC, NEVER GUESS: only auto-assign when the TOWN (or street, as a
+    // fallback) names one of our regions, then send the kid to the van LITERALLY
+    // NAMED for that region. An address the geocoder placed but no region word
+    // matches stays FLAGGED for the coordinator to place by hand — never routed
+    // onto the nearest van. Same address → same region → same named van, always.
+    const key = fam ? localRegionKey(toAddr(fam)) : null;
+    const zoneStopId = key ? zoneStopIdByKey.get(key) : undefined;
+    if (!zoneStopId) {
       flaggedStudents.add(r.student_id);
       continue;
     }
-    const point = region;
-
-    const next = assignStopsForMode(point, stops, r.mode, {
-      morningStopId: r.morning_stop_id,
-      afternoonStopId: r.afternoon_stop_id,
-    });
-    if (
-      next.morningStopId !== r.morning_stop_id ||
-      next.afternoonStopId !== r.afternoon_stop_id
-    ) {
+    const nextMorning = needsAm ? zoneStopId : r.morning_stop_id;
+    const nextAfternoon = needsPm ? zoneStopId : r.afternoon_stop_id;
+    if (nextMorning !== r.morning_stop_id || nextAfternoon !== r.afternoon_stop_id) {
       await admin
         .from("student_day_records")
         .update({
-          morning_stop_id: next.morningStopId,
-          afternoon_stop_id: next.afternoonStopId,
+          morning_stop_id: nextMorning,
+          afternoon_stop_id: nextAfternoon,
         } as never)
         .eq("student_id", r.student_id)
         .eq("event_date", r.event_date);

@@ -118,7 +118,11 @@ export default async function NameTagsPage({
   );
 
   // Filter server-side so the printed sheet matches the on-screen selection.
+  // EXCEPTION: a needs-routing kid (no town/van yet) is never excluded by a
+  // town/van filter — they'd silently vanish from a per-van print, which is
+  // exactly the kid you can't afford to miss. They always print.
   const tags = allTags.filter((t) => {
+    if (t.needsRouting) return true;
     if (town && t.town !== town) return false;
     if (van && t.vanName !== van) return false;
     return true;

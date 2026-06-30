@@ -35,27 +35,38 @@ type AddressParts = {
 // same-named street far away). Each maps to the region's center, so the home
 // resolves to the right region/van. The driver still navigates by the full street
 // address shown on the rider list. Keep these in sync with the van zones.
-const LOCAL_TOWNS: { match: RegExp; pt: GeoPoint }[] = [
+// `key` is a token guaranteed to appear in that region's van NAME, so routing can
+// match region → the correctly-named van directly (never via nearest coordinate).
+const LOCAL_TOWNS: { match: RegExp; key: string; pt: GeoPoint }[] = [
   // Barker Hill — also catch the common "barker bill" / "barkerhill" mistypes.
-  { match: /b[ae]rk\w*\s*(hill|bill)/i, pt: { lat: 45.581278, lng: -97.061277 } },
-  { match: /long\s*hollow/i, pt: { lat: 45.65316, lng: -97.04586 } },
+  { match: /b[ae]rk\w*\s*(hill|bill)/i, key: "barker", pt: { lat: 45.581278, lng: -97.061277 } },
+  { match: /long\s*hollow/i, key: "hollow", pt: { lat: 45.65316, lng: -97.04586 } },
   // Old Agency is the community of Agency Village, so accept either name.
-  { match: /old\s*agency|agency\s*village/i, pt: { lat: 45.56781, lng: -97.06721 } },
+  { match: /old\s*agency|agency\s*village/i, key: "agency", pt: { lat: 45.56781, lng: -97.06721 } },
   // Peever + Peever Flat(s) merged into one van — both map to the Peever zone.
-  { match: /peever/i, pt: { lat: 45.5391, lng: -96.9578 } },
+  { match: /peever/i, key: "peever", pt: { lat: 45.5391, lng: -96.9578 } },
 ];
 
 /**
- * If the address names a known local region, return its center. The TOWN field
- * decides the region and is checked FIRST — a reservation town there wins even
- * when a street name mentions a different town (e.g. an "Agency Village" home on
- * a road called "Barker Hill" belongs to Old Agency, not Barker Hill). The street
- * is only a fallback when the town doesn't name a region.
+ * The matched local region for an address. The TOWN field decides and is checked
+ * FIRST — a reservation town there wins even when a street name mentions a different
+ * town (an "Agency Village" home on a road called "Barker Hill" is Old Agency). The
+ * street is only a fallback when the town doesn't name a region.
  */
-export function localPlace(f: AddressParts): GeoPoint | null {
-  for (const lt of LOCAL_TOWNS) if (f.city && lt.match.test(f.city)) return lt.pt;
-  for (const lt of LOCAL_TOWNS) if (f.streetAddress && lt.match.test(f.streetAddress)) return lt.pt;
+function matchLocalTown(f: AddressParts): (typeof LOCAL_TOWNS)[number] | null {
+  for (const lt of LOCAL_TOWNS) if (f.city && lt.match.test(f.city)) return lt;
+  for (const lt of LOCAL_TOWNS) if (f.streetAddress && lt.match.test(f.streetAddress)) return lt;
   return null;
+}
+
+/** The region's center coordinate (for the map pin), or null. */
+export function localPlace(f: AddressParts): GeoPoint | null {
+  return matchLocalTown(f)?.pt ?? null;
+}
+
+/** The region's key (a token in its van's name) for direct region→van routing. */
+export function localRegionKey(f: AddressParts): string | null {
+  return matchLocalTown(f)?.key ?? null;
 }
 
 // A pasted "lat, lng" (e.g. straight from Google Maps). Requires ≥3 decimals so a

@@ -11,3 +11,4 @@
 - [Public registration data-integrity](public-registration-data-integrity.md) — registerFamily is a public service-role non-transactional insert chain; orphan risk (token last), retry not idempotent, no rate limit; wristband collision handling sound.
 - [Door-to-door zone model](door-to-door-zone-model.md) — verified GO, no migration; one per-van zone stop on AM+PM route; gotcha: zone stop must carry event AM/PM scheduled times or is_late_am/is_in_but_not_out never fire.
 - [Anomaly reachability (door-to-door event)](anomaly-reachability-doortodoor.md) — only is_boarded_but_not_arrived (AM) fires; is_pm_van_stuck UNREACHABLE (atomic smartCheckOut); late_am/in_but_not_out inert+app-suppressed; no PM "lost going home" net.
+- [Door-to-door auto-assign correctness](door-to-door-auto-assign-correctness.md) — town-first nearest-zone assignment; risk = zone-stop coords not nearest own region center; safe corrective-SQL pattern (not-exists-events guard).

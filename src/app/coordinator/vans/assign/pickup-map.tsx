@@ -240,7 +240,7 @@ export function PickupMap({
       }
       const parts = [`${r.assigned} assigned to a van`];
       if (r.geocoded) parts.push(`${r.geocoded} homes located`);
-      if (r.flagged) parts.push(`${r.flagged} still need an address`);
+      if (r.flagged) parts.push(`${r.flagged} need a region — assign them below`);
       if (r.pending) parts.push(`${r.pending} not located yet — run again`);
       toast.success(parts.join(" · "));
       router.refresh();
