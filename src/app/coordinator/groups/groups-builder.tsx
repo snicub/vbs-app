@@ -25,6 +25,9 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   const [teachers, setTeachers] = useState(6);
   const [perGroupTeachers, setPerGroupTeachers] = useState(1);
   const [mix, setMix] = useState(false);
+  // Optional age-range filter: build groups from only kids in this band.
+  const [minAge, setMinAge] = useState<number | null>(null);
+  const [maxAge, setMaxAge] = useState<number | null>(null);
   // Teacher names per group (by group label), typed in for the printout.
   const [teacherNames, setTeacherNames] = useState<Record<string, string[]>>({});
   const teachersFor = (label: string) => teacherNames[label] ?? [""];
@@ -46,7 +49,15 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   }
 
   const { groups, poolCount } = useMemo(() => {
-    const pool = source === "present" ? kids.filter((k) => k.present) : kids;
+    let pool = source === "present" ? kids.filter((k) => k.present) : kids;
+    if (minAge != null || maxAge != null) {
+      pool = pool.filter(
+        (k) =>
+          k.age != null &&
+          (minAge == null || k.age >= minAge) &&
+          (maxAge == null || k.age <= maxAge),
+      );
+    }
     return {
       groups: buildGroups(pool, {
         mode,
@@ -58,7 +69,7 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
       }),
       poolCount: pool.length,
     };
-  }, [kids, source, mode, size, count, teachers, perGroupTeachers, mix]);
+  }, [kids, source, mode, size, count, teachers, perGroupTeachers, mix, minAge, maxAge]);
 
   const perGroup =
     groups.length > 0 ? Math.round((poolCount / groups.length) * 10) / 10 : 0;
@@ -112,6 +123,26 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
               { value: "mix", label: "Mixed" },
             ]}
           />
+          <div className="space-y-1">
+            <div className="text-xs font-medium text-muted-foreground">Age range (optional)</div>
+            <div className="flex items-center gap-1.5">
+              <AgeInput value={minAge} placeholder="min" onChange={setMinAge} ariaLabel="Minimum age" />
+              <span aria-hidden className="text-muted-foreground">–</span>
+              <AgeInput value={maxAge} placeholder="max" onChange={setMaxAge} ariaLabel="Maximum age" />
+              {(minAge != null || maxAge != null) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setMinAge(null);
+                    setMaxAge(null);
+                  }}
+                  className="rounded-md border px-2 min-h-9 text-xs hover:bg-muted/40"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+          </div>
           <Button
             type="button"
             variant="outline"
@@ -289,5 +320,35 @@ function NumberField({
         </button>
       </div>
     </div>
+  );
+}
+
+function AgeInput({
+  value,
+  placeholder,
+  onChange,
+  ariaLabel,
+}: {
+  value: number | null;
+  placeholder: string;
+  onChange: (n: number | null) => void;
+  ariaLabel: string;
+}) {
+  return (
+    <input
+      type="number"
+      inputMode="numeric"
+      min={0}
+      aria-label={ariaLabel}
+      placeholder={placeholder}
+      value={value ?? ""}
+      onChange={(e) => {
+        const v = e.target.value.trim();
+        if (v === "") return onChange(null);
+        const n = Number(v);
+        onChange(Number.isFinite(n) ? Math.max(0, Math.floor(n)) : null);
+      }}
+      className="w-16 rounded-md border bg-background px-2 min-h-9 text-base md:text-sm text-foreground"
+    />
   );
 }
