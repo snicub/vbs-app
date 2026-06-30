@@ -640,3 +640,18 @@ export async function assignStudentToVanAllDays(input: unknown): Promise<AssignV
   revalidatePath("/van", "layout");
   return { ok: true };
 }
+
+/**
+ * Coordinator-only: convert a parent-drive kid into a van rider AND put them on a
+ * region for every VBS day. Used from the Pickup Map to route a kid who registered
+ * as parent_both but actually needs a ride (and has a home address).
+ */
+export async function addToVanAllDays(input: unknown): Promise<AssignVanResult> {
+  const parsed = AssignVanAllDaysSchema.safeParse(input);
+  if (!parsed.success) {
+    return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
+  }
+  const modeResult = await updateStudentModeAllDays({ studentId: parsed.data.studentId, mode: "van" });
+  if (!modeResult.ok) return modeResult;
+  return assignStudentToVanAllDays(input);
+}

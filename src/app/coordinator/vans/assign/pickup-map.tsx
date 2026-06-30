@@ -8,7 +8,11 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { contrastText } from "@/lib/nametags/tag-data";
 import { UNASSIGNED_PIN_COLOR, type PinnableKid, type NoAddressKid } from "@/lib/van-assign-map";
-import { assignStudentToVan, assignStudentToVanAllDays } from "@/server-actions/students";
+import {
+  assignStudentToVan,
+  assignStudentToVanAllDays,
+  addToVanAllDays,
+} from "@/server-actions/students";
 import {
   autoAssignStopsFromAddresses,
   locateStudentHomes,
@@ -17,18 +21,22 @@ import {
 
 type VanOption = { id: string; name: string; colorCode: string | null };
 
+type ParentCandidate = { studentId: string; name: string; street: string | null; city: string | null };
+
 export function PickupMap({
   date,
   pinnable,
   noAddress,
   locatableCount,
   vans,
+  parentCandidates,
 }: {
   date: string;
   pinnable: PinnableKid[];
   noAddress: NoAddressKid[];
   locatableCount: number;
   vans: VanOption[];
+  parentCandidates: ParentCandidate[];
 }) {
   const router = useRouter();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -318,6 +326,9 @@ export function PickupMap({
             onClear={clearSelection}
           />
           {noAddress.length > 0 && <NoAddressList kids={noAddress} vans={vans} />}
+          {parentCandidates.length > 0 && (
+            <ParentRideList kids={parentCandidates} vans={vans} />
+          )}
         </aside>
       </div>
 
@@ -614,6 +625,80 @@ function RegionAssign({ studentId, vans }: { studentId: string; vans: VanOption[
       aria-label="Assign to a region"
     >
       <option value="">{pending ? "Assigning…" : "Assign to region…"}</option>
+      {vans.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/**
+ * Parent-drive kids (parent_both) who have a home address. They're not on the map
+ * because they don't ride a van — but if one actually needs a ride, picking a
+ * region here flips them to a van rider AND assigns the region for every VBS day.
+ */
+function ParentRideList({
+  kids,
+  vans,
+}: {
+  kids: ParentCandidate[];
+  vans: VanOption[];
+}) {
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40">
+      <div className="px-3 py-2 border-b border-amber-300 dark:border-amber-800 text-sm font-semibold text-amber-900 dark:text-amber-200">
+        🚗 Parent-drive kids with an address ({kids.length})
+      </div>
+      <p className="px-3 pt-2 text-xs text-amber-800 dark:text-amber-300">
+        These registered as parent-driven, so they&apos;re not on the map. If one actually
+        needs a ride, pick a region to put them on a van.
+      </p>
+      <ul className="px-1 py-2 divide-y divide-amber-200 dark:divide-amber-900">
+        {kids.map((k) => (
+          <li key={k.studentId} className="flex flex-wrap items-center justify-between gap-2 px-2 py-1.5 text-sm">
+            <span className="min-w-0 flex-1">
+              <span className="truncate font-medium">{k.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {[k.street, k.city].filter(Boolean).join(", ")}
+              </span>
+            </span>
+            <ParentRideAssign studentId={k.studentId} vans={vans} />
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function ParentRideAssign({ studentId, vans }: { studentId: string; vans: VanOption[] }) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function assign(vanId: string) {
+    if (!vanId) return;
+    startTransition(async () => {
+      const r = await addToVanAllDays({ studentId, vanId });
+      if (!r.ok) {
+        toast.error(r.error);
+        return;
+      }
+      toast.success(`Put on ${vans.find((v) => v.id === vanId)?.name ?? "the van"} (all days)`);
+      router.refresh();
+    });
+  }
+
+  if (vans.length === 0) return null;
+  return (
+    <select
+      defaultValue=""
+      disabled={pending}
+      onChange={(e) => assign(e.target.value)}
+      className="shrink-0 rounded border bg-card px-1.5 py-1 text-xs"
+      aria-label="Put on a van"
+    >
+      <option value="">{pending ? "Adding…" : "Put on a van…"}</option>
       {vans.map((v) => (
         <option key={v.id} value={v.id}>
           {v.name}

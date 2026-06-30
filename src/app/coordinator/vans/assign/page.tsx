@@ -150,6 +150,45 @@ export default async function PickupMapPage({
     colorCode: zoneColorByVan.get(v.id) ?? null,
   }));
 
+  // Parent-drive kids (parent_both) who still have a home address on file. They're
+  // not on the map (they don't ride a van), but if one actually needs a ride the
+  // coordinator can put them on a van here in one tap.
+  const parentBothIds = (statuses ?? [])
+    .filter((s) => s.mode === "parent_both" && !s.morning_van_id && !s.afternoon_van_id)
+    .map((s) => s.student_id);
+  const { data: pbStudents } = parentBothIds.length
+    ? await supabase
+        .from("students")
+        .select("id, legal_first_name, legal_last_name, preferred_first_name, family_id")
+        .in("id", parentBothIds)
+        .returns<StudentRow[]>()
+    : { data: [] as StudentRow[] };
+  const pbFamilyIds = Array.from(new Set((pbStudents ?? []).map((s) => s.family_id)));
+  const { data: pbFamilies } = pbFamilyIds.length
+    ? await supabase
+        .from("families")
+        .select("id, street_address, city")
+        .in("id", pbFamilyIds)
+        .returns<{ id: string; street_address: string | null; city: string | null }[]>()
+    : { data: [] as { id: string; street_address: string | null; city: string | null }[] };
+  const pbFamById = new Map((pbFamilies ?? []).map((f) => [f.id, f]));
+  const parentCandidates = (pbStudents ?? [])
+    .map((s) => {
+      const f = pbFamById.get(s.family_id);
+      const dn = displayName({
+        preferredFirstName: s.preferred_first_name,
+        legalFirstName: s.legal_first_name,
+        legalLastName: s.legal_last_name,
+      });
+      return {
+        studentId: s.id,
+        name: `${dn.first} ${dn.last}`.trim(),
+        street: f?.street_address ?? null,
+        city: f?.city ?? null,
+      };
+    })
+    .filter((c) => !!c.street?.trim());
+
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4">
       <header className="space-y-1">
@@ -179,6 +218,7 @@ export default async function PickupMapPage({
         noAddress={noAddress}
         locatableCount={locatableCount}
         vans={vanOptions}
+        parentCandidates={parentCandidates}
       />
     </div>
   );
