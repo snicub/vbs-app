@@ -5,13 +5,60 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
-import { isCoordinator } from "@/lib/auth/roles";
+import { isCoordinator, canDriveVan } from "@/lib/auth/roles";
 import { splitName } from "@/lib/registration/schema";
 import { getLocalDate } from "@/lib/date";
 import { VBS_DATES } from "@/lib/registration/dates";
 import { resolveDayRecordUpdate } from "@/lib/day-record-plan";
 import { assignLegsForVan } from "@/lib/van-assign";
 import { boardedStopConflict } from "@/lib/routing";
+
+// -- Replace a student's profile photo (from the van view: snap a face so the
+//    driver can verify the kid). Staff who can work a van may set it. --
+
+const SetPhotoSchema = z.object({
+  studentId: z.string().uuid(),
+  photoBytes: z.string().min(1), // base64 JPEG, client-resized to ≤800px
+});
+
+export async function setStudentPhoto(
+  input: unknown,
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  if (!user || !canDriveVan(user.role)) {
+    return { ok: false, error: "Not permitted" };
+  }
+  const parsed = SetPhotoSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad photo data" };
+  const { studentId, photoBytes } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: student } = await admin
+    .from("students")
+    .select("family_id")
+    .eq("id", studentId)
+    .maybeSingle<{ family_id: string }>();
+  if (!student) return { ok: false, error: "Student not found" };
+
+  const path = `${student.family_id}/${studentId}.jpg`;
+  const { error: uploadErr } = await admin.storage
+    .from("student-photos")
+    .upload(path, Buffer.from(photoBytes, "base64"), {
+      contentType: "image/jpeg",
+      upsert: true,
+    });
+  if (uploadErr) return { ok: false, error: uploadErr.message };
+
+  const { error } = await admin
+    .from("students")
+    .update({ photo_path: path } as never)
+    .eq("id", studentId);
+  if (error) return { ok: false, error: error.message };
+
+  revalidatePath("/van", "layout");
+  revalidatePath("/coordinator", "layout");
+  return { ok: true };
+}
 
 // -- Update student profile (name, allergies, medical notes) --
 

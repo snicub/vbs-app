@@ -181,6 +181,13 @@ export default async function VanPage({
     return a.name.localeCompare(b.name);
   });
 
+  // Kids still to collect on the AM run: morning riders who haven't been boarded
+  // yet and aren't marked not-coming. (PM-only kids are dropped at the site by a
+  // parent, so the van never picks them up at home.) Counts down as you board.
+  const leftToPickUp = roster.filter(
+    (r) => r.direction !== "pm" && r.state === "not_started",
+  ).length;
+
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
       <header className="space-y-2">
@@ -195,15 +202,22 @@ export default async function VanPage({
           </Link>
         </div>
         <p className="text-muted-foreground text-base">
-          {roster.length} kid{roster.length === 1 ? "" : "s"}
+          {leftToPickUp === 0 ? (
+            <span className="font-semibold text-[var(--state-safe)]">All picked up</span>
+          ) : (
+            <>
+              <span className="font-semibold text-foreground">{leftToPickUp}</span> still to pick up
+            </>
+          )}{" "}
+          · {roster.length} on this van
         </p>
       </header>
 
-      {van.capacity > 0 && roster.length > van.capacity && (
+      {van.capacity > 0 && leftToPickUp > van.capacity && (
         <div className="rounded-lg border-2 border-[var(--anomaly-warn)] bg-[var(--anomaly-warn)]/10 px-4 py-3">
           <p className="text-base font-semibold text-[var(--anomaly-warn)]">
-            ⚠ {roster.length} riders · van holds {van.capacity} — make about{" "}
-            {Math.ceil(roster.length / van.capacity)} trips
+            ⚠ {leftToPickUp} left to pick up · van holds {van.capacity} — about{" "}
+            {Math.ceil(leftToPickUp / van.capacity)} more trips
           </p>
           <p className="mt-1 text-sm text-muted-foreground">
             Board a full load ({van.capacity}), drive them to the church, then come back for

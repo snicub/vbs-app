@@ -8,11 +8,13 @@ import { toast } from "sonner";
 import { submitEvent, cancelBoarding } from "@/server-actions/events";
 import { smartCheckOut } from "@/server-actions/check-out";
 import { broadcastVanLocation } from "@/server-actions/van";
+import { setStudentPhoto } from "@/server-actions/students";
+import { resizeImageFile } from "@/lib/image/resize";
 import { isLegalTransition } from "@/lib/events/state-machine";
 import { STATE_PRESENTATION, safeDayState } from "@/lib/state-presentation";
 import { StateBadge, SafetyCallout } from "@/components/state-badge";
 import { requestScreenWakeLock } from "@/lib/wake-lock";
-import { BusIcon, HomeIcon, MapPinIcon, RadioIcon, RadioTowerIcon } from "lucide-react";
+import { BusIcon, HomeIcon, MapPinIcon, RadioIcon, RadioTowerIcon, CameraIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useOutbox } from "@/lib/offline/use-outbox";
 import { OfflineBanner } from "@/components/offline-banner";
@@ -160,6 +162,33 @@ export function VanManifest({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [broadcasting, vanId]);
+
+  // Tap a kid's photo → snap a face with the phone camera (or pick from gallery),
+  // resize client-side, and save it so the driver can verify the kid next time.
+  const [photoBusy, setPhotoBusy] = useState<Set<string>>(new Set());
+  async function onPhotoPick(studentId: string, file: File | null) {
+    if (!file) return;
+    setPhotoBusy((prev) => new Set(prev).add(studentId));
+    try {
+      const blob = await resizeImageFile(file);
+      const photoBytes = await blobToBase64(blob);
+      const res = await setStudentPhoto({ studentId, photoBytes });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success("Photo saved");
+      router.refresh();
+    } catch {
+      toast.error("Couldn't save the photo — try again.");
+    } finally {
+      setPhotoBusy((prev) => {
+        const next = new Set(prev);
+        next.delete(studentId);
+        return next;
+      });
+    }
+  }
 
   function addPending(studentId: string) {
     setPendingStudents((prev) => new Set(prev).add(studentId));
@@ -338,7 +367,7 @@ export function VanManifest({
         <Button
           variant={broadcasting ? "outline" : "default"}
           size="lg"
-          className="w-full text-lg min-h-14 sm:w-auto"
+          className="w-full text-lg min-h-12 sm:w-auto"
           onClick={() => setBroadcasting((v) => !v)}
         >
           {broadcasting ? "Stop GPS" : "Start GPS"}
@@ -389,9 +418,17 @@ export function VanManifest({
                           : `var(--state-${presentation.tone})`,
                     }}
                   >
-                    <div className="p-4 space-y-4">
-                      <div className="flex items-start gap-4">
-                        <div className="size-16 shrink-0 rounded-xl border bg-muted overflow-hidden flex items-center justify-center">
+                    <div className="p-3 space-y-2.5">
+                      <div className="flex items-start gap-3">
+                        <label className="relative size-14 shrink-0 rounded-xl border bg-muted overflow-hidden flex items-center justify-center cursor-pointer">
+                          <input
+                            type="file"
+                            accept="image/*"
+                            capture="environment"
+                            className="sr-only"
+                            disabled={photoBusy.has(r.studentId)}
+                            onChange={(e) => onPhotoPick(r.studentId, e.target.files?.[0] ?? null)}
+                          />
                           {r.photoUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
                             <img
@@ -400,16 +437,23 @@ export function VanManifest({
                               className="w-full h-full object-cover"
                             />
                           ) : (
-                            <span className="text-xs text-muted-foreground">
-                              no photo
+                            <span className="text-[10px] leading-tight text-muted-foreground text-center px-1">
+                              tap to add
                             </span>
                           )}
-                        </div>
+                          <span className="absolute inset-x-0 bottom-0 flex items-center justify-center bg-black/55 py-0.5 text-white">
+                            {photoBusy.has(r.studentId) ? (
+                              <span className="text-[10px]">saving…</span>
+                            ) : (
+                              <CameraIcon className="size-3.5" />
+                            )}
+                          </span>
+                        </label>
                         <div className="min-w-0 flex-1">
-                          <div className="font-bold text-2xl leading-tight truncate">
+                          <div className="font-bold text-xl leading-tight truncate">
                             {r.name}
                           </div>
-                          <div className="mt-1.5 flex items-center gap-2 flex-wrap text-base">
+                          <div className="mt-1 flex items-center gap-2 flex-wrap text-sm">
                             {r.colorHex && (
                               <span
                                 className="inline-block w-5 h-5 rounded-full border ring-1 ring-border"
@@ -498,7 +542,7 @@ export function VanManifest({
                           {canBoardAm && (
                             <Button
                               size="lg"
-                              className="w-full text-lg min-h-14 sm:w-auto"
+                              className="w-full text-lg min-h-12 sm:w-auto"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "board_am")}
                             >
@@ -508,7 +552,7 @@ export function VanManifest({
                           {canCheckOut && (
                             <Button
                               size="lg"
-                              className="w-full text-lg min-h-14 sm:w-auto"
+                              className="w-full text-lg min-h-12 sm:w-auto"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "drop_off")}
                             >
@@ -519,7 +563,7 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="lg"
-                              className="w-full text-base min-h-14 sm:w-auto"
+                              className="w-full text-base min-h-12 sm:w-auto"
                               disabled={isPending || isQueued}
                               onClick={() => cancelBoardingFor(r.studentId)}
                             >
@@ -530,7 +574,7 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="lg"
-                              className="w-full text-base min-h-14 sm:w-auto"
+                              className="w-full text-base min-h-12 sm:w-auto"
                               disabled={isPending || isQueued}
                               onClick={() => {
                                 if (confirmNoShow === r.studentId) {
@@ -565,6 +609,14 @@ export function VanManifest({
       )}
     </>
   );
+}
+
+async function blobToBase64(blob: Blob): Promise<string> {
+  const buf = await blob.arrayBuffer();
+  let binary = "";
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]!);
+  return btoa(binary);
 }
 
 const VERIFY_TAP_THROUGH_MS = 1500;
