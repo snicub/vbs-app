@@ -170,6 +170,13 @@ export default async function VanRostersPage({
   const sortRiders = (rs: Rider[]) => rs.slice().sort((a, b) => a.name.localeCompare(b.name));
   const vanOptions = (vans ?? []).map((v) => ({ id: v.id, name: v.name }));
 
+  // A kid off every van is either parent-handled (mode parent_both — no van
+  // needed, so no warning) or a van-rider with no van assigned yet (needs
+  // routing — the real alert). Split them so the alert doesn't cry wolf over
+  // families who chose parent drop-off.
+  const parentHandled = unassigned.filter((r) => r.mode === "parent_both");
+  const needsRoutingRiders = unassigned.filter((r) => r.mode !== "parent_both");
+
   return (
     <main className="mx-auto max-w-4xl px-3 sm:px-4 py-4 sm:py-6 space-y-5 print:py-0">
       <header className="flex items-start justify-between gap-2 print:hidden">
@@ -255,13 +262,26 @@ export default async function VanRostersPage({
         });
       })}
 
-      {unassigned.length > 0 && (
+      {needsRoutingRiders.length > 0 && (
         <section className="roster-section rounded-lg border-2 border-[var(--anomaly-warn)] break-inside-avoid print:break-before-page">
           <div className="px-3 py-2 font-bold text-[var(--anomaly-warn)]">
-            ⚠ Not on a van ({unassigned.length}) — parent drop-off or needs routing
+            ⚠ Needs a van ({needsRoutingRiders.length}) — rides a van but none assigned
           </div>
           <ul className="divide-y">
-            {sortRiders(unassigned).map((r, i) => (
+            {sortRiders(needsRoutingRiders).map((r, i) => (
+              <RiderRow key={i} r={r} currentVanId={null} eventDate={day} vans={vanOptions} />
+            ))}
+          </ul>
+        </section>
+      )}
+
+      {parentHandled.length > 0 && (
+        <section className="roster-section rounded-lg border break-inside-avoid print:break-before-page">
+          <div className="px-3 py-2 font-bold text-muted-foreground">
+            Parent drop-off / pickup ({parentHandled.length}) — no van needed
+          </div>
+          <ul className="divide-y">
+            {sortRiders(parentHandled).map((r, i) => (
               <RiderRow key={i} r={r} currentVanId={null} eventDate={day} vans={vanOptions} />
             ))}
           </ul>
