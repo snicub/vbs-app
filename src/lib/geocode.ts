@@ -43,9 +43,9 @@ const LOCAL_TOWNS: { match: RegExp; key: string; pt: GeoPoint }[] = [
   // BIA Highway/roads run through Long Hollows, so treat "BIA" as Long Hollows.
   { match: /long\s*hollow|\bbia\b/i, key: "hollow", pt: { lat: 45.65316, lng: -97.04586 } },
   // Old Agency is the community of Agency Village, so accept either name — plus
-  // Tiospa (Zina), Little Crow Dr, and Bernard St addresses, which are all in
+  // Tiospa (Zina), Little Crow Dr, Bernard St, and Max* streets, which are all in
   // Agency Village even when the town is typed as "Sisseton".
-  { match: /old\s*agency|agency\s*village|tiospa|little\s*crow|bernard/i, key: "agency", pt: { lat: 45.56781, lng: -97.06721 } },
+  { match: /old\s*agency|agency\s*village|tiospa|little\s*crow|bernard|\bmax/i, key: "agency", pt: { lat: 45.56781, lng: -97.06721 } },
   // Peever + Peever Flat(s) merged into one van — both map to the Peever zone.
   { match: /peever/i, key: "peever", pt: { lat: 45.5391, lng: -96.9578 } },
 ];

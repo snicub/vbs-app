@@ -193,11 +193,29 @@ export default async function VanRostersPage({
       </header>
 
       {(vans ?? []).flatMap((v) => {
-        const riders = ridersByVan.get(v.id) ?? [];
+        const allRiders = ridersByVan.get(v.id) ?? [];
         const assign = assignByVan.get(v.id);
         const color = colorByVan.get(v.id) ?? "#e5e7eb";
         const crews = parseCrews(assign?.driver_name ?? null, assign?.aide_name ?? null);
-        const { stops, unlocated } = orderPickup(riders);
+
+        // Old Agency prints as two driver neighborhoods; every other van is one
+        // group. Empty neighborhoods drop out (but an empty van still shows).
+        const groups: { sublabel: string | null; riders: Rider[] }[] = isOldAgencyVan(v.name)
+          ? [
+              {
+                sublabel: "Lower-right neighborhood",
+                riders: allRiders.filter((r) => agencyNeighborhood(r.addressKey) === "lower-right"),
+              },
+              {
+                sublabel: "Upper-left neighborhood",
+                riders: allRiders.filter((r) => agencyNeighborhood(r.addressKey) === "upper-left"),
+              },
+            ].filter((g) => g.riders.length > 0)
+          : [{ sublabel: null, riders: allRiders }];
+        if (groups.length === 0) groups.push({ sublabel: null, riders: [] });
+
+        return groups.flatMap((group, gi) => {
+        const { stops, unlocated } = orderPickup(group.riders);
         const numLoads = Math.max(1, crews.length);
         const loads = splitStopsIntoLoads(stops, numLoads);
 
@@ -208,7 +226,7 @@ export default async function VanRostersPage({
             loadStops.reduce((sum, s) => sum + s.riders.length, 0) + tail.length;
           return (
             <section
-              key={`${v.id}:${li}`}
+              key={`${v.id}:${gi}:${li}`}
               className="roster-section rounded-lg border break-inside-avoid print:break-before-page"
             >
               <div
@@ -218,6 +236,7 @@ export default async function VanRostersPage({
                 <div className="min-w-0">
                   <div className="font-bold text-lg">
                     {v.name}
+                    {group.sublabel ? ` — ${group.sublabel}` : ""}
                     {numLoads > 1 ? ` — Van ${li + 1} of ${numLoads}` : ""}
                   </div>
                   <div className="text-sm font-medium">
@@ -256,6 +275,7 @@ export default async function VanRostersPage({
               )}
             </section>
           );
+        });
         });
       })}
 
@@ -353,6 +373,28 @@ function RiderRow({
       </div>
     </li>
   );
+}
+
+function isOldAgencyVan(name: string): boolean {
+  return /agency/i.test(name);
+}
+
+// Old Agency prints as two driver neighborhoods. Lower-right = a house number
+// 300+, or a Bernard / Max / Little Crow / Tiospa street; everything else in
+// Old Agency is the upper-left neighborhood.
+function agencyNeighborhood(address: string): "lower-right" | "upper-left" {
+  const a = address.toLowerCase();
+  const houseNumber = Number(a.match(/\d+/)?.[0] ?? "0");
+  if (
+    houseNumber >= 300 ||
+    a.includes("bernard") ||
+    /\bmax/.test(a) ||
+    /little\s*crow/.test(a) ||
+    a.includes("tiospa")
+  ) {
+    return "lower-right";
+  }
+  return "upper-left";
 }
 
 function formatDate(iso: string): string {
