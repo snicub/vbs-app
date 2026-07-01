@@ -11,6 +11,8 @@ import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/
 import { PrintButton } from "./print-button";
 import { RiderQr } from "./rider-qr";
 import { RegionSelect } from "./region-select";
+import { VanCheckInQr } from "./van-checkin-qr";
+import { env } from "@/lib/env";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Van Rosters — Coordinator" };
@@ -195,17 +197,20 @@ export default async function VanRostersPage({
               className="roster-section rounded-lg border break-inside-avoid print:break-before-page"
             >
               <div
-                className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-t-lg"
+                className="flex items-start justify-between gap-3 px-3 py-2 rounded-t-lg"
                 style={{ backgroundColor: color, color: contrastText(color), printColorAdjust: "exact", WebkitPrintColorAdjust: "exact" }}
               >
-                <span className="font-bold text-lg">
-                  {v.name}
-                  {numLoads > 1 ? ` — Van ${li + 1} of ${numLoads}` : ""}
-                </span>
-                <span className="text-sm font-medium">
-                  Driver: {crew?.driver || "—"} · Aide: {crew?.aide || "—"} · {totalKids} kid
-                  {totalKids === 1 ? "" : "s"}
-                </span>
+                <div className="min-w-0">
+                  <div className="font-bold text-lg">
+                    {v.name}
+                    {numLoads > 1 ? ` — Van ${li + 1} of ${numLoads}` : ""}
+                  </div>
+                  <div className="text-sm font-medium">
+                    Driver: {crew?.driver || "—"} · Aide: {crew?.aide || "—"} · {totalKids} kid
+                    {totalKids === 1 ? "" : "s"}
+                  </div>
+                </div>
+                <VanCheckInQr vanId={v.id} baseUrl={env.NEXT_PUBLIC_BASE_URL} />
               </div>
               {totalKids === 0 ? (
                 <p className="px-3 py-2 text-sm text-muted-foreground">No riders for this van.</p>
