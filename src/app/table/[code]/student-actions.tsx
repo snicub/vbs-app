@@ -7,7 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
-import { submitEvent, undoEvent } from "@/server-actions/events";
+import { submitEvent, undoEvent, resetStudentDay } from "@/server-actions/events";
 import { smartCheckOut, type PickupMetadata } from "@/server-actions/check-out";
 import {
   EVENT_LABEL,
@@ -79,6 +79,7 @@ export function StudentActions({
   const [pending, startTransition] = useTransition();
   const [confirmingNoShow, setConfirmingNoShow] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
+  const [resetConfirm, setResetConfirm] = useState(false);
 
   // Pickup picker state — opens when the volunteer taps the parent-pickup
   // button. We do NOT fire smart_checkout until a person is selected.
@@ -167,6 +168,20 @@ export function StudentActions({
   // One-tap override: fire the chosen event past the state machine with an
   // automatic reason (record_event still requires a reason to be present, and
   // it's logged) — no free-text box to slow the coordinator down.
+  function fireReset() {
+    startTransition(async () => {
+      const result = await resetStudentDay({ studentId, eventDate });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Status reset — back to Not arrived");
+      setResetConfirm(false);
+      setOverrideOpen(false);
+      router.refresh();
+    });
+  }
+
   function fireOverrideEvent(event: EventType) {
     startTransition(async () => {
       const result = await submitEvent({
@@ -523,6 +538,26 @@ export function StudentActions({
                 ))}
               </div>
               <p className="text-xs text-muted-foreground">Logged as a coordinator override.</p>
+              <div className="border-t pt-2">
+                {resetConfirm ? (
+                  <div className="flex items-center gap-2">
+                    <Button size="sm" variant="destructive" disabled={pending} onClick={fireReset}>
+                      Confirm reset to Not arrived
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setResetConfirm(false)}>
+                      Cancel
+                    </Button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setResetConfirm(true)}
+                    className="text-sm font-medium text-destructive underline underline-offset-2 hover:opacity-80"
+                  >
+                    Reset status → Not arrived (start over)
+                  </button>
+                )}
+              </div>
             </div>
           )}
         </div>

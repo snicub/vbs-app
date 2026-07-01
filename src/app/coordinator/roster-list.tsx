@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { XIcon } from "lucide-react";
 import { type AnomalyKind } from "@/lib/anomaly";
@@ -40,6 +40,14 @@ export function RosterList({
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
+
+  // Tapping a stat card changes ?show= but App Router doesn't scroll to the
+  // #roster hash on a query-only nav, so it looks like "nothing happened."
+  // Scroll the filtered list into view whenever the active filter changes.
+  const sectionRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (show) sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [show]);
   const filtered = show
     ? students.filter((s) =>
         METRIC_MATCHERS[show]({ state: s.state, hasAnomaly: s.anomalies.length > 0 }),
@@ -62,7 +70,7 @@ export function RosterList({
     : byMetric;
 
   return (
-    <section id="roster" className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
+    <section ref={sectionRef} id="roster" className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
       <div className="border-b px-3 sm:px-4 py-2.5 flex flex-col sm:flex-row sm:items-center gap-2">
         <h2 className="font-semibold text-sm shrink-0">
           {show ? `${METRIC_LABELS[show]} (${byMetric.length})` : `Roster (${students.length})`}

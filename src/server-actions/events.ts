@@ -194,6 +194,68 @@ export async function undoEvent(input: unknown): Promise<
 }
 
 /**
+ * Coordinator reset: wipe a student's day back to "not started" by superseding
+ * every active event for that (student, date). State is derived from the event
+ * log, so superseding all real events reverts them to the start — for when a kid
+ * was checked in / marked by mistake and you want to redo the whole flow. The
+ * original rows stay for audit (each gets a superseding override).
+ */
+const ResetSchema = z.object({
+  studentId: z.string().uuid(),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+export async function resetStudentDay(input: unknown): Promise<
+  { ok: true; newState: string } | { ok: false; error: string }
+> {
+  const session = await getSessionUser();
+  if (!session) return { ok: false, error: "Not signed in" };
+  if (session.role !== "coordinator" && session.role !== "admin") {
+    return { ok: false, error: "Coordinator only" };
+  }
+  const parsed = ResetSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+  const { studentId, eventDate } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: active } = await admin
+    .from("student_day_events")
+    .select("id")
+    .eq("student_id", studentId)
+    .eq("event_date", eventDate)
+    .is("superseded_by_event_id", null)
+    .neq("event_type", "override")
+    .order("occurred_at", { ascending: true })
+    .returns<{ id: string }[]>();
+
+  if (!active || active.length === 0) {
+    return { ok: true, newState: "not_started" };
+  }
+
+  let newState = "not_started";
+  for (const ev of active) {
+    const result = await recordEvent({
+      studentId,
+      eventDate,
+      eventType: "override",
+      actorUserId: session.id,
+      actorRole: session.role,
+      idempotencyKey: newIdempotencyKey("reset"),
+      overrideReason: "reset status to not started",
+      supersedesEventId: ev.id,
+      asAdmin: true,
+    });
+    if (!result.ok) return result;
+    newState = result.data.derivedState;
+  }
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true, newState };
+}
+
+/**
  * Cancel an AM boarding tapped by mistake — reverts the child to "not started".
  * Only works while they're still "on the van" (no check-in recorded yet), so it
  * can never rewrite a kid who has already moved on. Reuses undoEvent so all the
