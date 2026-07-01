@@ -538,11 +538,11 @@ export function VanManifest({
                       />
 
                       {(canBoardAm || canCheckOut || canCancelBoarding || canMarkNoShow) && (
-                        <div className="flex flex-col gap-2.5 pt-1 sm:flex-row sm:flex-wrap">
+                        <div className="flex flex-wrap gap-2 pt-0.5">
                           {canBoardAm && (
                             <Button
                               size="lg"
-                              className="w-full text-lg min-h-12 sm:w-auto"
+                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "board_am")}
                             >
@@ -552,7 +552,7 @@ export function VanManifest({
                           {canCheckOut && (
                             <Button
                               size="lg"
-                              className="w-full text-lg min-h-12 sm:w-auto"
+                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "drop_off")}
                             >
@@ -563,7 +563,7 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="lg"
-                              className="w-full text-base min-h-12 sm:w-auto"
+                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
                               disabled={isPending || isQueued}
                               onClick={() => cancelBoardingFor(r.studentId)}
                             >
@@ -574,7 +574,11 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="lg"
-                              className="w-full text-base min-h-12 sm:w-auto"
+                              className={`grow text-base min-h-11 ${
+                                confirmNoShow === r.studentId
+                                  ? "basis-full"
+                                  : "basis-[calc(50%-0.25rem)]"
+                              }`}
                               disabled={isPending || isQueued}
                               onClick={() => {
                                 if (confirmNoShow === r.studentId) {
