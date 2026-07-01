@@ -11,6 +11,14 @@ const serverSchema = z.object({
 
   APP_TIMEZONE: z.string().default("America/Chicago"),
 
+  // Force the app's "today" to a fixed VBS date (YYYY-MM-DD), overriding the
+  // system clock everywhere getLocalDate() is used. Set to run/prep a day early;
+  // REMOVE it once the real clock catches up or the app stays stuck on that day.
+  APP_TODAY_OVERRIDE: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/)
+    .optional(),
+
   TWILIO_ACCOUNT_SID: z.string().optional(),
   TWILIO_AUTH_TOKEN: z.string().optional(),
   TWILIO_MESSAGING_SERVICE_SID: z.string().optional(),
