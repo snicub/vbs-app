@@ -50,6 +50,7 @@ const cases: Case[] = [
   // --- Town is NOT a region (Sisseton / typos) → fall back to the STREET ---
   { desc: "Eastman — Sisseton town, Barker Hill street → Barker Hill", city: "Sisseton", street: "556 Barker Hill", want: BARKER_HILL },
   { desc: "Shantelle — Sisseton town, Old Agency street → Old Agency", city: "Sisseton", street: "705 old agency dr", want: OLD_AGENCY },
+  { desc: "Bernard St — Sisseton town, guaranteed Old Agency → Old Agency", city: "Sisseton", street: "410 Bernard St", want: OLD_AGENCY },
   { desc: "Dazen — Sisseron typo town, 'berker hill' street → Barker Hill", city: "Sisseron SD", street: "707 berker hill", want: BARKER_HILL },
   { desc: "Miles — Sissteon typo town, barker hill street → Barker Hill", city: "Sissteon", street: "551 Barker hill", want: BARKER_HILL },
   { desc: "town null, region in the street line", city: null, street: "12440 Barker Hill Rd", want: BARKER_HILL },

@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
-import { boardedStopConflict, planRegionMove } from "@/lib/routing";
+import { boardedStopConflict, planRegionMove, ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
 import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 import { VBS_DATES } from "@/lib/registration/dates";
 
@@ -120,7 +120,10 @@ type DayRec = {
  */
 export async function setStudentVan(
   input: unknown,
-): Promise<{ ok: true; appliedDays: number } | { ok: false; error: string }> {
+): Promise<
+  | { ok: true; changedDays: number; ridesVan: boolean }
+  | { ok: false; error: string }
+> {
   const user = await getSessionUser();
   if (!user || !isCoordinator(user.role)) {
     return { ok: false, error: "Coordinator only" };
@@ -143,7 +146,8 @@ export async function setStudentVan(
 
   // The viewed day and every later VBS day (don't rewrite history).
   const dates = VBS_DATES.filter((d) => d >= eventDate);
-  let appliedDays = 0;
+  let changedDays = 0;
+  let ridesVan = false;
   for (const d of dates) {
     const { data: rec } = await supabase
       .from("student_day_status")
@@ -152,6 +156,7 @@ export async function setStudentVan(
       .eq("event_date", d)
       .maybeSingle<DayRec>();
     if (!rec || !rec.attending) continue;
+    if (ridesMorningVan(rec.mode) || ridesAfternoonVan(rec.mode)) ridesVan = true;
 
     const plan = planRegionMove(
       rec.mode,
@@ -159,27 +164,31 @@ export async function setStudentVan(
       { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
       zoneStopId,
     );
-    if (plan.action === "noop") {
-      appliedDays++;
-      continue;
-    }
+    if (plan.action === "noop") continue;
     if (plan.action === "boarded-conflict") {
       return {
         ok: false,
         error: `This child is on the ${plan.leg} van right now (${d}) — undo their boarding before moving them.`,
       };
     }
-    const { error } = await supabase
+    // Read the affected rows back so a write that silently touches nothing
+    // (missing record, or a permission block that returns no error) surfaces as
+    // a real failure instead of a false "moved".
+    const { data: updated, error } = await supabase
       .from("student_day_records")
       .update({ morning_stop_id: plan.morningStopId, afternoon_stop_id: plan.afternoonStopId } as never)
       .eq("student_id", studentId)
-      .eq("event_date", d);
+      .eq("event_date", d)
+      .select("student_id");
     if (error) return { ok: false, error: error.message };
-    appliedDays++;
+    if (!updated || updated.length === 0) {
+      return { ok: false, error: "The move didn't save — no matching record or the write was blocked. Tell Daniel." };
+    }
+    changedDays++;
   }
 
   revalidatePath("/coordinator", "layout");
   revalidatePath("/table", "layout");
   revalidatePath("/van", "layout");
-  return { ok: true, appliedDays };
+  return { ok: true, changedDays, ridesVan };
 }

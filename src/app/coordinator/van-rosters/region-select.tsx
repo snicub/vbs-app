@@ -34,7 +34,13 @@ export function RegionSelect({
         toast.error(res.error);
         return;
       }
-      toast.success(`Moved to ${vanName} for the rest of VBS`);
+      if (res.changedDays > 0) {
+        toast.success(`Moved to ${vanName} for the rest of VBS`);
+      } else if (!res.ridesVan) {
+        toast.warning(`Not moved — this child is set to parent drop-off/pickup. Change their travel mode to ride a van first.`);
+      } else {
+        toast.info(`Already on ${vanName} — nothing to change.`);
+      }
       router.refresh();
     });
   }

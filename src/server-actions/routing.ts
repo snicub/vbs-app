@@ -491,12 +491,13 @@ export async function reconcileVansFromAddressRules(
       skippedBoarded++;
       continue;
     }
-    const { error } = await admin
+    const { data: updated } = await admin
       .from("student_day_records")
       .update({ morning_stop_id: plan.morningStopId, afternoon_stop_id: plan.afternoonStopId } as never)
       .eq("student_id", row.student_id)
-      .eq("event_date", row.event_date);
-    if (!error) moved++;
+      .eq("event_date", row.event_date)
+      .select("student_id");
+    if (updated && updated.length > 0) moved++;
   }
 
   revalidatePath("/coordinator", "layout");
