@@ -16,9 +16,10 @@ export type BuilderKid = GroupKid & { present: boolean };
  */
 export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   const presentCount = kids.filter((k) => k.present).length;
-  const [source, setSource] = useState<"present" | "all">(
-    presentCount > 0 ? "present" : "all",
-  );
+  // Always default to the checked-in pool — if no one has checked in yet, the
+  // groups stay empty (with a hint to switch to "All expected" to pre-plan)
+  // instead of silently populating from every expected kid.
+  const [source, setSource] = useState<"present" | "all">("present");
   const [mode, setMode] = useState<"size" | "count" | "teachers">("size");
   const [size, setSize] = useState(10);
   const [count, setCount] = useState(6);

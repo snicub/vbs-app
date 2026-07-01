@@ -12,6 +12,16 @@ export const dynamic = "force-dynamic";
 export const metadata = { title: "Groups — Coordinator" };
 
 type StatusRow = { student_id: string; state: string };
+
+// "Checked in today" = reached the site check-in at any point (still at the site
+// OR already checked out / on the way home). So the group pool reflects everyone
+// who actually showed up, and stays empty until the first kid checks in.
+const CHECKED_IN_STATES = new Set([
+  "site_checked_in",
+  "site_checked_out",
+  "van_boarded_pm",
+  "home",
+]);
 type StudentRow = {
   id: string;
   legal_first_name: string;
@@ -68,8 +78,8 @@ export default async function GroupsPage({
       lastName: last,
       age: ageFor({ ageAtRegistration: s.age_at_registration, dob: s.dob }, day),
       wristbandCode: s.wristband_code,
-      // "present" = currently checked in at the site (not just expected / on a van).
-      present: stateById.get(s.id) === "site_checked_in",
+      // "present" = checked in today (showed up), not just expected / on a van.
+      present: CHECKED_IN_STATES.has(stateById.get(s.id) ?? ""),
     };
   });
 
