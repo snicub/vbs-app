@@ -234,6 +234,28 @@ This app is maintained via flow-specialist subagents in `.claude/agents/`, each 
 
 All 5 phases on `main`. **193 unit tests pass; typecheck, lint clean.** pgTAP extended to 22 assertions but is **unverified since 2026-06-01** (Docker not running locally; run `pnpm supabase:reset && pnpm test:db` to confirm — and note `pnpm check` does NOT include pgTAP).
 
+### 2026-06-30 — LIVE VBS WEEK (day 1): wrong-van data fix + clickable dashboards + van UX + on-site flow
+
+Event is running (VBS_DATES 06/30–07/02). Worked live against **production** (hosted Supabase; service-role key is in `.env.local`, so throwaway `scripts/_*.ts` via `npx tsx` can inspect/patch prod). All app changes shipped straight to `main` → Vercel (`vbs26.vercel.app`); **501 unit tests / typecheck / lint / `next build` green** at each push.
+
+**Wrong-van incident + data fix (the big one).** Kids rode the wrong van AM of day 1. Root cause: the van is set by the **pickup-region dropdown at signup** (`registerFamily` writes `regionStopId` straight to the day-record stops); the typed **home address never chooses the van**, and `autoAssignStopsFromAddresses` only fills EMPTY legs, so a wrong dropdown pick is never corrected. Diagnosed per-date (my first cross-date inspection collapsed days and over-counted): **6/30 had 44 address↔van mismatches; 7/1 & 7/2 had already been corrected to ~0** by someone editing the future days. Fixed the remaining 7/1/7/2 stragglers via a one-off script that re-derives each kid's van from their address region (`localRegionKey` regexes copied from `geo` logic), scoped to future days only (today left as-is, revert JSON saved). **7/1 & 7/2 now 0 mismatches.** Caution baked in: the "Sisseton general" bucket is unreliable for plain-Sisseton-town addresses (e.g. Tiospa Dr is really Old Agency), so bulk re-derivation is NOT safe to trust blindly.
+
+**Durable self-service fix for the above:** `/coordinator/van-rosters` (driver sheets) now has a per-rider **"Move to van" dropdown** (screen only, hidden on print) → new `setStudentVan` server action points the legs the kid's mode rides at the chosen van's zone across the **viewed day + rest of VBS**, with the boarded-stop guard. Root cause (signup dropdown overriding address) is still open — offered to make signup derive the van from the address; NOT yet done (risk: messy/typo'd address data could silently mis-default).
+
+**Clickable dashboards (coordinator):**
+- Stat cards (Expected / On a van / At site / Checked in / Home / No-show / Needs attention) → tap to filter the roster to exactly those kids. One shared `METRIC_MATCHERS` map drives both the card count and the filter (`?show=<metric>`), so list always matches the number.
+- "Kids coming by van" cards → `/coordinator/van-group/[vanId]`, now a **compact list** (shared `RosterList`: color dot, name, wristband, status, tap → `/table/[code]`). Was a heavy per-kid inline-action page; dropped `StudentActions` + guardians/pickup fetches. (The review-flagged "un-routed van kid gets a fabricated Send-home-on-van" bug is now moot here since the page has no inline actions; the `offersPmVanCheckout`/`pmVanAvailable` guard on `StudentActions` stays, default-safe. `/table` still has that latent hole — afternoon-van not threaded into `lookupByWristband`.)
+
+**Van driver/aide screen (`/van/[vanId]`):**
+- Tap a rider's **photo → phone camera** (`capture=environment`), client-resized, saved via new `setStudentPhoto` action (gated `canDriveVan`).
+- Header + over-capacity banner now count **kids left to pick up** (AM riders still `not_started`, excluding no-shows / PM-only), counting down as you board.
+- **Compact rows** (smaller photo/name/padding, `min-h-12` buttons) to fit more kids per phone screen.
+- `Save all` button on `/coordinator/vans/manage` driver/aide editor (state lifted; writes every van's pairs at once).
+
+**On-site registration flow:** success → **check-in modal pops** (one-tap "Check in [child]" per kid via new `checkInByCode` = lookup + `parent_dropoff`; already-present kids report `alreadyIn`) → success card also offers **Print name tag** (deep-links `/coordinator/nametags/quick?first=&last=`, which now pre-fills the name). Note `/coordinator/nametags/quick` already existed and solves the "reprint the whole sheet for one walk-in" problem (prints one tag onto a chosen Avery-5395 position, auto-advances).
+
+**Still open:** signup address-derives-van (prevent recurrence for new signups); close the `/table` fabricated-van hole; decide today-6/30-PM reshuffle (left as-is); pgTAP still Docker-unverified.
+
 ### 2026-06-17 (cont.) — door-to-door hardening: registration is now orphan-safe (380 tests)
 
 Three fixes so the signup link is safe to send out for on-a-phone, door-to-door use (all green: 380 tests / typecheck / lint / `next build`):
