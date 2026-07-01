@@ -36,6 +36,8 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
   const [printOnly, setPrintOnly] = useState<number | null>(null);
+  // Master-doc print: every group on small cards, many per page.
+  const [masterPrint, setMasterPrint] = useState(false);
 
   // Saved / manual arrangement: studentId → group number (1-indexed).
   const [assignments, setAssignments] = useState<Record<string, number>>({});
@@ -62,6 +64,12 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
     window.print();
     setPrintOnly(null);
   }, [printOnly]);
+
+  useEffect(() => {
+    if (!masterPrint) return;
+    window.print();
+    setMasterPrint(false);
+  }, [masterPrint]);
 
   const [teacherNames, setTeacherNames] = useState<Record<number, string[]>>({});
   const teachersFor = (gi: number) => teacherNames[gi] ?? [""];
@@ -222,9 +230,14 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
               )}
             </div>
           </div>
-          <Button type="button" variant="outline" onClick={() => window.print()} className="ml-auto">
-            Print
-          </Button>
+          <div className="ml-auto flex gap-2">
+            <Button type="button" variant="outline" onClick={() => window.print()}>
+              Print (page each)
+            </Button>
+            <Button type="button" onClick={() => setMasterPrint(true)}>
+              Master doc
+            </Button>
+          </div>
         </div>
 
         {method === "auto" ? (
@@ -311,13 +324,18 @@ export function GroupsBuilder({ kids }: { kids: BuilderKid[] }) {
               : "No kids attending on this day."}
         </p>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:block print:gap-0">
+        <div
+          className={cn(
+            "grid gap-4 sm:grid-cols-2 lg:grid-cols-3 print:block print:gap-0",
+            masterPrint && "groups-master",
+          )}
+        >
           {displayGroups.map((g, gi) => (
             <section
               key={gi}
               className={cn(
                 "roster-section rounded-xl border bg-card overflow-hidden break-inside-avoid",
-                printOnly == null && "print:break-before-page",
+                printOnly == null && !masterPrint && "print:break-before-page",
                 printOnly != null && printOnly !== gi && "print:hidden",
               )}
             >

@@ -198,6 +198,40 @@
     break-inside: avoid;
   }
 
+  /* Master group doc: every group on small cards, several per page (not one
+   * group per page). Overrides the roster-section per-card page break + big
+   * single-group print sizes down to a compact multi-column sheet. */
+  .groups-master {
+    display: grid !important;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 0.18in !important;
+    page: roster;
+    padding: 0.35in;
+    box-sizing: border-box;
+  }
+  .groups-master .roster-section {
+    break-before: auto !important;
+    break-inside: avoid;
+    padding: 0 !important;
+    border: 1px solid #000;
+  }
+  .groups-master .print\:text-2xl {
+    font-size: 12pt !important;
+  }
+  .groups-master .print\:text-xl {
+    font-size: 10pt !important;
+  }
+  .groups-master .print\:text-lg {
+    font-size: 9pt !important;
+  }
+  .groups-master .print\:text-base {
+    font-size: 8pt !important;
+  }
+  .groups-master .roster-section li {
+    padding-top: 2px !important;
+    padding-bottom: 2px !important;
+  }
+
   html,
   body {
     background: #fff !important;
