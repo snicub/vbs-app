@@ -380,16 +380,17 @@ function isOldAgencyVan(name: string): boolean {
 }
 
 // Old Agency prints as two driver neighborhoods. Lower-right = a house number
-// 300+, or a Bernard / Max / Little Crow / Tiospa street; everything else in
-// Old Agency is the upper-left neighborhood.
+// 300+, or a Bernard / Max / Tiospa street; everything else in Old Agency
+// (including Little Crow) is the upper-left neighborhood.
 function agencyNeighborhood(address: string): "lower-right" | "upper-left" {
   const a = address.toLowerCase();
+  // Little Crow is upper-left regardless of house number.
+  if (/little\s*crow/.test(a)) return "upper-left";
   const houseNumber = Number(a.match(/\d+/)?.[0] ?? "0");
   if (
     houseNumber >= 300 ||
     a.includes("bernard") ||
     /\bmax/.test(a) ||
-    /little\s*crow/.test(a) ||
     a.includes("tiospa")
   ) {
     return "lower-right";
