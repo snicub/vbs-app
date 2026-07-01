@@ -227,7 +227,7 @@ export default async function VanRostersPage({
           return (
             <section
               key={`${v.id}:${gi}:${li}`}
-              className="roster-section rounded-lg border break-inside-avoid print:break-before-page"
+              className="roster-section rounded-lg border"
             >
               <div
                 className="flex items-start justify-between gap-3 px-3 py-2 rounded-t-lg"
@@ -280,7 +280,7 @@ export default async function VanRostersPage({
       })}
 
       {needsRoutingRiders.length > 0 && (
-        <section className="roster-section rounded-lg border-2 border-[var(--anomaly-warn)] break-inside-avoid print:break-before-page">
+        <section className="roster-section rounded-lg border-2 border-[var(--anomaly-warn)]">
           <div className="px-3 py-2 font-bold text-[var(--anomaly-warn)]">
             ⚠ Needs a van ({needsRoutingRiders.length}) — rides a van but none assigned
           </div>
@@ -293,7 +293,7 @@ export default async function VanRostersPage({
       )}
 
       {parentHandled.length > 0 && (
-        <section className="roster-section rounded-lg border break-inside-avoid print:break-before-page">
+        <section className="roster-section rounded-lg border">
           <div className="px-3 py-2 font-bold text-muted-foreground">
             Parent drop-off / pickup ({parentHandled.length}) — no van needed
           </div>

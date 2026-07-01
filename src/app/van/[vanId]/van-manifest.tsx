@@ -613,7 +613,7 @@ export function VanManifest({
                           {canBoardAm && (
                             <Button
                               size="sm"
-                              className="flex-1 basis-0 min-w-0 min-h-10"
+                              className="flex-1 basis-0 min-w-0 min-h-9 text-sm"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "board_am")}
                             >
@@ -623,7 +623,7 @@ export function VanManifest({
                           {canCheckOut && (
                             <Button
                               size="sm"
-                              className="flex-1 basis-0 min-w-0 min-h-10"
+                              className="flex-1 basis-0 min-w-0 min-h-9 text-sm"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "drop_off")}
                             >
@@ -634,7 +634,7 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 basis-0 min-w-0 min-h-10"
+                              className="flex-1 basis-0 min-w-0 min-h-9 text-sm"
                               disabled={isPending || isQueued}
                               onClick={() => cancelBoardingFor(r.studentId)}
                             >
@@ -645,7 +645,7 @@ export function VanManifest({
                             <Button
                               variant="outline"
                               size="sm"
-                              className="flex-1 basis-0 min-w-0 min-h-10"
+                              className="flex-1 basis-0 min-w-0 min-h-9 text-sm"
                               disabled={isPending || isQueued}
                               onClick={() => {
                                 if (confirmNoShow === r.studentId) {

@@ -184,6 +184,18 @@
     page: roster;
     padding: 0.5in 0.55in;
     box-sizing: border-box;
+    /* Start each van/section on a fresh page, but DON'T force the whole section
+     * to stay on one page — a long rider list must be allowed to flow onto the
+     * next page instead of being clipped (the "cut off / blank" print bug). */
+    break-before: page;
+    break-inside: auto;
+  }
+  .roster-section:first-of-type {
+    break-before: avoid;
+  }
+  /* Keep an individual kid and their stop heading intact across a page break. */
+  .roster-section li {
+    break-inside: avoid;
   }
 
   html,
