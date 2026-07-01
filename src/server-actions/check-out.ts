@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
+import { isCoordinator } from "@/lib/auth/roles";
 import { clampOccurredAt } from "@/lib/events/occurred-at";
 
 const PickupMetadataSchema = z.object({
@@ -153,4 +154,75 @@ export async function smartCheckOut(
   revalidatePath("/van", "layout");
 
   return { ok: true, finalState: row.final_state };
+}
+
+// -- Bulk "send home": mark many kids home at once from the coordinator roster --
+
+const BulkSendHomeSchema = z.object({
+  studentIds: z.array(z.string().uuid()).min(1).max(200),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+});
+
+/**
+ * Coordinator-only: mark several students home in one action. Each runs through
+ * smartCheckOut with pmPath 'auto' so a van kid goes home on their van chain and
+ * a parent kid records a parent pickup (attributed to the family's primary
+ * guardian). Kids who aren't in a releasable state are skipped, not failed —
+ * the count reports how many were sent home vs skipped.
+ */
+export async function bulkSendHome(input: unknown): Promise<
+  { ok: true; home: number; skipped: number } | { ok: false; error: string }
+> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = BulkSendHomeSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+  const { studentIds, eventDate } = parsed.data;
+
+  const admin = createAdminClient();
+  const { data: students } = await admin
+    .from("students")
+    .select("id, family_id")
+    .in("id", studentIds)
+    .returns<{ id: string; family_id: string }[]>();
+  const familyIds = Array.from(new Set((students ?? []).map((s) => s.family_id)));
+  const { data: families } = familyIds.length
+    ? await admin
+        .from("families")
+        .select("id, primary_guardian_name")
+        .in("id", familyIds)
+        .returns<{ id: string; primary_guardian_name: string | null }[]>()
+    : { data: [] as { id: string; primary_guardian_name: string | null }[] };
+  const guardianByFamily = new Map((families ?? []).map((f) => [f.id, f.primary_guardian_name]));
+  const guardianByStudent = new Map(
+    (students ?? []).map((s) => [s.id, guardianByFamily.get(s.family_id) ?? null]),
+  );
+
+  let home = 0;
+  let skipped = 0;
+  for (const studentId of studentIds) {
+    const name = (guardianByStudent.get(studentId) || "Parent").trim() || "Parent";
+    const res = await smartCheckOut({
+      studentId,
+      eventDate,
+      pmPath: "auto",
+      pickup: {
+        authorizedPickupPersonId: null,
+        name,
+        relationship: "Primary guardian",
+        isEmergencyContact: false,
+        wasUnlisted: false,
+        notes: "Bulk marked home",
+      },
+    });
+    if (res.ok) home++;
+    else skipped++;
+  }
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true, home, skipped };
 }

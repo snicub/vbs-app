@@ -1,12 +1,16 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { toast } from "sonner";
 import { XIcon } from "lucide-react";
 import { type AnomalyKind } from "@/lib/anomaly";
 import { STATE_PRESENTATION, safeDayState } from "@/lib/state-presentation";
 import { StateBadge, SafetyPills } from "@/components/state-badge";
+import { Button } from "@/components/ui/button";
 import { METRIC_MATCHERS, METRIC_LABELS, type MetricKey } from "@/lib/coordinator/dashboard";
+import { bulkSendHome } from "@/server-actions/check-out";
 
 export type RosterStudent = {
   student_id: string;
@@ -48,6 +52,20 @@ export function RosterList({
   useEffect(() => {
     if (show) sectionRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
   }, [show]);
+
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+  const [selectMode, setSelectMode] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+
+  function toggle(id: string) {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
   const filtered = show
     ? students.filter((s) =>
         METRIC_MATCHERS[show]({ state: s.state, hasAnomaly: s.anomalies.length > 0 }),
@@ -68,6 +86,32 @@ export function RosterList({
           s.wristbandCode.toLowerCase().includes(needle),
       )
     : byMetric;
+
+  const allVisibleSelected =
+    visible.length > 0 && visible.every((s) => selected.has(s.student_id));
+  function toggleAll() {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (allVisibleSelected) visible.forEach((s) => next.delete(s.student_id));
+      else visible.forEach((s) => next.add(s.student_id));
+      return next;
+    });
+  }
+  function sendSelectedHome() {
+    const ids = Array.from(selected);
+    if (ids.length === 0 || !date) return;
+    startTransition(async () => {
+      const res = await bulkSendHome({ studentIds: ids, eventDate: date });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`${res.home} sent home${res.skipped ? ` · ${res.skipped} skipped` : ""}`);
+      setSelected(new Set());
+      setSelectMode(false);
+      router.refresh();
+    });
+  }
 
   return (
     <section ref={sectionRef} id="roster" className="rounded-xl border bg-card overflow-hidden scroll-mt-4">
@@ -95,12 +139,46 @@ export function RosterList({
             {visible.length} of {byMetric.length}
           </span>
         )}
-        {!needle && (
-          <span className="text-xs text-muted-foreground hidden sm:block sm:ml-auto">
-            Tap a name to check in / out
-          </span>
-        )}
+        <div className="flex items-center gap-2 sm:ml-auto">
+          {selectMode && visible.length > 0 && (
+            <label className="flex items-center gap-1.5 text-xs text-muted-foreground cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allVisibleSelected}
+                onChange={toggleAll}
+                className="size-4"
+              />
+              All ({visible.length})
+            </label>
+          )}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectMode((v) => !v);
+              setSelected(new Set());
+            }}
+            className="rounded-full border px-3 min-h-8 text-xs hover:bg-muted/40 shrink-0"
+          >
+            {selectMode ? "Cancel select" : "Select"}
+          </button>
+        </div>
       </div>
+
+      {selectMode && selected.size > 0 && (
+        <div className="flex items-center gap-3 border-b bg-primary/10 px-3 sm:px-4 py-2">
+          <span className="text-sm font-medium">{selected.size} selected</span>
+          <Button size="sm" onClick={sendSelectedHome} disabled={pending}>
+            {pending ? "Sending…" : "Send home"}
+          </Button>
+          <button
+            type="button"
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-muted-foreground underline"
+          >
+            clear
+          </button>
+        </div>
+      )}
       {visible.length === 0 ? (
         <p className="px-4 py-6 text-sm text-muted-foreground text-center">
           {needle
@@ -125,9 +203,19 @@ export function RosterList({
                       : `var(--state-${tone})`,
                 }}
               >
+                <div className="flex items-center">
+                {selectMode && (
+                  <input
+                    type="checkbox"
+                    checked={selected.has(s.student_id)}
+                    onChange={() => toggle(s.student_id)}
+                    className="ml-3 size-5 shrink-0"
+                    aria-label={`Select ${s.name}`}
+                  />
+                )}
                 <Link
                   href={`/table/${s.wristbandCode}`}
-                  className="flex items-center gap-3 px-3 sm:px-4 py-3 min-h-14"
+                  className="flex-1 min-w-0 flex items-center gap-3 px-3 sm:px-4 py-3 min-h-14"
                 >
                   <Avatar url={s.photoUrl} alt={s.name} size={40} />
                   <ColorDot
@@ -149,6 +237,7 @@ export function RosterList({
                   />
                   <StateBadge state={state} size="sm" />
                 </Link>
+                </div>
               </li>
             );
           })}
