@@ -315,17 +315,34 @@ export function SignupForm({
         </div>
 
         {success.codes.length > 0 && (
-          <div className="space-y-2">
-            <p className="text-sm font-medium">Checking them in now? Tap their name:</p>
-            {success.codes.map((c) => (
-              <Link
-                key={c.code}
-                href={`/table/${c.code}`}
-                className={buttonVariants({ variant: "default" }) + " w-full justify-start text-base"}
-              >
-                Check in {c.studentName}
-              </Link>
-            ))}
+          <div className="space-y-3">
+            <p className="text-sm font-medium">For each child:</p>
+            {success.codes.map((c) => {
+              const parts = c.studentName.trim().split(/\s+/);
+              const lastName = parts.length > 1 ? parts.pop()! : "";
+              const firstName = parts.join(" ");
+              const tagHref = `/coordinator/nametags/quick?first=${encodeURIComponent(firstName)}&last=${encodeURIComponent(lastName)}`;
+              return (
+                <div key={c.code} className="space-y-1.5">
+                  <div className="text-sm font-semibold">{c.studentName}</div>
+                  <div className="flex flex-col gap-2 sm:flex-row">
+                    <Link
+                      href={`/table/${c.code}`}
+                      className={buttonVariants({ variant: "default" }) + " flex-1 justify-center text-base"}
+                    >
+                      Check in
+                    </Link>
+                    <Link
+                      href={tagHref}
+                      target="_blank"
+                      className={buttonVariants({ variant: "outline" }) + " flex-1 justify-center text-base"}
+                    >
+                      Print name tag
+                    </Link>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 

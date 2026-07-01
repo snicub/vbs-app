@@ -8,7 +8,12 @@ import { QuickNameTag } from "./quick-nametag";
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Quick Name Tag — Coordinator" };
 
-export default async function QuickNameTagPage() {
+export default async function QuickNameTagPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ first?: string; last?: string }>;
+}) {
+  const { first, last } = await searchParams;
   const user = await getSessionUser();
   if (!user) redirect("/login");
   if (!isCoordinator(user.role)) {
@@ -30,7 +35,7 @@ export default async function QuickNameTagPage() {
 
   return (
     <main className="mx-auto max-w-3xl px-3 sm:px-4 py-4 sm:py-6">
-      <QuickNameTag regions={regions} />
+      <QuickNameTag regions={regions} initialFirst={first ?? ""} initialLast={last ?? ""} />
     </main>
   );
 }

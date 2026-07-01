@@ -30,9 +30,17 @@ function describeAlign(a: { x: number; y: number }): string {
  * sheet can be fed back through and filled up one tag at a time. Reuses the same
  * print CSS (and per-printer alignment nudge) as the full sheet.
  */
-export function QuickNameTag({ regions }: { regions: Region[] }) {
-  const [first, setFirst] = useState("");
-  const [last, setLast] = useState("");
+export function QuickNameTag({
+  regions,
+  initialFirst = "",
+  initialLast = "",
+}: {
+  regions: Region[];
+  initialFirst?: string;
+  initialLast?: string;
+}) {
+  const [first, setFirst] = useState(initialFirst);
+  const [last, setLast] = useState(initialLast);
   const [regionId, setRegionId] = useState("");
   const [position, setPosition] = useState(1);
   const [align, setAlign] = useState(DEFAULT_ALIGN);
