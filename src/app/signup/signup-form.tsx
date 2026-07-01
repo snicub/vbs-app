@@ -216,7 +216,7 @@ export function SignupForm({
       return;
     }
     if (needsVan && regions.length > 0 && !regionStopId) {
-      toast.error("Please pick your pickup region for the van.");
+      toast.error("Please pick which van picks up your child.");
       return;
     }
     if (!family.primaryGuardianName.trim() || !family.primaryPhone.trim() || !family.primaryEmail.trim()) {
@@ -512,9 +512,9 @@ export function SignupForm({
           </Field>
         </div>
         {needsVan && regions.length > 0 && (
-          <Field label="Pickup region" required>
+          <Field label="Which van?" required>
             <Select value={regionStopId} onChange={(e) => setRegionStopId(e.target.value)}>
-              <option value="">-- Pick your region --</option>
+              <option value="">-- Pick the van --</option>
               {regions.map((r) => (
                 <option key={r.stopId} value={r.stopId}>
                   {r.name}
@@ -522,8 +522,8 @@ export function SignupForm({
               ))}
             </Select>
             <p className="mt-1 text-xs text-muted-foreground">
-              Pick the region/town your child is picked up from — this puts them straight on the
-              right van.
+              Pick the van for the area your child is picked up from — this puts them straight on
+              the right van.
             </p>
           </Field>
         )}
