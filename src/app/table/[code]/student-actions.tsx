@@ -145,6 +145,28 @@ export function StudentActions({
     });
   }
 
+  // A kid marked no-show who then shows up (parent dropped them off) must still
+  // be checkable in — being present is never a coordinator-only event. no_show is
+  // terminal in the state machine, so this rides the coordinator override path
+  // with an automatic reason instead of making staff dig into the override panel.
+  function fireArrivedAfterNoShow() {
+    startTransition(async () => {
+      const result = await submitEvent({
+        studentId,
+        eventDate,
+        eventType: "parent_dropoff",
+        overrideReason: "Marked no-show but arrived — parent dropped off",
+      });
+      if (!result.ok) {
+        toast.error(result.error);
+        return;
+      }
+      toast.success("Checked in — parent dropped off");
+      router.refresh();
+      if (!stayOnPage) router.push("/table");
+    });
+  }
+
   function fireOverride() {
     const reason = overrideReason.trim();
     if (!overrideEvent) {
@@ -252,11 +274,23 @@ export function StudentActions({
   return (
     <div className="space-y-4">
       {allDone ? (
-        <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
-          This student is in a terminal state ({stateLabel}).{" "}
-          {isCoordinator(actorRole)
-            ? "Use coordinator override below to change anything."
-            : "Ask a coordinator to fix this."}
+        <div className="space-y-3">
+          {currentState === "marked_no_show" && isCoordinator(actorRole) && (
+            <Button
+              size="lg"
+              onClick={fireArrivedAfterNoShow}
+              disabled={pending}
+              className="w-full"
+            >
+              <UserCheckIcon /> They&apos;re here — parent dropped off
+            </Button>
+          )}
+          <div className="rounded-lg border bg-muted/40 p-4 text-sm text-muted-foreground">
+            This student is in a terminal state ({stateLabel}).{" "}
+            {isCoordinator(actorRole)
+              ? "Use the button above (if they showed up) or the coordinator override below."
+              : "Ask a coordinator to fix this."}
+          </div>
         </div>
       ) : (
         <div className="grid gap-2 sm:grid-cols-2">

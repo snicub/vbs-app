@@ -11,6 +11,7 @@ import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/
 import { PrintButton } from "./print-button";
 import { ReconcileVansButton } from "./reconcile-vans-button";
 import { RegionSelect } from "./region-select";
+import { ModeSelect } from "./mode-select";
 import { Linkify } from "@/components/linkify";
 import { VanCheckInQr } from "./van-checkin-qr";
 import { env } from "@/lib/env";
@@ -23,6 +24,7 @@ type StopRow = { id: string; color_code: string };
 type Assignment = { van_id: string; driver_name: string | null; aide_name: string | null };
 type Status = {
   student_id: string;
+  mode: string | null;
   morning_van_id: string | null;
   afternoon_van_id: string | null;
 };
@@ -77,7 +79,7 @@ export default async function VanRostersPage({
         .returns<Assignment[]>(),
       supabase
         .from("student_day_status")
-        .select("student_id, morning_van_id, afternoon_van_id")
+        .select("student_id, mode, morning_van_id, afternoon_van_id")
         .eq("event_date", day)
         .eq("attending", true)
         .returns<Status[]>(),
@@ -117,6 +119,7 @@ export default async function VanRostersPage({
   type Rider = {
     studentId: string;
     name: string;
+    mode: string | null;
     address: string;
     notes: string | null;
     guardian: string;
@@ -129,12 +132,13 @@ export default async function VanRostersPage({
     lng: number | null;
     addressKey: string;
   };
-  function riderFor(s: Student): Rider {
+  function riderFor(s: Student, mode: string | null): Rider {
     const f = familyById.get(s.family_id);
     const cityLine = [f?.city, f?.state, f?.postal_code].map((p) => p?.trim()).filter(Boolean).join(", ");
     return {
       studentId: s.id,
       name: `${s.preferred_first_name ?? s.legal_first_name} ${s.legal_last_name}`.trim(),
+      mode,
       address: [f?.street_address?.trim(), cityLine].filter(Boolean).join(" · ") || "—",
       notes: f?.notes?.trim() || null,
       guardian: f?.primary_guardian_name ?? "—",
@@ -156,7 +160,7 @@ export default async function VanRostersPage({
     const stu = studentById.get(st.student_id);
     if (!stu) continue;
     const vanId = st.morning_van_id ?? st.afternoon_van_id;
-    const rider = riderFor(stu);
+    const rider = riderFor(stu, st.mode);
     if (vanId) {
       (ridersByVan.get(vanId) ?? ridersByVan.set(vanId, []).get(vanId)!).push(rider);
     } else {
@@ -276,6 +280,7 @@ function RiderRow({
   r: {
     studentId: string;
     name: string;
+    mode: string | null;
     address: string;
     notes: string | null;
     guardian: string;
@@ -296,6 +301,7 @@ function RiderRow({
       <div className="min-w-0 space-y-1">
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-semibold">{r.name}</span>
+          <ModeSelect studentId={r.studentId} mode={r.mode} />
           <RegionSelect
             studentId={r.studentId}
             currentVanId={currentVanId}
