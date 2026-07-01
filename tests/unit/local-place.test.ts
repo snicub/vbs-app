@@ -62,6 +62,29 @@ describe("localPlace", () => {
     expect(localPlace(parts("Agency Village"))).toEqual({ lat: 45.56781, lng: -97.06721 });
   });
 
+  it("a Tiospa street is always Old Agency, even in a Sisseton town line", () => {
+    expect(localPlace(parts("Sisseton", "45616 Tiospa Lina Dr"))).toEqual({
+      lat: 45.56781,
+      lng: -97.06721,
+    });
+  });
+
+  it("Little Crow Dr is always Old Agency", () => {
+    expect(localPlace(parts("Sisseton", "1055 Little Crow Dr"))).toEqual({
+      lat: 45.56781,
+      lng: -97.06721,
+    });
+  });
+
+  it("a BIA highway/road address is Long Hollows", () => {
+    expect(localPlace(parts("Sisseton", "123 BIA Hwy"))).toEqual({
+      lat: 45.65316,
+      lng: -97.04586,
+    });
+    // 'bia' as a substring (columbia) must NOT match.
+    expect(localPlace(parts("Columbia", "5 Columbia Ave"))).toBeNull();
+  });
+
   it("falls back to the street only when the town isn't a region (Sisseton + Barker Hill st)", () => {
     expect(localPlace(parts("Sisseton", "556 Barker Hill"))).toEqual({
       lat: 45.581278,
