@@ -18,6 +18,7 @@ import { DashboardCards } from "./dashboard-cards";
 import { computeMetrics, computeVanBreakdown, isMetricKey } from "@/lib/coordinator/dashboard";
 import { findDuplicateNames } from "@/lib/coordinator/duplicates";
 import { DuplicatesPanel } from "./duplicates-panel";
+import { DateSwitcher } from "./date-switcher";
 import { needsRouting } from "@/lib/routing";
 import { RouteBuildButton } from "./route-build-button";
 
@@ -62,7 +63,8 @@ export default async function CoordinatorTodayPage({
   }
 
   const { date, show } = await searchParams;
-  const today = date ?? defaultVbsDate(getLocalDate());
+  const realToday = getLocalDate();
+  const today = date ?? defaultVbsDate(realToday);
   const activeMetric = isMetricKey(show) ? show : null;
 
   const supabase = await createClient();
@@ -199,9 +201,12 @@ export default async function CoordinatorTodayPage({
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
       <header className="space-y-1">
-        <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
-          Today — {formatDate(today)}
-        </h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
+            {today === realToday ? "Today" : "Day"} — {formatDate(today)}
+          </h1>
+          <DateSwitcher date={today} realToday={realToday} />
+        </div>
         <p className="text-muted-foreground text-sm">
           {enriched.length} student{enriched.length === 1 ? "" : "s"} ·{" "}
           {watchList.length === 0 ? (
