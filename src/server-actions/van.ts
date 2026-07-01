@@ -1,7 +1,7 @@
 "use server";
 
 import { z } from "zod";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { getLocalDate } from "@/lib/date";
 
@@ -25,7 +25,7 @@ export async function broadcastVanLocation(
     return { ok: false, error: "Invalid location payload" };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const today = getLocalDate();
 
   // Verify the user is assigned to this van today (RLS would also block this).

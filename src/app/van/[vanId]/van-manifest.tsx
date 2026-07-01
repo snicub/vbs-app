@@ -18,6 +18,7 @@ import { BusIcon, HomeIcon, MapPinIcon, RadioIcon, RadioTowerIcon, CameraIcon } 
 import { cn } from "@/lib/utils";
 import { useOutbox } from "@/lib/offline/use-outbox";
 import { OfflineBanner } from "@/components/offline-banner";
+import { Linkify } from "@/components/linkify";
 import { clientId } from "@/lib/offline/uuid";
 
 type RosterItem = {
@@ -35,7 +36,6 @@ type RosterItem = {
   stopOrder: number;
   homeAddress: string | null;
   homeNotes: string | null;
-  homeMapsUrl: string | null;
   photoUrl: string | null;
 };
 
@@ -497,30 +497,15 @@ export function VanManifest({
                         <StateBadge state={state} size="md" />
                       </div>
 
-                      {r.homeAddress || r.homeMapsUrl ? (
+                      {r.homeAddress ? (
                         <div className="space-y-0.5">
-                          {r.homeMapsUrl ? (
-                            <a
-                              href={r.homeMapsUrl}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="flex items-start gap-1.5 text-sm font-medium text-primary underline-offset-2 hover:underline"
-                            >
-                              <MapPinIcon className="size-4 shrink-0 mt-0.5" />
-                              <span>
-                                {r.homeAddress ?? "Home location"}{" "}
-                                <span className="text-xs font-normal">(tap to navigate)</span>
-                              </span>
-                            </a>
-                          ) : (
-                            <div className="flex items-start gap-1.5 text-sm font-medium">
-                              <MapPinIcon className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
-                              <span>{r.homeAddress}</span>
-                            </div>
-                          )}
+                          <div className="flex items-start gap-1.5 text-sm font-medium">
+                            <MapPinIcon className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
+                            <span>{r.homeAddress}</span>
+                          </div>
                           {r.homeNotes && (
                             <div className="ml-6 text-xs text-muted-foreground">
-                              📝 {r.homeNotes}
+                              📝 <Linkify text={r.homeNotes} />
                             </div>
                           )}
                         </div>
@@ -700,18 +685,7 @@ function PhotoVerifyModal({
           <div className="text-center text-base space-y-0.5">
             <div>
               <span className="text-muted-foreground">Home:</span>{" "}
-              {target.homeMapsUrl ? (
-                <a
-                  href={target.homeMapsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-semibold text-primary underline"
-                >
-                  {target.homeAddress}
-                </a>
-              ) : (
-                <strong>{target.homeAddress}</strong>
-              )}
+              <strong>{target.homeAddress}</strong>
             </div>
             {target.homeNotes && (
               <div className="text-sm text-muted-foreground">📝 {target.homeNotes}</div>

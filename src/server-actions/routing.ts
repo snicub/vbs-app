@@ -7,7 +7,7 @@ import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { geocodeFamilyAddress, familyAddressQuery, localRegionKey } from "@/lib/geocode";
 import { type StopPoint } from "@/lib/route-build";
-import { ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
+import { ridesMorningVan, ridesAfternoonVan, planRegionMove } from "@/lib/routing";
 import { VBS_DATES } from "@/lib/registration/dates";
 
 const Schema = z.object({ eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/) });
@@ -351,4 +351,156 @@ export async function setStudentHomeAddress(input: unknown): Promise<SetHomeAddr
 
   revalidatePath("/coordinator", "layout");
   return { ok: true, located: !!pt };
+}
+
+// -- Re-check vans against the address street-rules (correct wrong assignments) --
+
+// Only the specifically-named local regions — never the catch-all "sisseton"
+// bucket, which over-claims plain in-town homes that are really another region.
+// So the sweep only ever PROMOTES a kid onto the van their address explicitly
+// names (Barker Hill, Long Hollows/BIA, Old Agency/Tiospa/Little Crow, Peever),
+// and never yanks a kid back into the general bucket over a deliberate placement.
+const SPECIFIC_REGION_KEYS = ["barker", "hollow", "agency", "peever"] as const;
+
+type AddrFamily = {
+  id: string;
+  street_address: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+};
+type PlanRow = {
+  student_id: string;
+  event_date: string;
+  mode: string | null;
+  state: string;
+  morning_stop_id: string | null;
+  afternoon_stop_id: string | null;
+};
+
+export type ReconcileVansResult =
+  | { ok: true; moved: number; skippedBoarded: number; days: number }
+  | { ok: false; error: string };
+
+/**
+ * Coordinator action: re-derive each attending van kid's van from their typed
+ * home address using the current street rules (geocode.ts) and CORRECT any who
+ * sit on the WRONG van. This is the gap "Suggest vans from addresses" leaves —
+ * that one only fills EMPTY legs, so a kid the signup dropdown put on the wrong
+ * van is never fixed and the driver sheet keeps showing the stored (wrong) van.
+ *
+ * Scoped to the viewed day and every later VBS day (history is never rewritten),
+ * and to addresses that explicitly name one of our pickup regions — a plain
+ * "Sisseton" or unmatched address is left exactly as the coordinator has it. A
+ * kid currently boarded on the leg being changed is skipped (undo the boarding
+ * first). Reports how many were moved and how many were skipped for being on the
+ * van right now. Reversible one-by-one via the sheet's per-rider "Move to" menu.
+ */
+export async function reconcileVansFromAddressRules(
+  input: unknown,
+): Promise<ReconcileVansResult> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator access required" };
+  }
+  const parsed = Schema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: "Bad input" };
+
+  const admin = createAdminClient();
+
+  // region key → that region's routed zone stop, BY NAME (same mapping the
+  // address→van builder uses). A stop must be on a van route to derive a van.
+  const { data: routesData } = await admin
+    .from("routes")
+    .select("stop_ids")
+    .returns<{ stop_ids: string[] }[]>();
+  const routedStopIds = new Set<string>();
+  for (const r of routesData ?? []) for (const id of r.stop_ids) routedStopIds.add(id);
+
+  const { data: stopsData } = await admin
+    .from("stops")
+    .select("id, name")
+    .returns<{ id: string; name: string }[]>();
+  const zoneStopIdByKey = new Map<string, string>();
+  for (const s of stopsData ?? []) {
+    if (!routedStopIds.has(s.id)) continue;
+    const lower = s.name.toLowerCase();
+    for (const key of SPECIFIC_REGION_KEYS) if (lower.includes(key)) zoneStopIdByKey.set(key, s.id);
+  }
+  if (zoneStopIdByKey.size === 0) {
+    return { ok: false, error: "No vans have pickup zones set up yet — set each van's area first." };
+  }
+
+  const dates = VBS_DATES.filter((d) => d >= parsed.data.eventDate);
+
+  // Current plan + live state per (student, day) for the days we'll touch.
+  const { data: statuses } = await admin
+    .from("student_day_status")
+    .select("student_id, event_date, mode, state, morning_stop_id, afternoon_stop_id")
+    .in("event_date", [...dates])
+    .eq("attending", true)
+    .returns<PlanRow[]>();
+  const rows = statuses ?? [];
+  if (rows.length === 0) return { ok: true, moved: 0, skippedBoarded: 0, days: dates.length };
+
+  // Address is family-wide, so resolve each student's target zone once.
+  const studentIds = Array.from(new Set(rows.map((r) => r.student_id)));
+  const { data: students } = await admin
+    .from("students")
+    .select("id, family_id")
+    .in("id", studentIds)
+    .returns<{ id: string; family_id: string }[]>();
+  const familyIdByStudent = new Map((students ?? []).map((s) => [s.id, s.family_id]));
+  const familyIds = Array.from(new Set((students ?? []).map((s) => s.family_id)));
+  const { data: families } = familyIds.length
+    ? await admin
+        .from("families")
+        .select("id, street_address, city, state, postal_code")
+        .in("id", familyIds)
+        .returns<AddrFamily[]>()
+    : { data: [] as AddrFamily[] };
+  const famById = new Map((families ?? []).map((f) => [f.id, f]));
+
+  const zoneByStudent = new Map<string, string | null>();
+  for (const sid of studentIds) {
+    const fam = famById.get(familyIdByStudent.get(sid) ?? "");
+    const key = fam
+      ? localRegionKey({
+          streetAddress: fam.street_address,
+          city: fam.city,
+          state: fam.state,
+          postalCode: fam.postal_code,
+        })
+      : null;
+    zoneByStudent.set(sid, key ? (zoneStopIdByKey.get(key) ?? null) : null);
+  }
+
+  let moved = 0;
+  let skippedBoarded = 0;
+  for (const row of rows) {
+    const zoneStopId = zoneByStudent.get(row.student_id);
+    if (!zoneStopId) continue;
+    const plan = planRegionMove(
+      row.mode,
+      row.state,
+      { morningStopId: row.morning_stop_id, afternoonStopId: row.afternoon_stop_id },
+      zoneStopId,
+    );
+    if (plan.action === "noop") continue;
+    if (plan.action === "boarded-conflict") {
+      skippedBoarded++;
+      continue;
+    }
+    const { error } = await admin
+      .from("student_day_records")
+      .update({ morning_stop_id: plan.morningStopId, afternoon_stop_id: plan.afternoonStopId } as never)
+      .eq("student_id", row.student_id)
+      .eq("event_date", row.event_date);
+    if (!error) moved++;
+  }
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true, moved, skippedBoarded, days: dates.length };
 }

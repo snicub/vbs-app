@@ -9,8 +9,9 @@ import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 import { contrastText } from "@/lib/nametags/tag-data";
 import { orderPickup, splitStopsIntoLoads, parseCrews } from "@/lib/van-rosters/pickup-order";
 import { PrintButton } from "./print-button";
-import { RiderQr } from "./rider-qr";
+import { ReconcileVansButton } from "./reconcile-vans-button";
 import { RegionSelect } from "./region-select";
+import { Linkify } from "@/components/linkify";
 import { VanCheckInQr } from "./van-checkin-qr";
 import { env } from "@/lib/env";
 
@@ -174,7 +175,10 @@ export default async function VanRostersPage({
             {formatDate(day)} · driver sheets with each rider&apos;s home address and family contacts.
           </p>
         </div>
-        <PrintButton />
+        <div className="flex items-center gap-2">
+          <ReconcileVansButton date={day} />
+          <PrintButton />
+        </div>
       </header>
 
       {(vans ?? []).flatMap((v) => {
@@ -302,7 +306,9 @@ function RiderRow({
         <div>
           <span className="text-muted-foreground">Home: </span>
           {r.address}
-          {r.notes && <span className="text-muted-foreground"> — {r.notes}</span>}
+          {r.notes && (
+            <span className="text-muted-foreground"> — <Linkify text={r.notes} /></span>
+          )}
         </div>
         <div>
           <span className="text-muted-foreground">Guardian: </span>
@@ -322,7 +328,6 @@ function RiderRow({
           </div>
         )}
       </div>
-      {r.lat != null && r.lng != null && <RiderQr lat={r.lat} lng={r.lng} />}
     </li>
   );
 }

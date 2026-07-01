@@ -92,12 +92,12 @@ export default async function VanPage({
   // driver needs the full address (tappable to navigate), the address notes
   // (landmarks/directions), and a kid with no address on file is flagged.
   const familyIds = Array.from(new Set(students.map((s) => s.family_id)));
-  type HomeInfo = { address: string | null; notes: string | null; mapsUrl: string | null };
+  type HomeInfo = { address: string | null; notes: string | null };
   const familyHome = new Map<string, HomeInfo>();
   if (familyIds.length > 0) {
     const { data: fams } = await supabase
       .from("families")
-      .select("id, street_address, city, state, postal_code, notes, lat, lng")
+      .select("id, street_address, city, state, postal_code, notes")
       .in("id", familyIds)
       .returns<{
         id: string;
@@ -106,20 +106,11 @@ export default async function VanPage({
         state: string | null;
         postal_code: string | null;
         notes: string | null;
-        lat: number | null;
-        lng: number | null;
       }[]>();
     for (const f of fams ?? []) {
       const address =
         [f.street_address, f.city, f.state, f.postal_code].map((p) => p?.trim()).filter(Boolean).join(", ") || null;
-      // Prefer the geocoded point for navigation (exact), else the typed address.
-      let mapsUrl: string | null = null;
-      if (f.lat != null && f.lng != null) {
-        mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${f.lat},${f.lng}`;
-      } else if (address) {
-        mapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
-      }
-      familyHome.set(f.id, { address, notes: f.notes?.trim() || null, mapsUrl });
+      familyHome.set(f.id, { address, notes: f.notes?.trim() || null });
     }
   }
 
@@ -172,7 +163,6 @@ export default async function VanPage({
       stopOrder: stopOrderMap.get(stopId) ?? Infinity,
       homeAddress: student ? (familyHome.get(student.family_id)?.address ?? null) : null,
       homeNotes: student ? (familyHome.get(student.family_id)?.notes ?? null) : null,
-      homeMapsUrl: student ? (familyHome.get(student.family_id)?.mapsUrl ?? null) : null,
       photoUrl: student?.photo_path ? (photoUrls.get(student.photo_path) ?? null) : null,
     };
   });

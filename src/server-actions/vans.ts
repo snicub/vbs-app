@@ -56,7 +56,7 @@ export async function createVan(input: unknown): Promise<Result> {
   if (!parsed.success) return fail(issues(parsed.error));
   const { name, capacity, plate, colorCode } = parsed.data;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: van, error: vanErr } = await supabase
     .from("vans")
@@ -180,7 +180,7 @@ export async function updateVan(input: unknown): Promise<Result> {
     return { ok: true };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Don't retire a van while kids are still assigned to it — the status view
   // would keep mapping them onto its pickup zone, stranding them on an inactive
@@ -353,7 +353,7 @@ type EnsureResult = { ok: true; provisioned: number } | { ok: false; error: stri
 export async function ensureVanZones(): Promise<EnsureResult> {
   if (!(await requireCoordinator())) return fail("Coordinator access required");
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const [{ data: vans, error: vansErr }, { data: routes, error: routesErr }] = await Promise.all([
     supabase.from("vans").select("id, name").returns<{ id: string; name: string }[]>(),
     supabase.from("routes").select("van_id, direction, stop_ids").returns<DirectionRoute[]>(),
@@ -413,7 +413,7 @@ export async function setVanAssignment(input: unknown): Promise<Result> {
   const parsed = SetAssignmentSchema.safeParse(input);
   if (!parsed.success) return fail(issues(parsed.error));
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase.from("van_assignments").upsert(
     {
       assignment_date: parsed.data.assignmentDate,

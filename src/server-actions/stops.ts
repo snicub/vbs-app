@@ -2,7 +2,7 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
 import { isValidHexColor } from "@/lib/validators";
@@ -37,7 +37,7 @@ export async function updateStopColor(
   }
 
   const { stopId, colorCode, colorName } = parsed.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("stops")
     .update({ color_code: colorCode, color_name: colorName } as never)

@@ -4,6 +4,7 @@ import {
   ridesMorningVan,
   ridesAfternoonVan,
   boardedStopConflict,
+  planRegionMove,
 } from "@/lib/routing";
 
 const row = (over: Partial<Parameters<typeof needsRouting>[0]>) => ({
@@ -99,5 +100,77 @@ describe("boardedStopConflict", () => {
         boardedStopConflict(state, am, { morningStopId: "a2", afternoonStopId: "p2" }),
       ).toBeNull();
     }
+  });
+});
+
+describe("planRegionMove", () => {
+  const ZONE = "agency-zone";
+  const at = (morningStopId: string | null, afternoonStopId: string | null) => ({
+    morningStopId,
+    afternoonStopId,
+  });
+
+  it("points both legs of a full-van kid at the target zone", () => {
+    expect(planRegionMove("van", "not_started", at("wrong", "wrong"), ZONE)).toEqual({
+      action: "move",
+      morningStopId: ZONE,
+      afternoonStopId: ZONE,
+    });
+  });
+
+  it("routes an unassigned van kid (null legs) onto the zone", () => {
+    expect(planRegionMove("van", "not_started", at(null, null), ZONE)).toEqual({
+      action: "move",
+      morningStopId: ZONE,
+      afternoonStopId: ZONE,
+    });
+  });
+
+  it("moves only the leg the mode rides, leaving the other untouched", () => {
+    // pickup-only rides the morning van; the afternoon stop stays as-is.
+    expect(planRegionMove("parent_pickup_only", "not_started", at("wrong", "p1"), ZONE)).toEqual({
+      action: "move",
+      morningStopId: ZONE,
+      afternoonStopId: "p1",
+    });
+    // dropoff-only rides the afternoon van; the morning stop stays as-is.
+    expect(planRegionMove("parent_dropoff_only", "not_started", at("a1", "wrong"), ZONE)).toEqual({
+      action: "move",
+      morningStopId: "a1",
+      afternoonStopId: ZONE,
+    });
+  });
+
+  it("is a no-op when the ridden legs already sit on the zone", () => {
+    expect(planRegionMove("van", "not_started", at(ZONE, ZONE), ZONE).action).toBe("noop");
+    // dropoff-only already on the zone for its one leg → no-op despite a stale AM.
+    expect(
+      planRegionMove("parent_dropoff_only", "not_started", at("anything", ZONE), ZONE).action,
+    ).toBe("noop");
+  });
+
+  it("is a no-op for a kid who rides no van (parent_both / null mode)", () => {
+    expect(planRegionMove("parent_both", "not_started", at("a1", "p1"), ZONE).action).toBe("noop");
+    expect(planRegionMove(null, "not_started", at(null, null), ZONE).action).toBe("noop");
+  });
+
+  it("refuses to move a leg the child is currently boarded on", () => {
+    expect(planRegionMove("van", "van_boarded_am", at("wrong", "wrong"), ZONE)).toEqual({
+      action: "boarded-conflict",
+      leg: "morning",
+    });
+    expect(planRegionMove("van", "van_boarded_pm", at("wrong", "wrong"), ZONE)).toEqual({
+      action: "boarded-conflict",
+      leg: "afternoon",
+    });
+  });
+
+  it("still moves the untouched leg's kid when boarded on the OTHER leg", () => {
+    // On the AM van but AM stop already correct: only the PM leg changes → safe.
+    expect(planRegionMove("van", "van_boarded_am", at(ZONE, "wrong"), ZONE)).toEqual({
+      action: "move",
+      morningStopId: ZONE,
+      afternoonStopId: ZONE,
+    });
   });
 });

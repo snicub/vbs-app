@@ -72,3 +72,39 @@ export function boardedStopConflict(
   }
   return null;
 }
+
+export type RegionMovePlan =
+  | { action: "move"; morningStopId: string | null; afternoonStopId: string | null }
+  | { action: "noop" }
+  | { action: "boarded-conflict"; leg: "morning" | "afternoon" };
+
+/**
+ * Decide how to re-point a child's van legs onto a target pickup zone. Only the
+ * legs the child's mode actually rides are moved — the other leg is left exactly
+ * as-is (a parent-dropoff-only kid keeps their untouched morning). Returns
+ * "noop" when the rider already sits on that zone for every leg they ride (or
+ * rides no van at all), and "boarded-conflict" when the move would re-point a
+ * leg the child is currently boarded on — the caller must skip it and undo the
+ * boarding first, so the aide holding the child keeps check-out authority.
+ *
+ * Shared by the one-tap driver-sheet "Move to van" and the bulk "re-check vans
+ * from address rules" sweep, so both apply the identical leg + boarding safety.
+ */
+export function planRegionMove(
+  mode: string | null,
+  state: string,
+  current: StopPair,
+  zoneStopId: string,
+): RegionMovePlan {
+  const nextMorning = ridesMorningVan(mode) ? zoneStopId : current.morningStopId;
+  const nextAfternoon = ridesAfternoonVan(mode) ? zoneStopId : current.afternoonStopId;
+  if (nextMorning === current.morningStopId && nextAfternoon === current.afternoonStopId) {
+    return { action: "noop" };
+  }
+  const conflict = boardedStopConflict(state, current, {
+    morningStopId: nextMorning,
+    afternoonStopId: nextAfternoon,
+  });
+  if (conflict) return { action: "boarded-conflict", leg: conflict };
+  return { action: "move", morningStopId: nextMorning, afternoonStopId: nextAfternoon };
+}

@@ -2,7 +2,6 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator, canDriveVan } from "@/lib/auth/roles";
@@ -134,7 +133,7 @@ export async function updateStudent(
     return { ok: true };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("students")
     .update(updates as never)
@@ -201,7 +200,7 @@ export async function archiveStudent(input: unknown): Promise<ArchiveStudentResu
     };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("students")
     .update({ archived_at: new Date().toISOString() } as never)
@@ -229,7 +228,7 @@ export async function unarchiveStudent(input: unknown): Promise<ArchiveStudentRe
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
   }
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
   const { error } = await supabase
     .from("students")
     .update({ archived_at: null } as never)
@@ -344,7 +343,7 @@ export async function updateStudentDayRecord(
 
   const { studentId, eventDate, ...fields } = parsed.data;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // An attendance-only edit doesn't touch the van plan, so it needs no current
   // state. Anything that changes mode or a stop is resolved against the current
@@ -448,7 +447,7 @@ export async function assignStudentToVan(
   }
 
   const { studentId, eventDate, vanId } = parsed.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // Resolve the van's pickup zone: the single stop on its routes. We read both
   // directions so a van set up with only one direction's route still resolves.
@@ -554,7 +553,7 @@ export async function updateStudentModeAllDays(input: unknown): Promise<UpdateDa
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
   }
   const { studentId, mode } = parsed.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: recs } = await supabase
     .from("student_day_status")
@@ -623,7 +622,7 @@ export async function assignStudentToVanAllDays(input: unknown): Promise<AssignV
     return { ok: false, error: parsed.error.issues.map((i) => i.message).join("; ") };
   }
   const { studentId, vanId } = parsed.data;
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: routes } = await supabase
     .from("routes")

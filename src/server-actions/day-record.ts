@@ -2,10 +2,10 @@
 
 import { z } from "zod";
 import { revalidatePath } from "next/cache";
-import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { getSessionUser } from "@/lib/auth/session";
 import { isCoordinator } from "@/lib/auth/roles";
-import { boardedStopConflict, ridesMorningVan, ridesAfternoonVan } from "@/lib/routing";
+import { boardedStopConflict, planRegionMove } from "@/lib/routing";
 import { zoneStopIdForVan, type DirectionRoute } from "@/lib/vans";
 import { VBS_DATES } from "@/lib/registration/dates";
 
@@ -36,7 +36,7 @@ export async function updateTodayStops(
   const parsed = Schema.safeParse(input);
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" };
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   // One read of the derived status gives the current mode, stops, and event
   // state — enough for both safety guards below.
@@ -129,7 +129,7 @@ export async function setStudentVan(
   if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" };
   const { studentId, vanId, eventDate } = parsed.data;
 
-  const supabase = await createClient();
+  const supabase = createAdminClient();
 
   const { data: routes } = await supabase
     .from("routes")
@@ -153,26 +153,25 @@ export async function setStudentVan(
       .maybeSingle<DayRec>();
     if (!rec || !rec.attending) continue;
 
-    const nextMorning = ridesMorningVan(rec.mode) ? zoneStopId : rec.morning_stop_id;
-    const nextAfternoon = ridesAfternoonVan(rec.mode) ? zoneStopId : rec.afternoon_stop_id;
-    if (nextMorning === rec.morning_stop_id && nextAfternoon === rec.afternoon_stop_id) {
+    const plan = planRegionMove(
+      rec.mode,
+      rec.state,
+      { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
+      zoneStopId,
+    );
+    if (plan.action === "noop") {
       appliedDays++;
       continue;
     }
-    const conflict = boardedStopConflict(
-      rec.state,
-      { morningStopId: rec.morning_stop_id, afternoonStopId: rec.afternoon_stop_id },
-      { morningStopId: nextMorning, afternoonStopId: nextAfternoon },
-    );
-    if (conflict) {
+    if (plan.action === "boarded-conflict") {
       return {
         ok: false,
-        error: `This child is on the ${conflict} van right now (${d}) — undo their boarding before moving them.`,
+        error: `This child is on the ${plan.leg} van right now (${d}) — undo their boarding before moving them.`,
       };
     }
     const { error } = await supabase
       .from("student_day_records")
-      .update({ morning_stop_id: nextMorning, afternoon_stop_id: nextAfternoon } as never)
+      .update({ morning_stop_id: plan.morningStopId, afternoon_stop_id: plan.afternoonStopId } as never)
       .eq("student_id", studentId)
       .eq("event_date", d);
     if (error) return { ok: false, error: error.message };
