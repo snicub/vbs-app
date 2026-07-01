@@ -16,11 +16,16 @@ export type RosterStudent = {
   wristbandCode: string;
   wristband_color_for_day: string | null;
   wristband_color_name: string | null;
+  last_event_at?: string | null;
   allergies: string | null;
   medicalNotes: string | null;
   photoUrl: string | null;
   anomalies: AnomalyKind[];
 };
+
+// Views where the useful order is most-recent-first (newest check-in / arrival
+// / home on top) rather than the dashboard's anomaly-then-state order.
+const RECENCY_METRICS = new Set<MetricKey>(["atSite", "checkedIn", "home"]);
 
 export function RosterList({
   students,
@@ -35,11 +40,18 @@ export function RosterList({
 }) {
   const [query, setQuery] = useState("");
   const needle = query.trim().toLowerCase();
-  const byMetric = show
+  const filtered = show
     ? students.filter((s) =>
         METRIC_MATCHERS[show]({ state: s.state, hasAnomaly: s.anomalies.length > 0 }),
       )
     : students;
+  // For check-in views, put the most recently checked-in kid on top.
+  const byMetric =
+    show && RECENCY_METRICS.has(show)
+      ? filtered
+          .slice()
+          .sort((a, b) => (b.last_event_at ?? "").localeCompare(a.last_event_at ?? ""))
+      : filtered;
   const visible = needle
     ? byMetric.filter(
         (s) =>

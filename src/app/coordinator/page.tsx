@@ -21,6 +21,7 @@ import { DuplicatesPanel } from "./duplicates-panel";
 import { DateSwitcher } from "./date-switcher";
 import { needsRouting } from "@/lib/routing";
 import { RouteBuildButton } from "./route-build-button";
+import { AutoRefresh } from "@/components/auto-refresh";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Coordinator — Today" };
@@ -33,6 +34,7 @@ type StatusRow = {
   afternoon_van_id: string | null;
   wristband_color_for_day: string | null;
   wristband_color_name: string | null;
+  last_event_at: string | null;
   is_late_am: boolean;
   is_boarded_but_not_arrived: boolean;
   is_in_but_not_out: boolean;
@@ -80,7 +82,7 @@ export default async function CoordinatorTodayPage({
     supabase
       .from("student_day_status")
       .select(
-        "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_for_day, wristband_color_name, is_late_am, is_boarded_but_not_arrived, is_in_but_not_out, is_pm_van_stuck",
+        "student_id, event_date, state, morning_van_id, afternoon_van_id, wristband_color_for_day, wristband_color_name, last_event_at, is_late_am, is_boarded_but_not_arrived, is_in_but_not_out, is_pm_van_stuck",
       )
       .eq("event_date", today)
       .returns<StatusRow[]>(),
@@ -200,6 +202,10 @@ export default async function CoordinatorTodayPage({
 
   return (
     <div className="mx-auto max-w-7xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-6">
+      {/* Realtime refresh needs an authenticated subscription; in no-login kiosk
+          mode it can't deliver, so poll as a reliable fallback so check-ins show
+          up live. */}
+      <AutoRefresh intervalMs={15_000} />
       <header className="space-y-1">
         <div className="flex items-center gap-3 flex-wrap">
           <h1 className="text-xl sm:text-2xl font-semibold tracking-tight">
