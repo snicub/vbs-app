@@ -561,9 +561,9 @@ export function SignupForm({
         </div>
       </details>
 
-      <section className="space-y-3 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
-        <h2 className="text-xl font-semibold">Please agree to the following</h2>
-        <label className="flex gap-3 items-center rounded-lg border-2 border-primary/40 bg-primary/5 p-3 min-h-12">
+      <section className="space-y-2.5 rounded-2xl border bg-card p-4 shadow-sm sm:p-6">
+        <h2 className="text-lg font-semibold">Please agree to the following</h2>
+        <label className="flex gap-3 items-center rounded-lg border-2 border-primary/40 bg-primary/5 px-3 py-2.5 min-h-11">
           <Checkbox
             checked={consents.length > 0 && agreedKinds.size === consents.length}
             onCheckedChange={(checked: boolean) =>
@@ -572,9 +572,9 @@ export function SignupForm({
           />
           <span className="text-base font-semibold">Agree to all</span>
         </label>
-        <div className="space-y-3">
+        <div className="space-y-2">
           {consents.map((c) => (
-            <label key={c.kind} className="flex gap-3 items-start rounded-lg border bg-muted/30 p-3">
+            <label key={c.kind} className="flex gap-2.5 items-start rounded-lg border bg-muted/30 p-2.5">
               <Checkbox
                 checked={agreedKinds.has(c.kind)}
                 onCheckedChange={(checked: boolean) =>
@@ -587,15 +587,14 @@ export function SignupForm({
                 }
                 className="mt-0.5"
               />
-              <span className="text-sm">
-                <strong className="text-base">{CONSENT_LABELS[c.kind]}</strong>
-                <br />
-                <span className="text-muted-foreground">{c.text}</span>
+              <span className="leading-snug">
+                <strong className="text-sm font-semibold">{CONSENT_LABELS[c.kind]}</strong>{" "}
+                <span className="text-xs text-muted-foreground">{c.text}</span>
               </span>
             </label>
           ))}
         </div>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           By submitting, you agree to the items above on behalf of your family.
         </p>
       </section>
