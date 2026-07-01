@@ -187,8 +187,8 @@ export default async function StudentTablePage({
         className={cn("rounded-xl border-l-4 border bg-card p-4 flex items-center gap-3")}
         style={{ borderLeftColor: `var(--state-${presentation.tone})` }}
       >
-        <presentation.icon className={cn("size-7", tone.icon)} aria-hidden />
-        <div>
+        <presentation.icon className={cn("size-7 shrink-0", tone.icon)} aria-hidden />
+        <div className="min-w-0">
           <div className="text-xs text-muted-foreground uppercase tracking-wide">
             Current status
           </div>
@@ -316,7 +316,7 @@ export default async function StudentTablePage({
               {family.primary_email && (
                 <>
                   <span className="text-muted-foreground">·</span>
-                  <a href={`mailto:${family.primary_email}`} className="text-primary hover:underline">
+                  <a href={`mailto:${family.primary_email}`} className="text-primary hover:underline min-w-0 break-all">
                     {family.primary_email}
                   </a>
                 </>
@@ -329,7 +329,7 @@ export default async function StudentTablePage({
                   <a href={`tel:${g.phone}`} className="text-primary hover:underline">{g.phone}</a>
                 )}
                 {g.email && (
-                  <a href={`mailto:${g.email}`} className="text-primary hover:underline">{g.email}</a>
+                  <a href={`mailto:${g.email}`} className="text-primary hover:underline min-w-0 break-all">{g.email}</a>
                 )}
               </div>
             ))}
@@ -337,7 +337,7 @@ export default async function StudentTablePage({
               {hasAddress ? (
                 <div className="flex items-start gap-2 text-muted-foreground">
                   <MapPinIcon className="size-4 mt-0.5 shrink-0" aria-hidden />
-                  <div>
+                  <div className="min-w-0 break-words">
                     {streetLine && <div>{streetLine}</div>}
                     {cityStateZip && <div>{cityStateZip}</div>}
                   </div>
