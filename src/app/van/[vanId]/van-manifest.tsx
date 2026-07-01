@@ -418,7 +418,7 @@ export function VanManifest({
                           : `var(--state-${presentation.tone})`,
                     }}
                   >
-                    <div className="p-2.5 space-y-2">
+                    <div className="p-2 space-y-1.5">
                       <div className="flex items-start gap-2.5">
                         <label className="relative size-12 shrink-0 rounded-lg border bg-muted overflow-hidden flex items-center justify-center cursor-pointer">
                           <input
@@ -519,15 +519,15 @@ export function VanManifest({
                       <SafetyCallout
                         allergies={r.allergies}
                         medicalNotes={r.medicalNotes}
-                        density="comfortable"
+                        density="compact"
                       />
 
                       {(canBoardAm || canCheckOut || canCancelBoarding || canMarkNoShow) && (
-                        <div className="flex flex-wrap gap-2 pt-0.5">
+                        <div className="flex gap-2 pt-0.5">
                           {canBoardAm && (
                             <Button
-                              size="lg"
-                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
+                              size="sm"
+                              className="flex-1 basis-0 min-w-0 min-h-10"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "board_am")}
                             >
@@ -536,8 +536,8 @@ export function VanManifest({
                           )}
                           {canCheckOut && (
                             <Button
-                              size="lg"
-                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
+                              size="sm"
+                              className="flex-1 basis-0 min-w-0 min-h-10"
                               disabled={isPending || isQueued}
                               onClick={() => requestVerify(r, "drop_off")}
                             >
@@ -547,8 +547,8 @@ export function VanManifest({
                           {canCancelBoarding && (
                             <Button
                               variant="outline"
-                              size="lg"
-                              className="grow basis-[calc(50%-0.25rem)] text-base min-h-11"
+                              size="sm"
+                              className="flex-1 basis-0 min-w-0 min-h-10"
                               disabled={isPending || isQueued}
                               onClick={() => cancelBoardingFor(r.studentId)}
                             >
@@ -558,12 +558,8 @@ export function VanManifest({
                           {canMarkNoShow && (
                             <Button
                               variant="outline"
-                              size="lg"
-                              className={`grow text-base min-h-11 ${
-                                confirmNoShow === r.studentId
-                                  ? "basis-full"
-                                  : "basis-[calc(50%-0.25rem)]"
-                              }`}
+                              size="sm"
+                              className="flex-1 basis-0 min-w-0 min-h-10"
                               disabled={isPending || isQueued}
                               onClick={() => {
                                 if (confirmNoShow === r.studentId) {
@@ -575,8 +571,8 @@ export function VanManifest({
                               }}
                             >
                               {confirmNoShow === r.studentId
-                                ? "Tap again — confirm not coming"
-                                : "Not coming today"}
+                                ? "Tap to confirm"
+                                : "Not taking van"}
                             </Button>
                           )}
                         </div>

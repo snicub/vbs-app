@@ -10,6 +10,7 @@ import {
   filterStudents,
   sortStudents,
   presentStates,
+  presentTowns,
   type SortKey,
   type SortDir,
 } from "@/lib/coordinator/student-filter";
@@ -47,9 +48,11 @@ export function StudentsTable({
   const [minAge, setMinAge] = useState<number | null>(null);
   const [maxAge, setMaxAge] = useState<number | null>(null);
   const [status, setStatus] = useState<string | null>(null);
+  const [town, setTown] = useState<string | null>(null);
   const [showArchived, setShowArchived] = useState(false);
 
   const baseRows = showArchived ? archivedRows : rows;
+  const towns = useMemo(() => presentTowns(baseRows), [baseRows]);
 
   // Quick-pick age chips are for the K–12 kids (kindergarten ≈ 4 through 12th
   // grade ≈ 18). Adult leaders/helpers can register at higher ages, but we don't
@@ -69,8 +72,8 @@ export function StudentsTable({
 
   const filtered = useMemo(
     () =>
-      sortStudents(filterStudents(baseRows, { query, minAge, maxAge, status }), sortKey, sortDir),
-    [baseRows, query, sortKey, sortDir, minAge, maxAge, status],
+      sortStudents(filterStudents(baseRows, { query, minAge, maxAge, status, town }), sortKey, sortDir),
+    [baseRows, query, sortKey, sortDir, minAge, maxAge, status, town],
   );
 
   const ageFilterActive = minAge != null || maxAge != null;
@@ -93,6 +96,21 @@ export function StudentsTable({
           onChange={(e) => setQuery(e.target.value)}
           className="max-w-md"
         />
+        {towns.length > 1 && (
+          <select
+            aria-label="Filter by town"
+            value={town ?? ""}
+            onChange={(e) => setTown(e.target.value || null)}
+            className="rounded-md border bg-card px-2 min-h-11 md:min-h-9 text-sm"
+          >
+            <option value="">All towns</option>
+            {towns.map((t) => (
+              <option key={t} value={t}>
+                {t}
+              </option>
+            ))}
+          </select>
+        )}
         <span className="text-xs text-muted-foreground whitespace-nowrap">
           {filtered.length} of {baseRows.length}
         </span>

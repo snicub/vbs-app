@@ -15,6 +15,8 @@ export type StudentFilters = {
   maxAge: number | null;
   /** A DayState to match, or null for "all statuses". */
   status: string | null;
+  /** A stop/town label to match on EITHER leg, or null/undefined for all towns. */
+  town?: string | null;
 };
 
 type FilterableRow = {
@@ -70,8 +72,19 @@ export function filterStudents<T extends FilterableRow>(rows: T[], f: StudentFil
       if (f.maxAge != null && r.age > f.maxAge) return false;
     }
     if (f.status && r.state !== f.status) return false;
+    if (f.town && r.morningStop !== f.town && r.afternoonStop !== f.town) return false;
     return true;
   });
+}
+
+/** Distinct stop/town labels present on either leg, for the town filter. */
+export function presentTowns(rows: { morningStop: string; afternoonStop: string }[]): string[] {
+  const seen = new Set<string>();
+  for (const r of rows) {
+    if (r.morningStop) seen.add(r.morningStop);
+    if (r.afternoonStop) seen.add(r.afternoonStop);
+  }
+  return Array.from(seen).sort((a, b) => a.localeCompare(b));
 }
 
 export function sortStudents<T extends FilterableRow>(
