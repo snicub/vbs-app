@@ -56,6 +56,9 @@ export function VanManifest({
   const [search, setSearch] = useState("");
   // Two-tap confirm for "not coming today" (no_show is terminal — don't fire on a stray tap).
   const [confirmNoShow, setConfirmNoShow] = useState<string | null>(null);
+  // Confirm gate for the bulk "mark everyone left as not boarded" action.
+  const [bulkConfirm, setBulkConfirm] = useState(false);
+  const [bulkPending, setBulkPending] = useState(false);
   // Auto-start location sharing on landing so the aide doesn't have to find the
   // toggle — opening the van page prompts for GPS permission immediately. They
   // can still tap "Stop GPS" to turn it off.
@@ -276,6 +279,37 @@ export function VanManifest({
       });
   }
 
+  // Bulk "everyone still waiting didn't get on the van" — marks each remaining
+  // not-boarded AM rider as a no-show in one go (one summary toast, offline-safe).
+  // They can still be checked in as a parent drop-off later if a parent brings them.
+  async function markRestNotBoarded(ids: string[]) {
+    if (ids.length === 0) return;
+    setBulkPending(true);
+    const offline = typeof navigator !== "undefined" && !navigator.onLine;
+    await Promise.all(
+      ids.map(async (studentId) => {
+        const idempotencyKey = clientId();
+        const occurredAt = new Date().toISOString();
+        const payload = { studentId, eventDate, eventType: "no_show", vanId, idempotencyKey, occurredAt };
+        if (offline) {
+          outbox.enqueue({ kind: "submitEvent", studentId, dedupKey: idempotencyKey, payload });
+          return;
+        }
+        try {
+          const res = await submitEvent(payload);
+          if (!res.ok) throw new Error(res.error);
+        } catch {
+          outbox.enqueue({ kind: "submitEvent", studentId, dedupKey: idempotencyKey, payload });
+        }
+      }),
+    );
+    setBulkPending(false);
+    toast.success(
+      offline ? `Saved ${ids.length} offline` : `Marked ${ids.length} not boarded`,
+    );
+    router.refresh();
+  }
+
   function fire(studentId: string, eventType: string) {
     // Client-generated key so an offline replay dedupes to one event; captured
     // time so the event records when it happened, not when it later syncs.
@@ -380,6 +414,58 @@ export function VanManifest({
         onChange={(e) => setSearch(e.target.value)}
         className="mt-5 text-base"
       />
+
+      {(() => {
+        const remaining = roster.filter(
+          (r) => r.direction !== "pm" && safeDayState(r.state) === "not_started",
+        );
+        if (remaining.length === 0) return null;
+        const ids = remaining.map((r) => r.studentId);
+        return (
+          <div className="mt-3">
+            {bulkConfirm ? (
+              <div className="rounded-xl border-2 border-[var(--anomaly-warn)]/50 bg-[var(--anomaly-warn)]/5 p-3 space-y-2">
+                <div className="text-sm font-medium">
+                  Mark the {remaining.length} kid{remaining.length === 1 ? "" : "s"} still waiting
+                  as NOT on the van? They can still be checked in later if a parent drops them off.
+                </div>
+                <div className="flex gap-2">
+                  <Button
+                    variant="destructive"
+                    size="sm"
+                    className="flex-1 min-h-10"
+                    disabled={bulkPending}
+                    onClick={() => {
+                      setBulkConfirm(false);
+                      void markRestNotBoarded(ids);
+                    }}
+                  >
+                    {bulkPending ? "Marking…" : `Yes — mark ${remaining.length} not boarded`}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="min-h-10"
+                    onClick={() => setBulkConfirm(false)}
+                  >
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : (
+              <Button
+                variant="outline"
+                size="sm"
+                className="w-full min-h-10"
+                disabled={bulkPending}
+                onClick={() => setBulkConfirm(true)}
+              >
+                Mark rest not boarded ({remaining.length})
+              </Button>
+            )}
+          </div>
+        );
+      })()}
 
       <ul className="space-y-2.5 mt-3">
         {roster
