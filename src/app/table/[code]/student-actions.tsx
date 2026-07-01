@@ -254,6 +254,26 @@ export function StudentActions({
     setUnlistedNotes("");
   }
 
+  // Fast path: release straight to the primary guardian without opening the
+  // picker (the common case). "Someone else?" still opens the full picker. Falls
+  // back to the picker if there's no one on file to attribute the pickup to.
+  function releaseToDefault() {
+    const primary = pickupOptions.find((o) => o.kind === "primary") ?? pickupOptions[0];
+    if (!primary) {
+      setPickupOpen(true);
+      return;
+    }
+    const meta: PickupMetadata = {
+      authorizedPickupPersonId: primary.id,
+      name: primary.fullName,
+      relationship: primary.relationship,
+      isEmergencyContact: primary.kind === "emergency",
+      wasUnlisted: false,
+      notes: null,
+    };
+    fireCheckOut("parent", `Released to ${primary.fullName}`, meta);
+  }
+
   // Drive available actions from the state machine — never offer an event
   // that would round-trip to an "illegal transition" error.
   const canBoardAm     = isLegalTransition(currentState, "van_boarded_am");
@@ -338,15 +358,25 @@ export function StudentActions({
             </Button>
           )}
           {canCheckOut && !inVanPmChain && (
-            <Button
-              size="lg"
-              variant="secondary"
-              onClick={() => setPickupOpen(true)}
-              disabled={pending}
-              className={usesPmVan ? "" : "sm:col-span-2"}
-            >
-              <UserCheckIcon /> Parent here — going home now
-            </Button>
+            <div className={usesPmVan ? "" : "sm:col-span-2"}>
+              <Button
+                size="lg"
+                variant="secondary"
+                onClick={releaseToDefault}
+                disabled={pending}
+                className="w-full"
+              >
+                <UserCheckIcon /> Parent here — going home now
+              </Button>
+              <button
+                type="button"
+                onClick={() => setPickupOpen(true)}
+                disabled={pending}
+                className="mt-1 w-full text-center text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+              >
+                someone else is picking up?
+              </button>
+            </div>
           )}
           {canCheckOut && !inVanPmChain && usesPmVan && (
             <Button
