@@ -245,9 +245,6 @@ export default async function VanRostersPage({
                   ))}
                   {tail.length > 0 && (
                     <li className="break-inside-avoid">
-                      <div className="px-3 pt-2 text-xs font-bold uppercase tracking-wide text-[var(--anomaly-warn)]">
-                        ⚠ No map location — confirm pickup
-                      </div>
                       <ul className="divide-y">
                         {tail.map((r, i) => (
                           <RiderRow key={i} r={r} currentVanId={v.id} eventDate={day} vans={vanOptions} />
