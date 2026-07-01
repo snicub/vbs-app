@@ -12,11 +12,12 @@ import { signedUrlsFor } from "@/lib/storage/signed-url";
 import {
   AnomalyBadge,
 } from "@/components/state-badge";
-import { AlertTriangleIcon, MapPinOffIcon, CopyIcon } from "lucide-react";
+import { AlertTriangleIcon, MapPinOffIcon } from "lucide-react";
 import { RosterList, Avatar } from "./roster-list";
 import { DashboardCards } from "./dashboard-cards";
 import { computeMetrics, computeVanBreakdown, isMetricKey } from "@/lib/coordinator/dashboard";
 import { findDuplicateNames } from "@/lib/coordinator/duplicates";
+import { DuplicatesPanel } from "./duplicates-panel";
 import { needsRouting } from "@/lib/routing";
 import { RouteBuildButton } from "./route-build-button";
 
@@ -292,38 +293,7 @@ export default async function CoordinatorTodayPage({
         </section>
       )}
 
-      {duplicateGroups.length > 0 && (
-        <section className="rounded-xl border-2 border-[var(--anomaly-warn)]/30 bg-[var(--anomaly-warn)]/5 p-3 sm:p-4">
-          <div className="flex items-center gap-2 mb-1">
-            <CopyIcon className="size-5 text-[var(--anomaly-warn)]" aria-hidden />
-            <h2 className="font-semibold text-sm sm:text-base">
-              Possible duplicate names ({duplicateGroups.length})
-            </h2>
-          </div>
-          <p className="text-sm text-muted-foreground mb-3">
-            These kids share a name — check they aren&apos;t the same child registered twice. (Two
-            different kids can share a name; verify before removing either.)
-          </p>
-          <ul className="space-y-2">
-            {duplicateGroups.map((g) => (
-              <li key={g.key} className="rounded-lg bg-card border px-2.5 py-2">
-                <div className="text-sm font-semibold">{g.display}</div>
-                <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1">
-                  {g.members.map((mem) => (
-                    <Link
-                      key={mem.studentId}
-                      href={`/table/${mem.wristbandCode}`}
-                      className="text-xs font-mono text-primary hover:underline"
-                    >
-                      {mem.wristbandCode}
-                    </Link>
-                  ))}
-                </div>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {duplicateGroups.length > 0 && <DuplicatesPanel groups={duplicateGroups} />}
 
       {/* Dashboard — big at-a-glance numbers + per-van rollup */}
       <DashboardCards metrics={metrics} vans={vanRollup} date={today} />
