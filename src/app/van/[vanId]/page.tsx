@@ -178,9 +178,15 @@ export default async function VanPage({
   // Kids still to collect on the AM run: morning riders who haven't been boarded
   // yet and aren't marked not-coming. (PM-only kids are dropped at the site by a
   // parent, so the van never picks them up at home.) Counts down as you board.
-  const leftToPickUp = roster.filter(
-    (r) => r.direction !== "pm" && r.state === "not_started",
+  const amRiders = roster.filter((r) => r.direction !== "pm");
+  const leftToPickUp = amRiders.filter((r) => r.state === "not_started").length;
+  const onBoard = amRiders.filter((r) => r.state === "van_boarded_am").length;
+  const droppedOff = amRiders.filter((r) =>
+    ["arrived_at_site", "site_checked_in", "site_checked_out", "van_boarded_pm", "home"].includes(
+      r.state,
+    ),
   ).length;
+  const notComing = amRiders.filter((r) => r.state === "marked_no_show").length;
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-6 space-y-4">
@@ -202,8 +208,12 @@ export default async function VanPage({
             <>
               <span className="font-semibold text-foreground">{leftToPickUp}</span> still to pick up
             </>
-          )}{" "}
-          · {roster.length} on this van
+          )}
+          {onBoard > 0 && <> · {onBoard} on board</>}
+          {droppedOff > 0 && <> · {droppedOff} dropped off</>}
+          {notComing > 0 && <> · {notComing} not coming</>}
+          {" · "}
+          {amRiders.length} to pick up total
         </p>
       </header>
 
