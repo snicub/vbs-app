@@ -381,7 +381,7 @@ export function VanManifest({
         className="mt-5 text-base"
       />
 
-      <ul className="space-y-4 mt-3">
+      <ul className="space-y-2.5 mt-3">
         {roster
           .filter((r) =>
             search.trim()
@@ -418,9 +418,9 @@ export function VanManifest({
                           : `var(--state-${presentation.tone})`,
                     }}
                   >
-                    <div className="p-3 space-y-2.5">
-                      <div className="flex items-start gap-3">
-                        <label className="relative size-14 shrink-0 rounded-xl border bg-muted overflow-hidden flex items-center justify-center cursor-pointer">
+                    <div className="p-2.5 space-y-2">
+                      <div className="flex items-start gap-2.5">
+                        <label className="relative size-12 shrink-0 rounded-lg border bg-muted overflow-hidden flex items-center justify-center cursor-pointer">
                           <input
                             type="file"
                             accept="image/*"
@@ -450,10 +450,10 @@ export function VanManifest({
                           </span>
                         </label>
                         <div className="min-w-0 flex-1">
-                          <div className="font-bold text-xl leading-tight truncate">
+                          <div className="font-bold text-lg leading-tight truncate">
                             {r.name}
                           </div>
-                          <div className="mt-1 flex items-center gap-2 flex-wrap text-sm">
+                          <div className="mt-0.5 flex items-center gap-2 flex-wrap text-xs">
                             {r.colorHex && (
                               <span
                                 className="inline-block w-5 h-5 rounded-full border ring-1 ring-border"
@@ -498,35 +498,35 @@ export function VanManifest({
                       </div>
 
                       {r.homeAddress || r.homeMapsUrl ? (
-                        <div className="space-y-1">
+                        <div className="space-y-0.5">
                           {r.homeMapsUrl ? (
                             <a
                               href={r.homeMapsUrl}
                               target="_blank"
                               rel="noreferrer"
-                              className="flex items-start gap-2 text-base font-medium text-primary underline-offset-2 hover:underline"
+                              className="flex items-start gap-1.5 text-sm font-medium text-primary underline-offset-2 hover:underline"
                             >
-                              <MapPinIcon className="size-5 shrink-0 mt-0.5" />
+                              <MapPinIcon className="size-4 shrink-0 mt-0.5" />
                               <span>
                                 {r.homeAddress ?? "Home location"}{" "}
-                                <span className="text-sm font-normal">(tap to navigate)</span>
+                                <span className="text-xs font-normal">(tap to navigate)</span>
                               </span>
                             </a>
                           ) : (
-                            <div className="flex items-start gap-2 text-base font-medium">
-                              <MapPinIcon className="size-5 shrink-0 mt-0.5 text-muted-foreground" />
+                            <div className="flex items-start gap-1.5 text-sm font-medium">
+                              <MapPinIcon className="size-4 shrink-0 mt-0.5 text-muted-foreground" />
                               <span>{r.homeAddress}</span>
                             </div>
                           )}
                           {r.homeNotes && (
-                            <div className="ml-7 text-sm text-muted-foreground">
+                            <div className="ml-6 text-xs text-muted-foreground">
                               📝 {r.homeNotes}
                             </div>
                           )}
                         </div>
                       ) : (
-                        <div className="flex items-start gap-2 text-base font-semibold text-[var(--anomaly-warn)]">
-                          <MapPinIcon className="size-5 shrink-0 mt-0.5" />
+                        <div className="flex items-start gap-1.5 text-sm font-semibold text-[var(--anomaly-warn)]">
+                          <MapPinIcon className="size-4 shrink-0 mt-0.5" />
                           <span>No home address on file — confirm pickup with the coordinator</span>
                         </div>
                       )}

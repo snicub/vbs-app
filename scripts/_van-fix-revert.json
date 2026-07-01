@@ -1,0 +1,74 @@
+[
+  {
+    "student_id": "27a35476-47f3-4a7f-81d2-1c1fe1bc42b0",
+    "event_date": "2026-07-01",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "27a35476-47f3-4a7f-81d2-1c1fe1bc42b0",
+    "event_date": "2026-07-02",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "a7ee7ae1-c950-4361-90f7-a23eb322122f",
+    "event_date": "2026-07-01",
+    "morning_stop_id": null,
+    "afternoon_stop_id": null
+  },
+  {
+    "student_id": "a7ee7ae1-c950-4361-90f7-a23eb322122f",
+    "event_date": "2026-07-02",
+    "morning_stop_id": null,
+    "afternoon_stop_id": null
+  },
+  {
+    "student_id": "16769722-c35e-48e1-b7d3-30907af220fe",
+    "event_date": "2026-07-01",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "16769722-c35e-48e1-b7d3-30907af220fe",
+    "event_date": "2026-07-02",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "027062c8-d837-4e76-89f3-2cd23dfd18ab",
+    "event_date": "2026-07-01",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "027062c8-d837-4e76-89f3-2cd23dfd18ab",
+    "event_date": "2026-07-02",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "327f8750-0313-4687-b7ec-3044b9764ea4",
+    "event_date": "2026-07-01",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "327f8750-0313-4687-b7ec-3044b9764ea4",
+    "event_date": "2026-07-02",
+    "morning_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3",
+    "afternoon_stop_id": "2a5d8339-6f3f-421a-8443-debf34f209e3"
+  },
+  {
+    "student_id": "13cae711-b874-4c07-92c3-e3eb4f2f3c6d",
+    "event_date": "2026-07-02",
+    "morning_stop_id": "d97f2f9f-d4e6-4ce2-b8ed-a9c74ed8e8c2",
+    "afternoon_stop_id": "d97f2f9f-d4e6-4ce2-b8ed-a9c74ed8e8c2"
+  },
+  {
+    "student_id": "13cae711-b874-4c07-92c3-e3eb4f2f3c6d",
+    "event_date": "2026-07-01",
+    "morning_stop_id": "d97f2f9f-d4e6-4ce2-b8ed-a9c74ed8e8c2",
+    "afternoon_stop_id": "d97f2f9f-d4e6-4ce2-b8ed-a9c74ed8e8c2"
+  }
+]

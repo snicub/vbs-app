@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { HomeIcon } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { SignOutButton } from "./sign-out-button";
 import { AppShellNav } from "./app-shell-nav";
@@ -59,10 +60,12 @@ export function AppShell({
         <div className="mx-auto max-w-7xl px-3 sm:px-4 h-14 flex items-center justify-between gap-2">
           <div className="flex items-center gap-4 min-w-0 flex-1">
             <Link
-              href="/"
-              className="font-semibold whitespace-nowrap text-sm sm:text-base"
+              href={isCoordinator(user.role) ? "/coordinator" : "/"}
+              className="inline-flex items-center gap-1.5 rounded-lg border bg-muted/50 px-2.5 py-1.5 font-semibold whitespace-nowrap text-sm sm:text-base hover:bg-muted transition-colors"
             >
-              VBS Check-In
+              <HomeIcon className="size-4 shrink-0" aria-hidden />
+              <span className="hidden sm:inline">VBS Check-In</span>
+              <span className="sm:hidden">Home</span>
             </Link>
             <AppShellNav links={links} />
           </div>

@@ -219,8 +219,8 @@ export function SignupForm({
       toast.error("Please pick which van picks up your child.");
       return;
     }
-    if (!family.primaryGuardianName.trim() || !family.primaryPhone.trim() || !family.primaryEmail.trim()) {
-      toast.error("Please fill in the caregiver's name, phone, and email.");
+    if (!family.primaryGuardianName.trim() || !family.primaryPhone.trim()) {
+      toast.error("Please fill in the caregiver's name and phone.");
       return;
     }
 
@@ -377,9 +377,8 @@ export function SignupForm({
             />
           </Field>
         </div>
-        <Field label="Email" required>
+        <Field label="Email (optional)">
           <Input
-            required
             type="email"
             autoComplete="email"
             value={family.primaryEmail}

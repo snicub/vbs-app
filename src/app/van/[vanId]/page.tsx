@@ -5,6 +5,7 @@ import { getLocalDate } from "@/lib/date";
 import { getSessionUser } from "@/lib/auth/session";
 import { canDriveVan } from "@/lib/auth/roles";
 import { signedUrlsFor } from "@/lib/storage/signed-url";
+import { compareByStreet } from "@/lib/van-rosters/street-sort";
 import { VanManifest } from "./van-manifest";
 
 export const dynamic = "force-dynamic";
@@ -176,8 +177,11 @@ export default async function VanPage({
     };
   });
 
+  // Group riders by street then house number so same-road/same-house kids sit
+  // together (a natural door-to-door pickup order); ties fall back to name.
   const roster = rosterUnsorted.sort((a, b) => {
-    if (a.stopOrder !== b.stopOrder) return a.stopOrder - b.stopOrder;
+    const byStreet = compareByStreet(a.homeAddress, b.homeAddress);
+    if (byStreet !== 0) return byStreet;
     return a.name.localeCompare(b.name);
   });
 
