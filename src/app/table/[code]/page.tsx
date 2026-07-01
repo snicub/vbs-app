@@ -124,16 +124,16 @@ export default async function StudentTablePage({
   const tone = TONE_CLASSES[presentation.tone];
 
   return (
-    <main className="mx-auto max-w-2xl px-3 sm:px-4 py-4 sm:py-6 space-y-5">
+    <main className="mx-auto max-w-2xl px-3 sm:px-4 py-4 sm:py-6 space-y-4 sm:space-y-5">
       <Link
         href="/table"
-        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground min-h-11"
+        className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground min-h-9"
       >
         <ArrowLeftIcon className="size-4" /> Back to search
       </Link>
 
       <div className="flex items-start gap-4">
-        <div className="h-24 w-24 rounded-xl border bg-muted flex items-center justify-center overflow-hidden shrink-0">
+        <div className="h-20 w-20 sm:h-24 sm:w-24 rounded-xl border bg-muted flex items-center justify-center overflow-hidden shrink-0">
           {photoUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={photoUrl} alt={student.legalFirstName} className="h-full w-full object-cover" />
