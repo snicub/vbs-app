@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { Select } from "@/components/ui/select";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { submitEvent, undoEvent } from "@/server-actions/events";
@@ -80,8 +79,6 @@ export function StudentActions({
   const [pending, startTransition] = useTransition();
   const [confirmingNoShow, setConfirmingNoShow] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
-  const [overrideEvent, setOverrideEvent] = useState<EventType | "">("");
-  const [overrideReason, setOverrideReason] = useState("");
 
   // Pickup picker state — opens when the volunteer taps the parent-pickup
   // button. We do NOT fire smart_checkout until a person is selected.
@@ -167,31 +164,23 @@ export function StudentActions({
     });
   }
 
-  function fireOverride() {
-    const reason = overrideReason.trim();
-    if (!overrideEvent) {
-      toast.error("Pick the event to record.");
-      return;
-    }
-    if (reason.length === 0) {
-      toast.error("Write a reason — overrides are logged.");
-      return;
-    }
+  // One-tap override: fire the chosen event past the state machine with an
+  // automatic reason (record_event still requires a reason to be present, and
+  // it's logged) — no free-text box to slow the coordinator down.
+  function fireOverrideEvent(event: EventType) {
     startTransition(async () => {
       const result = await submitEvent({
         studentId,
         eventDate,
-        eventType: overrideEvent,
-        overrideReason: reason,
+        eventType: event,
+        overrideReason: `Coordinator override — ${EVENT_LABEL[event]}`,
       });
       if (!result.ok) {
         toast.error(result.error);
         return;
       }
-      toast.success(`${EVENT_LABEL[overrideEvent]} (override)`);
+      toast.success(`${EVENT_LABEL[event]} (override)`);
       setOverrideOpen(false);
-      setOverrideEvent("");
-      setOverrideReason("");
       router.refresh();
     });
   }
@@ -509,49 +498,31 @@ export function StudentActions({
               Coordinator override…
             </Button>
           ) : (
-            <div className="space-y-3">
-              <div className="space-y-1.5">
-                <Label>Event to record</Label>
-                <Select
-                  value={overrideEvent}
-                  onChange={(e) =>
-                    setOverrideEvent(e.target.value as EventType)
-                  }
-                >
-                  <option value="">— select —</option>
-                  {OVERRIDABLE.map((e) => (
-                    <option key={e} value={e}>
-                      {EVENT_LABEL[e]}
-                    </option>
-                  ))}
-                </Select>
-              </div>
-              <div className="space-y-1.5">
-                <Label>
-                  Reason{" "}
-                  <span className="text-destructive">(required)</span>
-                </Label>
-                <Textarea
-                  value={overrideReason}
-                  onChange={(e) => setOverrideReason(e.target.value)}
-                  placeholder="Why is this transition necessary?"
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button onClick={fireOverride} disabled={pending}>
-                  Submit override
-                </Button>
-                <Button
-                  variant="ghost"
-                  onClick={() => {
-                    setOverrideOpen(false);
-                    setOverrideEvent("");
-                    setOverrideReason("");
-                  }}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Force a status — tap one</Label>
+                <button
+                  type="button"
+                  className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  onClick={() => setOverrideOpen(false)}
                 >
                   Cancel
-                </Button>
+                </button>
               </div>
+              <div className="grid gap-2 sm:grid-cols-2">
+                {OVERRIDABLE.map((e) => (
+                  <Button
+                    key={e}
+                    variant="outline"
+                    size="sm"
+                    disabled={pending}
+                    onClick={() => fireOverrideEvent(e)}
+                  >
+                    {EVENT_LABEL[e]}
+                  </Button>
+                ))}
+              </div>
+              <p className="text-xs text-muted-foreground">Logged as a coordinator override.</p>
             </div>
           )}
         </div>
