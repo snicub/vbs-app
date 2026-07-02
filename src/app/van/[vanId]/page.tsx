@@ -56,6 +56,15 @@ export default async function VanPage({
     .maybeSingle<{ id: string; name: string; capacity: number }>();
   if (!van) notFound();
 
+  // All active vans — so a rider can be moved to another van's pickup/drop-off
+  // region right from the manifest.
+  const { data: allVans } = await supabase
+    .from("vans")
+    .select("id, name")
+    .eq("active", true)
+    .order("name")
+    .returns<{ id: string; name: string }[]>();
+
   // Get today's statuses for kids on this van (AM or PM)
   const { data: statuses } = await supabase
     .from("student_day_status")
@@ -234,6 +243,7 @@ export default async function VanPage({
         vanId={vanId}
         eventDate={day}
         roster={roster}
+        vans={allVans ?? []}
         loadedAt={new Date().toISOString()}
       />
     </main>

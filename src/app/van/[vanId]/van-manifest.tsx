@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { toast } from "sonner";
 import { submitEvent, cancelBoarding } from "@/server-actions/events";
+import { setStudentLegVan } from "@/server-actions/day-record";
 import { smartCheckOut } from "@/server-actions/check-out";
 import { broadcastVanLocation } from "@/server-actions/van";
 import { setStudentPhoto } from "@/server-actions/students";
@@ -51,11 +52,13 @@ export function VanManifest({
   vanId,
   eventDate,
   roster,
+  vans,
   loadedAt,
 }: {
   vanId: string;
   eventDate: string;
   roster: RosterItem[];
+  vans: { id: string; name: string }[];
   loadedAt: string;
 }) {
   const router = useRouter();
@@ -642,6 +645,21 @@ export function VanManifest({
                         density="compact"
                       />
 
+                      {vans.length > 1 && (
+                        <div className="flex items-center gap-1.5 pt-0.5 text-xs">
+                          <span className="shrink-0 text-muted-foreground">
+                            {phase === "am" ? "Pick up from:" : "Drop off at:"}
+                          </span>
+                          <MoveVanSelect
+                            studentId={r.studentId}
+                            currentVanId={vanId}
+                            eventDate={eventDate}
+                            leg={phase}
+                            vans={vans}
+                          />
+                        </div>
+                      )}
+
                       {(canBoardAm || canCheckOut || canCancelBoarding || canMarkNoShow) && (
                         <div className="flex gap-2 pt-0.5">
                           {canBoardAm && (
@@ -722,6 +740,56 @@ export function VanManifest({
         />
       )}
     </>
+  );
+}
+
+// Move a rider's pickup (am) or drop-off (pm) to a different van's region, right
+// from the manifest — for when a kid is actually picked up from / dropped at a
+// different region than they're planned for. Only the current leg moves.
+function MoveVanSelect({
+  studentId,
+  currentVanId,
+  eventDate,
+  leg,
+  vans,
+}: {
+  studentId: string;
+  currentVanId: string;
+  eventDate: string;
+  leg: "am" | "pm";
+  vans: { id: string; name: string }[];
+}) {
+  const router = useRouter();
+  const [pending, startTransition] = useTransition();
+
+  function onChange(nextVanId: string) {
+    if (!nextVanId || nextVanId === currentVanId) return;
+    const name = vans.find((v) => v.id === nextVanId)?.name ?? "van";
+    startTransition(async () => {
+      const res = await setStudentLegVan({ studentId, vanId: nextVanId, eventDate, leg });
+      if (!res.ok) {
+        toast.error(res.error);
+        return;
+      }
+      toast.success(`Moved to ${name} for ${leg === "am" ? "pickup" : "drop-off"}`);
+      router.refresh();
+    });
+  }
+
+  return (
+    <select
+      aria-label={leg === "am" ? "Pickup van" : "Drop-off van"}
+      value={currentVanId}
+      disabled={pending}
+      onChange={(e) => onChange(e.target.value)}
+      className="h-8 max-w-[10rem] rounded-md border bg-card px-1.5 text-xs disabled:opacity-50"
+    >
+      {vans.map((v) => (
+        <option key={v.id} value={v.id}>
+          {v.name}
+        </option>
+      ))}
+    </select>
   );
 }
 

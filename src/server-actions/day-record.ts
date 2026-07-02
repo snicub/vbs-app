@@ -192,3 +192,87 @@ export async function setStudentVan(
   revalidatePath("/van", "layout");
   return { ok: true, changedDays, ridesVan };
 }
+
+const SetLegVanSchema = z.object({
+  studentId: z.string().uuid(),
+  vanId: z.string().uuid(),
+  eventDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  leg: z.enum(["am", "pm"]),
+});
+
+/**
+ * From the van manifest: move a child's PICKUP van (am leg) or DROP-OFF van (pm
+ * leg) to a different van — for when a kid on the van says they're actually
+ * picked up from / dropped at another region. Only the chosen leg's stop moves
+ * (the other leg is untouched), for the viewed day and later VBS days. A leg the
+ * child is currently boarded on can't be re-pointed (undo the boarding first).
+ */
+export async function setStudentLegVan(
+  input: unknown,
+): Promise<{ ok: true; changedDays: number } | { ok: false; error: string }> {
+  const user = await getSessionUser();
+  if (!user || !isCoordinator(user.role)) {
+    return { ok: false, error: "Coordinator only" };
+  }
+  const parsed = SetLegVanSchema.safeParse(input);
+  if (!parsed.success) return { ok: false, error: parsed.error.issues[0]?.message ?? "Bad input" };
+  const { studentId, vanId, eventDate, leg } = parsed.data;
+
+  const supabase = createAdminClient();
+  const { data: routes } = await supabase
+    .from("routes")
+    .select("van_id, direction, stop_ids")
+    .eq("van_id", vanId)
+    .returns<DirectionRoute[]>();
+  const zoneStopId = zoneStopIdForVan(vanId, routes ?? []);
+  if (!zoneStopId) {
+    return { ok: false, error: "That van has no pickup zone set up yet — set its area first." };
+  }
+
+  const dates = VBS_DATES.filter((d) => d >= eventDate);
+  let changedDays = 0;
+  for (const d of dates) {
+    const { data: rec } = await supabase
+      .from("student_day_status")
+      .select("state, morning_stop_id, afternoon_stop_id, attending")
+      .eq("student_id", studentId)
+      .eq("event_date", d)
+      .maybeSingle<{
+        state: string;
+        morning_stop_id: string | null;
+        afternoon_stop_id: string | null;
+        attending: boolean;
+      }>();
+    if (!rec || !rec.attending) continue;
+
+    if (leg === "am" && rec.state === "van_boarded_am") {
+      return { ok: false, error: `On the morning van right now (${d}) — undo their boarding first.` };
+    }
+    if (leg === "pm" && rec.state === "van_boarded_pm") {
+      return { ok: false, error: `On the afternoon van right now (${d}) — undo their boarding first.` };
+    }
+
+    const column = leg === "am" ? "morning_stop_id" : "afternoon_stop_id";
+    const current = leg === "am" ? rec.morning_stop_id : rec.afternoon_stop_id;
+    if (current === zoneStopId) {
+      changedDays++;
+      continue;
+    }
+    const { data: updated, error } = await supabase
+      .from("student_day_records")
+      .update({ [column]: zoneStopId } as never)
+      .eq("student_id", studentId)
+      .eq("event_date", d)
+      .select("student_id");
+    if (error) return { ok: false, error: error.message };
+    if (!updated || updated.length === 0) {
+      return { ok: false, error: "The change didn't save — no matching record. Tell Daniel." };
+    }
+    changedDays++;
+  }
+
+  revalidatePath("/coordinator", "layout");
+  revalidatePath("/table", "layout");
+  revalidatePath("/van", "layout");
+  return { ok: true, changedDays };
+}
