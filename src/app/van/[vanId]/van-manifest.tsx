@@ -39,6 +39,14 @@ type RosterItem = {
   photoUrl: string | null;
 };
 
+// Kids who actually checked in today — the only ones the PM van takes home.
+const CHECKED_IN_STATES = new Set([
+  "site_checked_in",
+  "site_checked_out",
+  "van_boarded_pm",
+  "home",
+]);
+
 export function VanManifest({
   vanId,
   eventDate,
@@ -59,6 +67,9 @@ export function VanManifest({
   // Confirm gate for the bulk "mark everyone left as not boarded" action.
   const [bulkConfirm, setBulkConfirm] = useState(false);
   const [bulkPending, setBulkPending] = useState(false);
+  // "am" = morning pickup (all riders); "pm" = afternoon drop-off (only kids who
+  // checked in today ride home).
+  const [phase, setPhase] = useState<"am" | "pm">("am");
   // Auto-start location sharing on landing so the aide doesn't have to find the
   // toggle — opening the van page prompts for GPS permission immediately. They
   // can still tap "Stop GPS" to turn it off.
@@ -408,14 +419,30 @@ export function VanManifest({
         </Button>
       </div>
 
+      <div className="mt-5 inline-flex rounded-xl border bg-muted/30 p-0.5 w-full sm:w-auto">
+        {(["am", "pm"] as const).map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={() => setPhase(p)}
+            className={cn(
+              "flex-1 rounded-lg px-4 min-h-11 text-base font-semibold transition-colors",
+              phase === p ? "bg-card shadow-sm" : "text-muted-foreground",
+            )}
+          >
+            {p === "am" ? "Picking up" : "Dropping off"}
+          </button>
+        ))}
+      </div>
+
       <Input
         placeholder="Search this van's riders by name…"
         value={search}
         onChange={(e) => setSearch(e.target.value)}
-        className="mt-5 text-base"
+        className="mt-3 text-base"
       />
 
-      {(() => {
+      {phase === "am" && (() => {
         const remaining = roster.filter(
           (r) => r.direction !== "pm" && safeDayState(r.state) === "not_started",
         );
@@ -469,6 +496,13 @@ export function VanManifest({
 
       <ul className="space-y-2.5 mt-3">
         {roster
+          .filter((r) =>
+            // Picking up = morning riders; Dropping off = afternoon riders who
+            // actually checked in today (no-shows / never-arrived don't ride home).
+            phase === "am"
+              ? r.direction !== "pm"
+              : r.direction !== "am" && CHECKED_IN_STATES.has(safeDayState(r.state)),
+          )
           .filter((r) =>
             search.trim()
               ? r.name.toLowerCase().includes(search.trim().toLowerCase())
@@ -668,6 +702,15 @@ export function VanManifest({
                 );
         })}
       </ul>
+
+      {phase === "pm" &&
+        roster.filter(
+          (r) => r.direction !== "am" && CHECKED_IN_STATES.has(safeDayState(r.state)),
+        ).length === 0 && (
+          <p className="mt-3 rounded-xl border bg-card px-4 py-6 text-center text-base text-muted-foreground">
+            No one has checked in yet — kids show up here once they&apos;re checked in at the site.
+          </p>
+        )}
 
       {verifyTarget && verifyAction && verifyArmedAt !== null && (
         <PhotoVerifyModal
